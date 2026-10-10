@@ -9,6 +9,7 @@ import { ApprovalPanel } from "./ApprovalPanel";
 import { Spinner, useElapsed } from "./Spinner";
 import { Transcript } from "./Transcript";
 import { FilePreview } from "../panels/FilePreview";
+import { QuickOpen } from "../panels/QuickOpen";
 import { PANEL_TABS, RightPanel, useChangedCount } from "../panels/RightPanel";
 
 function TitleBar() {
@@ -259,7 +260,8 @@ export function TerminalView() {
 	useEffect(() => {
 		if (!isRunning) return;
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape" && !(e.target instanceof HTMLTextAreaElement)) void abort();
+			const target = e.target instanceof Element ? e.target : null;
+			if (e.key === "Escape" && !(target instanceof HTMLTextAreaElement) && !target?.closest(".cm-editor, input")) void abort();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
@@ -299,6 +301,7 @@ export function TerminalView() {
 				</div>
 			</div>
 			<RightPanel />
+			<QuickOpen />
 		</div>
 	);
 }

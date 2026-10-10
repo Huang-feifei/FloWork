@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { WorkspaceEntry } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { collectSessionFiles } from "../../lib/session-files";
+import { useFileSearch } from "../../lib/useFileSearch";
+import { SearchResultLabel } from "./SearchResultRow";
 import { useApp } from "../../store";
 
 function formatSize(n: number | undefined): string {
@@ -23,6 +25,7 @@ export function ProjectFiles() {
 	const [error, setError] = useState<string | null>(null);
 	const [showIgnored, setShowIgnored] = useState(false);
 	const [filter, setFilter] = useState("");
+	const search = useFileSearch(filter);
 
 	/** 本会话修改过的文件，在树中标注 */
 	const changed = useMemo(() => {
@@ -71,11 +74,8 @@ export function ProjectFiles() {
 		});
 	};
 
-	const q = filter.trim().toLowerCase();
 	const renderDir = (dir: string, depth: number): React.ReactNode => {
-		const entries = (children[dir] ?? []).filter(
-			(e) => (showIgnored || !e.ignored) && (!q || e.type === "dir" || e.name.toLowerCase().includes(q)),
-		);
+		const entries = (children[dir] ?? []).filter((e) => showIgnored || !e.ignored);
 		return entries.map((entry) => {
 			const isOpen = expanded.has(entry.path);
 			const mark = changed.get(entry.path.toLowerCase());
@@ -139,7 +139,11 @@ export function ProjectFiles() {
 				<input
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
-					placeholder="筛选已展开目录中的文件"
+					placeholder="搜索整个项目（Ctrl+P）"
+					onKeyDown={(e) => {
+						if (e.key === "Escape") setFilter("");
+						if (e.key === "Enter" && search.result?.matches[0]) openPreview(search.result.matches[0].path);
+					}}
 					className="min-w-0 flex-1 rounded border border-border bg-panel px-2 py-0.5 text-[12px] outline-none focus:border-accent"
 				/>
 				<button
@@ -156,7 +160,53 @@ export function ProjectFiles() {
 			</div>
 			<div className="term min-h-0 flex-1 overflow-y-auto py-1 text-[12px] leading-5">
 				{error && <div className="px-3 py-1 text-err">{error}</div>}
-				{children[""] === undefined && !error ? <div className="px-3 text-muted">加载中…</div> : renderDir("", 0)}
+				{filter.trim() ? (
+					<>
+						{search.error && <div className="px-3 py-1 text-err">{search.error}</div>}
+						{search.result?.matches.map((m) => {
+							const mark = changed.get(m.path.toLowerCase());
+							return (
+								<div
+									key={m.path}
+									className={`group flex items-center gap-1 py-[3px] pr-2 pl-3 ${preview === m.path ? "bg-accent-soft" : "hover:bg-panel-2"}`}
+								>
+									<button
+										type="button"
+										onClick={() => openPreview(m.path)}
+										className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+										title={m.path}
+									>
+										<span className="shrink-0 text-[12px]">📄</span>
+										<SearchResultLabel path={m.path} query={filter} />
+										{mark && (
+											<span className={`shrink-0 text-[10px] font-bold ${mark === "created" ? "text-ok" : "text-warn"}`}>
+												{mark === "created" ? "A" : "M"}
+											</span>
+										)}
+									</button>
+									<button
+										type="button"
+										onClick={() => insertIntoPrompt(m.path)}
+										title="把路径引用到输入框"
+										className="hidden shrink-0 rounded px-1 text-[11px] text-accent hover:bg-accent-soft group-hover:block"
+									>
+										引用
+									</button>
+								</div>
+							);
+						})}
+						{search.result && search.result.matches.length === 0 && <div className="px-3 text-muted">没有匹配的文件</div>}
+						{search.result && (
+							<div className="px-3 pt-2 text-[11px] text-muted">
+								在 {search.result.total} 个文件中搜索（不含被忽略的目录）{search.result.truncated ? "，文件过多，只索引了一部分" : ""}
+							</div>
+						)}
+					</>
+				) : children[""] === undefined && !error ? (
+					<div className="px-3 text-muted">加载中…</div>
+				) : (
+					renderDir("", 0)
+				)}
 			</div>
 		</div>
 	);

@@ -382,12 +382,29 @@ export interface FilePreview {
 	text: string;
 }
 
+export interface FileSearchResult {
+	/** 匹配的相对路径，按得分排序 */
+	matches: Array<{ path: string; score: number }>;
+	/** 参与搜索的文件总数 */
+	total: number;
+	/** 文件过多时只扫描了一部分 */
+	truncated: boolean;
+}
+
+export const WRITE_CONFLICT_PREFIX = "WRITE_CONFLICT:";
+
 export interface BackendMethods {
 	"app.info": { params: undefined; result: AppInfo };
 	"app.pickFolder": { params: undefined; result: string | null };
 	"fs.listDirs": { params: { path?: string }; result: DirListing };
 	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
 	"workspace.read": { params: { root: string; path: string }; result: FilePreview };
+	/** 保存文件；expectedMtime 与磁盘不一致时拒绝（文件已被 AI 或外部修改） */
+	"workspace.write": {
+		params: { root: string; path: string; content: string; expectedMtime?: number };
+		result: FilePreview;
+	};
+	"workspace.search": { params: { root: string; query: string; limit?: number; /** 忽略缓存重新扫描 */ fresh?: boolean }; result: FileSearchResult };
 	"service.send": { params: ServiceCommand; result: unknown };
 	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };

@@ -12,7 +12,7 @@ import {
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
 import { getPiAgentDir } from "./paths";
-import { listWorkspaceDir, readWorkspaceFile } from "./workspace-fs";
+import { listWorkspaceDir, readWorkspaceFile, searchWorkspaceFiles, writeWorkspaceFile } from "./workspace-fs";
 import { WorkerManager } from "./worker-manager";
 import type { WorkerSpawner } from "./worker-process";
 
@@ -77,6 +77,14 @@ export class Backend {
 			case "workspace.read": {
 				const params = rawParams as BackendMethods["workspace.read"]["params"];
 				return readWorkspaceFile(params.root, params.path);
+			}
+			case "workspace.write": {
+				const params = rawParams as BackendMethods["workspace.write"]["params"];
+				return writeWorkspaceFile(params.root, params.path, params.content, params.expectedMtime);
+			}
+			case "workspace.search": {
+				const params = rawParams as BackendMethods["workspace.search"]["params"];
+				return searchWorkspaceFiles(params.root, params.query, params.limit, params.fresh);
 			}
 			case "service.send": {
 				const command = rawParams as ServiceCommand;

@@ -20,6 +20,10 @@ export const api = {
 	listDirs: (path?: string) => call("fs.listDirs", { path }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
 	readWorkspaceFile: (root: string, path: string) => call("workspace.read", { root, path }),
+	writeWorkspaceFile: (root: string, path: string, content: string, expectedMtime?: number) =>
+		call("workspace.write", { root, path, content, expectedMtime }),
+	searchWorkspace: (root: string, query: string, options: { limit?: number; fresh?: boolean } = {}) =>
+		call("workspace.search", { root, query, ...options }),
 
 	service: <C extends ServiceCommand>(command: C) => call("service.send", command) as Promise<CommandResult<C>>,
 
