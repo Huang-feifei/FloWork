@@ -1,0 +1,358 @@
+/**
+ * FloWork 内部协议。三段链路共用：
+ *
+ *   界面（renderer） ──Transport──▶ 后端核心（core/Backend） ──worker 消息──▶ pi worker
+ *
+ * - Transport：桌面版走 Electron IPC（preload 暴露），网页版走 WebSocket。两者的信封格式相同。
+ * - worker 命令与事件命名沿用 pi RPC 协议（prompt / abort / get_state / get_tree …），
+ *   并补充 RPC 没有的命令（navigate_tree / list_sessions / 登录与配置 …）。
+ * - 这里只定义 FloWork 自己的数据形状，不 re-export pi 的类型；pi 的类型只在 src/worker/adapter.ts 中解读。
+ */
+
+// ---------------------------------------------------------------------------
+// 基础数据
+// ---------------------------------------------------------------------------
+
+export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
+export const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
+
+export interface ModelInfo {
+	provider: string;
+	id: string;
+	name: string;
+	reasoning: boolean;
+	contextWindow?: number;
+	maxTokens?: number;
+	/** 美元 / 百万 token */
+	cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+}
+
+export interface ModelEntry extends ModelInfo {
+	/** 供应商凭据可用 */
+	available: boolean;
+}
+
+export interface Usage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	totalTokens: number;
+	cost: { total: number };
+}
+
+export type ContentBlock =
+	| { type: "text"; text: string }
+	| { type: "thinking"; thinking: string; redacted?: boolean }
+	| { type: "toolCall"; id: string; name: string; arguments: Record<string, unknown> }
+	| { type: "image"; mimeType: string; data: string };
+
+export type StopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted" | "deferred";
+
+export type ChatMessage =
+	| { role: "user"; content: ContentBlock[]; timestamp: number }
+	| {
+			role: "assistant";
+			content: ContentBlock[];
+			provider: string;
+			model: string;
+			stopReason: StopReason;
+			errorMessage?: string;
+			usage?: Usage;
+			timestamp: number;
+	  }
+	| {
+			role: "toolResult";
+			toolCallId: string;
+			toolName: string;
+			content: ContentBlock[];
+			details?: unknown;
+			isError: boolean;
+			timestamp: number;
+	  }
+	| {
+			/** bashExecution / custom / branchSummary / compactionSummary 等其他角色，统一以文本呈现 */
+			role: "note";
+			kind: string;
+			text: string;
+			timestamp: number;
+	  };
+
+export interface SessionState {
+	sessionId: string;
+	sessionFile?: string;
+	sessionName?: string;
+	cwd: string;
+	model?: ModelInfo;
+	thinkingLevel: ThinkingLevel;
+	availableThinkingLevels: ThinkingLevel[];
+	isStreaming: boolean;
+	messageCount: number;
+}
+
+export interface SessionSummary {
+	path: string;
+	id: string;
+	cwd: string;
+	name?: string;
+	firstMessage: string;
+	messageCount: number;
+	created: number;
+	modified: number;
+	parentSessionPath?: string;
+}
+
+export interface SessionTreeNode {
+	id: string;
+	parentId: string | null;
+	/** 条目类型：message / model_change / compaction / branch_summary / label … */
+	entryType: string;
+	/** 消息条目的角色 */
+	role?: string;
+	/** 用于树视图展示的简短文本 */
+	preview: string;
+	label?: string;
+	timestamp: string;
+	children: SessionTreeNode[];
+}
+
+export type AuthMethod = "api_key" | "ambient" | "oauth" | "oauth_subscription";
+
+export interface ProviderInfo {
+	id: string;
+	name: string;
+	authMethods: AuthMethod[];
+	configured: boolean;
+	/** 凭据来源：stored（auth.json）/ environment / models_json_key … */
+	authSource?: string;
+	/** 来源的可读说明，例如环境变量名 */
+	authLabel?: string;
+	modelCount: number;
+	/** 是否来自 models.json 的自定义供应商 */
+	custom: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// 登录流程（API Key / OAuth），提示与通知从 worker 转发到界面
+// ---------------------------------------------------------------------------
+
+export type AuthPrompt =
+	| { type: "text" | "secret" | "manual_code"; message: string; placeholder?: string }
+	| { type: "select"; message: string; options: Array<{ id: string; label: string; description?: string }> };
+
+export type AuthNotice =
+	| { type: "info"; message: string; links?: Array<{ url: string; label?: string }> }
+	| { type: "auth_url"; url: string; instructions?: string }
+	| { type: "device_code"; userCode: string; verificationUri: string; expiresInSeconds?: number }
+	| { type: "progress"; message: string };
+
+export type AuthFlowEvent =
+	| { flowId: string; kind: "prompt"; promptId: string; prompt: AuthPrompt }
+	| { flowId: string; kind: "prompt_cancelled"; promptId: string }
+	| { flowId: string; kind: "notice"; notice: AuthNotice };
+
+// ---------------------------------------------------------------------------
+// 配置文件
+// ---------------------------------------------------------------------------
+
+/** 允许界面直接读写的 pi 配置文件（auth.json 含密钥，不开放） */
+export type ConfigFileName = "settings" | "models";
+
+export interface ConfigFile {
+	name: ConfigFileName;
+	path: string;
+	exists: boolean;
+	text: string;
+}
+
+export interface TestResult {
+	ok: boolean;
+	latencyMs: number;
+	text?: string;
+	error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// worker 命令
+// ---------------------------------------------------------------------------
+
+export type SessionCommand =
+	| { type: "prompt"; message: string; streamingBehavior?: "steer" | "followUp" }
+	| { type: "abort" }
+	| { type: "get_state" }
+	| { type: "get_messages" }
+	| { type: "get_tree" }
+	| { type: "navigate_tree"; entryId: string; summarize?: boolean }
+	| { type: "get_available_models" }
+	| { type: "set_model"; provider: string; modelId: string }
+	| { type: "set_thinking_level"; level: ThinkingLevel }
+	| { type: "new_session" }
+	| { type: "switch_session"; sessionPath: string }
+	| { type: "set_session_name"; name: string }
+	/** 配置（凭据 / models.json / settings.json）变化后重新加载 */
+	| { type: "refresh_config" };
+
+/** 不依赖活动会话的服务类命令，由常驻的 service worker 处理 */
+export type ServiceCommand =
+	| { type: "ping" }
+	| { type: "list_sessions"; cwd?: string }
+	| { type: "list_providers" }
+	| { type: "list_models"; availableOnly?: boolean }
+	| { type: "auth_login"; flowId: string; provider: string; method: "api_key" | "oauth" }
+	| { type: "logout"; provider: string }
+	| { type: "test_model"; provider: string; modelId: string }
+	| { type: "get_config_file"; name: ConfigFileName }
+	| { type: "save_config_file"; name: ConfigFileName; text: string }
+	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string };
+
+export interface CommandResultMap {
+	prompt: { disposition: "started" | "queued" | "handled" };
+	abort: null;
+	get_state: SessionState;
+	get_messages: ChatMessage[];
+	get_tree: { tree: SessionTreeNode[]; leafId: string | null };
+	navigate_tree: { cancelled: boolean; editorText?: string };
+	get_available_models: ModelInfo[];
+	set_model: SessionState;
+	set_thinking_level: SessionState;
+	new_session: SessionState;
+	switch_session: SessionState;
+	set_session_name: null;
+	refresh_config: SessionState;
+	ping: { pid: number; versions: Record<string, string | undefined>; agentDir: string };
+	list_sessions: SessionSummary[];
+	list_providers: ProviderInfo[];
+	list_models: ModelEntry[];
+	auth_login: { provider: string };
+	logout: null;
+	test_model: TestResult;
+	get_config_file: ConfigFile;
+	save_config_file: ConfigFile;
+	fetch_remote_models: string[];
+}
+
+export type AnyCommand = SessionCommand | ServiceCommand;
+export type CommandResult<C extends AnyCommand> = CommandResultMap[C["type"]];
+
+/** 会修改配置、需要通知各会话刷新的服务命令 */
+export const CONFIG_MUTATING_COMMANDS = new Set<ServiceCommand["type"]>(["auth_login", "logout", "save_config_file"]);
+
+// ---------------------------------------------------------------------------
+// 会话事件（worker → 界面）
+// ---------------------------------------------------------------------------
+
+export type BlockKind = "text" | "thinking" | "toolCall";
+
+export type SessionEvent =
+	| { type: "agent_start" }
+	| { type: "agent_settled"; aborted: boolean }
+	| { type: "message_start"; message: ChatMessage }
+	| { type: "block_start"; contentIndex: number; kind: BlockKind; toolCallId?: string; toolName?: string }
+	| { type: "block_delta"; contentIndex: number; kind: BlockKind; delta: string }
+	| { type: "block_end"; contentIndex: number; block: ContentBlock }
+	| { type: "message_end"; message: ChatMessage }
+	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: unknown }
+	| { type: "tool_execution_update"; toolCallId: string; partialResult: unknown }
+	| {
+			type: "tool_execution_end";
+			toolCallId: string;
+			toolName: string;
+			result: { content: ContentBlock[]; details?: unknown };
+			isError: boolean;
+			durationMs?: number;
+	  }
+	| { type: "queue_update"; steering: string[]; followUp: string[] }
+	| { type: "session_info_changed"; name?: string }
+	| { type: "thinking_level_changed"; level: ThinkingLevel }
+	| { type: "notice"; level: "info" | "warning" | "error"; text: string }
+	/** 会话被替换（新建 / 切换）或当前分支移动（树导航），界面需要重新拉取消息 */
+	| { type: "session_changed"; state: SessionState };
+
+// ---------------------------------------------------------------------------
+// 后端核心 ⇄ worker 的线上消息
+// ---------------------------------------------------------------------------
+
+export interface WorkerInit {
+	/** service：处理 ServiceCommand；session：承载一个 pi 会话 */
+	role: "service" | "session";
+	cwd: string;
+	/** 打开已有会话；不传则新建 */
+	sessionPath?: string;
+}
+
+export type MainToWorker =
+	| { kind: "init"; init: WorkerInit }
+	| { kind: "command"; id: string; command: AnyCommand }
+	| { kind: "auth_answer"; flowId: string; promptId: string; value?: string; cancel?: boolean }
+	| { kind: "auth_cancel"; flowId: string }
+	| { kind: "shutdown" };
+
+export type WorkerToMain =
+	| { kind: "ready"; state?: SessionState }
+	| { kind: "init_error"; error: string }
+	| { kind: "response"; id: string; ok: true; data: unknown }
+	| { kind: "response"; id: string; ok: false; error: string }
+	| { kind: "event"; event: SessionEvent }
+	| { kind: "auth"; event: AuthFlowEvent };
+
+// ---------------------------------------------------------------------------
+// 界面 ⇄ 后端核心：Transport 信封
+// ---------------------------------------------------------------------------
+
+export interface AppInfo {
+	version: string;
+	versions: Record<string, string | undefined>;
+	agentDir: string;
+	/** 当前外壳 */
+	shell: "electron" | "web";
+	/** 是否支持系统原生文件夹对话框（仅桌面版） */
+	nativeDialogs: boolean;
+}
+
+export interface DirListing {
+	path: string;
+	parent: string | null;
+	entries: Array<{ name: string; path: string }>;
+	/** Windows 盘符或 / */
+	roots: string[];
+	home: string;
+}
+
+export interface BackendMethods {
+	"app.info": { params: undefined; result: AppInfo };
+	"app.pickFolder": { params: undefined; result: string | null };
+	"fs.listDirs": { params: { path?: string }; result: DirListing };
+	"service.send": { params: ServiceCommand; result: unknown };
+	"session.open": { params: { cwd: string; sessionPath?: string }; result: { handleId: string; state: SessionState } };
+	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };
+	"session.close": { params: { handleId: string }; result: null };
+	"auth.answer": { params: { flowId: string; promptId: string; value?: string; cancel?: boolean }; result: null };
+	"auth.cancel": { params: { flowId: string }; result: null };
+}
+
+export type BackendMethod = keyof BackendMethods;
+
+export type BackendPush =
+	| { type: "session_event"; handleId: string; event: SessionEvent }
+	| { type: "session_exit"; handleId: string; code: number }
+	| { type: "auth"; event: AuthFlowEvent }
+	/** 凭据或配置文件变更，界面应刷新模型与供应商列表 */
+	| { type: "config_changed" };
+
+/** 网页版 WebSocket 帧 */
+export type ClientFrame = { id: string; method: BackendMethod; params: unknown };
+export type ServerFrame =
+	| { id: string; ok: true; result: unknown }
+	| { id: string; ok: false; error: string }
+	| { push: BackendPush };
+
+/** 渲染进程看到的传输层；桌面版由 preload 以 window.floworkTransport 暴露 */
+export interface Transport {
+	request(method: BackendMethod, params: unknown): Promise<unknown>;
+	onPush(listener: (push: BackendPush) => void): () => void;
+}
+
+export const ELECTRON_CHANNELS = {
+	request: "flowork:request",
+	push: "flowork:push",
+} as const;

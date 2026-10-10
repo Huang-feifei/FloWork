@@ -1,0 +1,101 @@
+# FloWork
+
+以 [pi coding agent](https://github.com/badlogic/pi-mono)（`@earendil-works/pi-coding-agent`）为内核、以对话为中心的开发者工具。先支持 Windows。
+
+同一套代码提供两种外壳：
+
+- **网页版**（当前主要开发形态）：浏览器访问本地服务 `http://127.0.0.1:17321/`
+- **桌面版**：Electron 应用，界面与后端逻辑和网页版共用
+
+## 快速开始（网页版）
+
+```bash
+npm install
+npm run build:web     # 构建页面与本地后端
+npm run start:web     # 启动并打开浏览器：http://127.0.0.1:17321/
+```
+
+打开后先到 **设置 → 模型供应商** 填写 API Key（或在“自定义端点”添加 OpenAI 兼容接口），再选择一个项目文件夹开始对话。
+
+开发时使用热更新模式：
+
+```bash
+npm run dev:web       # 页面：http://127.0.0.1:5173/（Vite 热更新），后端代码变更后自动重启
+```
+
+## 架构
+
+```text
+界面（React 19 + Tailwind 4 + zustand）── src/renderer
+   │  Transport：网页版 WebSocket（/ws）｜桌面版 Electron IPC（preload）
+后端核心 Backend ── src/core（与外壳无关）
+   │  外壳：src/server（Node HTTP + ws，仅监听 127.0.0.1）｜src/main（Electron 主进程）
+   │  worker 消息：命令 / 响应 / 事件 / 登录交互（src/shared/protocol.ts）
+pi worker ── src/worker（网页版用 child_process，桌面版用 utilityProcess）
+   ├─ service worker × 1：会话列表、供应商与模型、登录 / 登出、测试连接、配置文件读写
+   └─ session worker × N：每个打开的工作区一个，承载 pi AgentSessionRuntime
+```
+
+- pi 以 **SDK** 方式运行在独立子进程中：可以使用 SDK 的完整能力（会话树导航、OAuth 登录、资源重载等），pi 或扩展崩溃不会影响界面和后端。
+- 内部协议的命令和事件命名沿用 pi RPC，并补充了 RPC 没有的能力（`navigate_tree`、`list_sessions`、交互式登录、配置读写等）。
+- **适配层**：pi 的类型只在 `src/worker/adapter.ts` 中解读，界面只依赖 `src/shared/protocol.ts`。升级 pi 时优先检查适配层。pi 版本锁定在 `1.1.0`。
+- **网页版安全边界**：服务只监听 127.0.0.1，WebSocket 校验 Origin（只接受本服务和开发模式的 Vite 地址），防止其他网站经浏览器连接。本机其他进程仍可连接，因此不要把端口转发到外网。
+- **运行时**：pi 要求 Node ≥ 22.19（项目 `.nvmrc` 为 24.21.0）。网页版后端按以下顺序选择 Node：当前 Node（满足要求时）→ 环境变量 `FLOWORK_NODE` → nvm 已安装的最高满足版本（读取 `NVM_SYMLINK` / `NVM_HOME` / `NVM_DIR`）→ Electron 自带的 Node 24（`ELECTRON_RUN_AS_NODE=1`）。启动时会打印实际使用的运行时。构建工具（Vite、esbuild、tsc）对 Node 版本没有这一要求。
+
+## 目录
+
+```text
+src/
+  shared/protocol.ts        内部协议：数据形状、worker 命令与事件、Transport 信封
+  core/                     后端核心（无 Electron 依赖）
+    backend.ts              请求分发、推送、配置变更后通知各会话刷新
+    worker-manager.ts       worker 启动、请求关联、退出处理（启动方式由外壳注入）
+    fs.ts / paths.ts        目录浏览、pi 配置目录
+    smoke-checks.ts         两种外壳共用的冒烟检查
+  worker/                   pi worker
+    session-host.ts         承载 pi 会话
+    service-host.ts         供应商、登录、测试连接、配置文件
+    adapter.ts              pi → FloWork 数据适配
+  server/                   网页版外壳（HTTP 静态页面 + WebSocket）
+  main/ + preload/          桌面版外壳（Electron）
+  renderer/                 界面（两种外壳共用）
+    src/api/                Transport 选择与类型化 API
+    src/components/settings 设置页：模型供应商 / 自定义端点 / 偏好设置 / 配置文件
+scripts/                    网页版构建、开发、启动脚本
+```
+
+## pi 配置目录
+
+默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。设置页中的所有修改都写入这个目录：
+
+| 设置页 | 写入 |
+| --- | --- |
+| 模型供应商（API Key / 订阅登录 / 登出） | auth.json（明文；桌面版计划改用系统加密存储） |
+| 自定义端点 | models.json 的 `providers` |
+| 偏好设置 | settings.json |
+| 配置文件 | 直接编辑 settings.json / models.json（auth.json 不在页面中显示） |
+
+## 命令
+
+```bash
+# 网页版
+npm run dev:web       # 开发模式（Vite 热更新 + 后端自动重启）
+npm run build:web     # 构建到 out/web/
+npm run start:web     # 启动已构建的网页版并打开浏览器
+npm run smoke:web     # 构建并运行网页版后端冒烟检查（不调用模型）
+
+# 桌面版
+npm run dev           # 开发模式
+npm run build         # 构建到 out/
+npm run smoke         # 构建并运行桌面版冒烟测试；加 --screenshot <path.png> 可保存截图
+
+npm run typecheck     # 类型检查（全部代码）
+```
+
+Electron 二进制在首次运行时下载；网络受限时可以设置镜像：`set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
+
+## 路线图
+
+- **M1**：工具审批（pi 扩展 `tool_call` + 确认对话框）、write 修改前快照与 diff、Markdown 渲染、会话树视图与导航、Git Bash 检测。
+- **M2**：多工作区并行、Skills / Extensions 导入与管理、会话分叉 / 标签。
+- **M3**：内置终端与文件树；转为桌面版发布（凭据改用系统加密存储、electron-builder 打包、收紧 CSP）。

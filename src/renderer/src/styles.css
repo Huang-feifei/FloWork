@@ -1,0 +1,208 @@
+@import "tailwindcss";
+
+/* 浅色简洁主题：暖白底、低对比边框、陶土色强调（参考 Claude 桌面端） */
+@theme {
+	--color-bg: #faf9f6;
+	--color-panel: #ffffff;
+	--color-panel-2: #f2f0eb;
+	--color-sidebar: #f3f1ec;
+	--color-border: #e5e1d8;
+	--color-border-strong: #d6d1c6;
+	--color-fg: #1f1e1b;
+	--color-muted: #77736a;
+	--color-accent: #c96442;
+	--color-accent-soft: #f6e8e1;
+	--color-ok: #2f8a4c;
+	--color-warn: #b7791f;
+	--color-err: #c2402f;
+	--color-info: #2f6fb3;
+
+	/* 终端区 */
+	--color-term: #fdfcfa;
+	--color-term-bar: #f4f2ed;
+	--color-term-prompt: #f1eee8;
+	--color-diff-add: #e6f4ea;
+	--color-diff-del: #fbe9e7;
+
+	--font-sans: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+	--font-mono: "Cascadia Mono", "JetBrains Mono", "Sarasa Mono SC", Consolas, "Microsoft YaHei UI", monospace;
+}
+
+html,
+body,
+#root {
+	height: 100%;
+}
+
+body {
+	margin: 0;
+	background: var(--color-bg);
+	color: var(--color-fg);
+	font-family: var(--font-sans);
+	font-size: 14px;
+	-webkit-font-smoothing: antialiased;
+}
+
+::selection {
+	background: #f0d5c8;
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+::-webkit-scrollbar-thumb {
+	background: #d9d4ca;
+	border-radius: 6px;
+	border: 3px solid transparent;
+	background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #c4bdb0;
+	background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+select {
+	cursor: pointer;
+}
+
+/* ---------- 终端式会话区 ---------- */
+
+.term {
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 1.65;
+	font-variant-ligatures: none;
+}
+
+/* 运行中光标闪烁 */
+@keyframes term-blink {
+	0%,
+	50% {
+		opacity: 1;
+	}
+	51%,
+	100% {
+		opacity: 0;
+	}
+}
+.term-cursor {
+	display: inline-block;
+	width: 0.6em;
+	height: 1.1em;
+	vertical-align: text-bottom;
+	background: var(--color-accent);
+	animation: term-blink 1s steps(1) infinite;
+}
+
+/* ---------- 终端内的 Markdown ---------- */
+
+.term-md > :first-child {
+	margin-top: 0;
+}
+.term-md > :last-child {
+	margin-bottom: 0;
+}
+.term-md p {
+	margin: 0 0 0.6em;
+	white-space: pre-wrap;
+}
+.term-md h1,
+.term-md h2,
+.term-md h3,
+.term-md h4 {
+	font-size: 1em;
+	font-weight: 700;
+	margin: 0.9em 0 0.4em;
+}
+.term-md h1::before {
+	content: "# ";
+	color: var(--color-accent);
+}
+.term-md h2::before {
+	content: "## ";
+	color: var(--color-accent);
+}
+.term-md h3::before,
+.term-md h4::before {
+	content: "### ";
+	color: var(--color-accent);
+}
+.term-md ul,
+.term-md ol {
+	margin: 0 0 0.6em;
+	padding-left: 1.6em;
+}
+.term-md ul {
+	list-style: none;
+}
+.term-md ul > li::before {
+	content: "–";
+	color: var(--color-muted);
+	margin-left: -1.2em;
+	width: 1.2em;
+	display: inline-block;
+}
+.term-md ol {
+	list-style: decimal;
+}
+.term-md li {
+	margin: 0.1em 0;
+}
+.term-md a {
+	color: var(--color-info);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.term-md strong {
+	font-weight: 700;
+}
+.term-md em {
+	font-style: italic;
+}
+.term-md code {
+	color: #9a3f22;
+	background: #f4ebe5;
+	border-radius: 4px;
+	padding: 0.05em 0.35em;
+}
+.term-md pre {
+	margin: 0.4em 0 0.8em;
+	padding: 0.7em 0.9em;
+	background: #f5f3ee;
+	border: 1px solid var(--color-border);
+	border-radius: 6px;
+	overflow-x: auto;
+}
+.term-md pre code {
+	color: var(--color-fg);
+	background: transparent;
+	padding: 0;
+}
+.term-md blockquote {
+	margin: 0 0 0.6em;
+	padding-left: 0.9em;
+	border-left: 2px solid var(--color-border-strong);
+	color: var(--color-muted);
+}
+.term-md table {
+	border-collapse: collapse;
+	margin: 0.4em 0 0.8em;
+}
+.term-md th,
+.term-md td {
+	border: 1px solid var(--color-border);
+	padding: 0.2em 0.7em;
+	text-align: left;
+}
+.term-md th {
+	background: var(--color-panel-2);
+}
+.term-md hr {
+	border: none;
+	border-top: 1px dashed var(--color-border-strong);
+	margin: 0.8em 0;
+}

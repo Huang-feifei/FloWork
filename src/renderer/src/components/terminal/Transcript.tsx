@@ -1,0 +1,158 @@
+/**
+ * 终端风格的会话记录：
+ *   ❯ 用户输入
+ *   ● 回复文本（Markdown）
+ *   ✻ 思考过程（可展开）
+ *   ● tool(参数)  ⎿ 结果
+ */
+import { useMemo, useState } from "react";
+import type { ChatMessage, ContentBlock } from "@shared/protocol";
+import { useApp } from "../../store";
+import { Markdown } from "./Markdown";
+import { ToolBlock } from "./ToolBlock";
+
+type ToolResultMap = Map<string, { content: ContentBlock[]; details?: unknown; isError: boolean }>;
+type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
+
+function Gutter({ mark, className = "", children }: { mark: React.ReactNode; className?: string; children: React.ReactNode }) {
+	return (
+		<div className="grid grid-cols-[2ch_1fr] gap-x-1">
+			<div className={className}>{mark}</div>
+			<div className="min-w-0">{children}</div>
+		</div>
+	);
+}
+
+function UserLine({ message }: { message: Extract<ChatMessage, { role: "user" }> }) {
+	const text = message.content
+		.map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[图片]" : ""))
+		.join("");
+	return (
+		<div className="-mx-3 rounded-md bg-term-prompt px-3 py-1.5">
+			<Gutter mark="❯" className="font-bold text-accent">
+				<div className="whitespace-pre-wrap">{text}</div>
+			</Gutter>
+		</div>
+	);
+}
+
+function ThinkingLine({ text, live }: { text: string; live: boolean }) {
+	const [open, setOpen] = useState(false);
+	if (!text.trim()) return null;
+	const lines = text.trim().split("\n");
+	const tail = lines.slice(-3).join("\n");
+	return (
+		<Gutter mark="✻" className="text-muted">
+			<button type="button" onClick={() => setOpen(!open)} className="text-muted italic hover:text-fg">
+				{live ? "思考中…" : `思考过程（${text.length} 字）`} {open ? "▾" : "▸"}
+			</button>
+			{(open || live) && (
+				<div className="max-h-72 overflow-y-auto border-l border-border-strong pl-3 whitespace-pre-wrap text-muted italic">
+					{open ? text : tail}
+				</div>
+			)}
+		</Gutter>
+	);
+}
+
+function AssistantBlocks({
+	message,
+	toolResults,
+	live,
+}: {
+	message: AssistantMessage;
+	toolResults: ToolResultMap;
+	live: boolean;
+}) {
+	const toolRuns = useApp((s) => s.toolRuns);
+	const toolArgsText = useApp((s) => s.toolArgsText);
+	const cwd = useApp((s) => s.cwd);
+	const last = message.content.length - 1;
+
+	return (
+		<>
+			{message.content.map((block, i) => {
+				const key = `${i}-${block.type}`;
+				switch (block.type) {
+					case "text":
+						if (!block.text.trim()) return null;
+						return (
+							<Gutter key={key} mark="●">
+								<Markdown text={block.text} />
+								{live && i === last && <span className="term-cursor" />}
+							</Gutter>
+						);
+					case "thinking":
+						return <ThinkingLine key={key} text={block.thinking} live={live && i === last} />;
+					case "toolCall":
+						return (
+							<ToolBlock
+								key={key}
+								call={block}
+								cwd={cwd}
+								argsText={toolArgsText[block.id]}
+								run={toolRuns[block.id]}
+								result={toolResults.get(block.id)}
+							/>
+						);
+					default:
+						return null;
+				}
+			})}
+			{message.stopReason === "error" && (
+				<Gutter mark="✗" className="text-err">
+					<span className="text-err">{message.errorMessage || "请求失败"}</span>
+				</Gutter>
+			)}
+			{message.stopReason === "aborted" && (
+				<Gutter mark="⎿" className="text-muted">
+					<span className="text-muted">已中断</span>
+				</Gutter>
+			)}
+		</>
+	);
+}
+
+function MessageView({ message, toolResults }: { message: ChatMessage; toolResults: ToolResultMap }) {
+	switch (message.role) {
+		case "user":
+			return <UserLine message={message} />;
+		case "assistant":
+			return <AssistantBlocks message={message} toolResults={toolResults} live={false} />;
+		case "toolResult":
+			// 工具结果合并显示在对应的工具调用下方
+			return null;
+		case "note":
+			return (
+				<Gutter mark="※" className="text-muted">
+					<div className="whitespace-pre-wrap text-muted">
+						<span className="mr-2">[{message.kind}]</span>
+						{message.text}
+					</div>
+				</Gutter>
+			);
+	}
+}
+
+export function Transcript() {
+	const messages = useApp((s) => s.messages);
+	const streaming = useApp((s) => s.streaming);
+
+	const toolResults = useMemo(() => {
+		const map: ToolResultMap = new Map();
+		for (const m of messages) {
+			if (m.role === "toolResult") map.set(m.toolCallId, { content: m.content, details: m.details, isError: m.isError });
+		}
+		return map;
+	}, [messages]);
+
+	return (
+		<div className="flex flex-col gap-3">
+			{messages.map((m, i) => (
+				// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
+				<MessageView key={i} message={m} toolResults={toolResults} />
+			))}
+			{streaming && <AssistantBlocks message={streaming} toolResults={toolResults} live />}
+		</div>
+	);
+}
