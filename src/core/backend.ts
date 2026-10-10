@@ -12,6 +12,7 @@ import {
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
 import { getPiAgentDir } from "./paths";
+import { listWorkspaceDir, readWorkspaceFile } from "./workspace-fs";
 import { WorkerManager } from "./worker-manager";
 import type { WorkerSpawner } from "./worker-process";
 
@@ -68,6 +69,14 @@ export class Backend {
 			case "fs.listDirs": {
 				const params = rawParams as BackendMethods["fs.listDirs"]["params"];
 				return listDirs(params?.path);
+			}
+			case "workspace.list": {
+				const params = rawParams as BackendMethods["workspace.list"]["params"];
+				return listWorkspaceDir(params.root, params.path);
+			}
+			case "workspace.read": {
+				const params = rawParams as BackendMethods["workspace.read"]["params"];
+				return readWorkspaceFile(params.root, params.path);
 			}
 			case "service.send": {
 				const command = rawParams as ServiceCommand;

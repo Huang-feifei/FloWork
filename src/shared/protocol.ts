@@ -357,10 +357,37 @@ export interface DirListing {
 	home: string;
 }
 
+export interface WorkspaceEntry {
+	name: string;
+	/** 相对工作区根目录，/ 分隔 */
+	path: string;
+	type: "file" | "dir";
+	size?: number;
+	/** 被 .gitignore 或常见构建目录规则命中，界面置灰 */
+	ignored: boolean;
+}
+
+export interface WorkspaceDirListing {
+	path: string;
+	entries: WorkspaceEntry[];
+}
+
+export interface FilePreview {
+	path: string;
+	absolutePath: string;
+	size: number;
+	mtime: number;
+	binary: boolean;
+	truncated: boolean;
+	text: string;
+}
+
 export interface BackendMethods {
 	"app.info": { params: undefined; result: AppInfo };
 	"app.pickFolder": { params: undefined; result: string | null };
 	"fs.listDirs": { params: { path?: string }; result: DirListing };
+	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
+	"workspace.read": { params: { root: string; path: string }; result: FilePreview };
 	"service.send": { params: ServiceCommand; result: unknown };
 	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };

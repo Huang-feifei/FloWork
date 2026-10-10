@@ -46,6 +46,7 @@ export interface Notice {
 }
 
 export type View = "chat" | "settings";
+export type RightPanel = "files" | "session" | "tree";
 export type SettingsTab = "providers" | "custom" | "preferences" | "raw";
 
 type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
@@ -77,8 +78,13 @@ interface AppState {
 	/** 等待用户确认的工具调用，按到达顺序 */
 	pendingApprovals: PendingApproval[];
 	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息）；seq 变化时输入框读取 */
-	draft: { text: string; seq: number };
-	treeOpen: boolean;
+	draft: { text: string; seq: number; append?: boolean };
+	/** 右侧面板：项目文件 / 会话文件 / 会话树；null 表示收起 */
+	rightPanel: RightPanel | null;
+	/** 工作区文件可能变化时递增，文件面板据此刷新 */
+	filesVersion: number;
+	/** 正在预览的文件（相对工作区的路径） */
+	preview: string | null;
 	tree: SessionTreeNode[];
 	leafId: string | null;
 
@@ -99,7 +105,11 @@ interface AppState {
 	dismissNotice(id: number): void;
 	setApprovalMode(mode: ApprovalMode): Promise<void>;
 	respondApproval(toolCallId: string, decision: ApprovalDecision): Promise<void>;
-	toggleTree(open?: boolean): void;
+	setRightPanel(panel: RightPanel | null): void;
+	openPreview(path: string | null): void;
+	/** 把文本追加到输入框（例如引用文件路径） */
+	insertIntoPrompt(text: string): void;
+	refreshFiles(): void;
 	loadTree(): Promise<void>;
 	navigateTo(entryId: string): Promise<void>;
 	forkFrom(entryId: string, position: "before" | "at"): Promise<void>;
@@ -110,7 +120,12 @@ interface AppState {
 
 const LAST_CWD_KEY = "flowork.lastCwd";
 const APPROVAL_KEY = "flowork.approvalMode";
-const TREE_KEY = "flowork.treeOpen";
+const PANEL_KEY = "flowork.rightPanel";
+
+function storedPanel(): RightPanel | null {
+	const v = localStorage.getItem(PANEL_KEY);
+	return v === "files" || v === "session" || v === "tree" ? v : null;
+}
 
 function storedApprovalMode(): ApprovalMode {
 	const v = localStorage.getItem(APPROVAL_KEY);
@@ -141,7 +156,7 @@ export const useApp = create<AppState>()((set, get) => {
 			pendingApprovals: [],
 			...(state ? { state } : {}),
 		});
-		if (get().treeOpen) void get().loadTree();
+		if (get().rightPanel === "tree") void get().loadTree();
 	}
 
 	return {
@@ -166,7 +181,9 @@ export const useApp = create<AppState>()((set, get) => {
 		approvalMode: storedApprovalMode(),
 		pendingApprovals: [],
 		draft: { text: "", seq: 0 },
-		treeOpen: localStorage.getItem(TREE_KEY) === "1",
+		rightPanel: storedPanel(),
+		filesVersion: 0,
+		preview: null,
 		tree: [],
 		leafId: null,
 
@@ -226,6 +243,7 @@ export const useApp = create<AppState>()((set, get) => {
 				pendingApprovals: [],
 				tree: [],
 				leafId: null,
+				preview: null,
 			});
 			localStorage.setItem(LAST_CWD_KEY, cwd);
 			rememberCwd(cwd);
@@ -302,11 +320,22 @@ export const useApp = create<AppState>()((set, get) => {
 			await sessionCall((h) => api.session(h, { type: "respond_approval", toolCallId, decision }));
 		},
 
-		toggleTree(open) {
-			const next = open ?? !get().treeOpen;
-			localStorage.setItem(TREE_KEY, next ? "1" : "0");
-			set({ treeOpen: next });
-			if (next) void get().loadTree();
+		setRightPanel(panel) {
+			localStorage.setItem(PANEL_KEY, panel ?? "");
+			set({ rightPanel: panel });
+			if (panel === "tree") void get().loadTree();
+		},
+
+		openPreview(path) {
+			set({ preview: path });
+		},
+
+		insertIntoPrompt(text) {
+			set((s) => ({ draft: { text, seq: s.draft.seq + 1, append: true } }));
+		},
+
+		refreshFiles() {
+			set((s) => ({ filesVersion: s.filesVersion + 1 }));
 		},
 
 		async loadTree() {
@@ -381,7 +410,8 @@ export const useApp = create<AppState>()((set, get) => {
 				case "agent_settled":
 					set({ isRunning: false, pendingApprovals: [] });
 					void get().refreshSessions();
-					if (get().treeOpen) void get().loadTree();
+					if (get().rightPanel === "tree") void get().loadTree();
+					get().refreshFiles();
 					return;
 				case "message_start":
 					if (event.message.role === "assistant") set({ streaming: { ...event.message, content: [] } });
@@ -444,6 +474,7 @@ export const useApp = create<AppState>()((set, get) => {
 					});
 					return;
 				case "tool_execution_end":
+					if (["write", "edit", "bash", "powershell"].includes(event.toolName)) get().refreshFiles();
 					set((s) => ({
 						toolRuns: {
 							...s.toolRuns,

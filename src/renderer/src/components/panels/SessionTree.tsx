@@ -76,11 +76,11 @@ function activePath(roots: SessionTreeNode[], leafId: string | null): Set<string
 	return path;
 }
 
-export function TreePanel() {
+export function SessionTree() {
 	const tree = useApp((s) => s.tree);
 	const leafId = useApp((s) => s.leafId);
 	const isRunning = useApp((s) => s.isRunning);
-	const { navigateTo, forkFrom, setLabel, toggleTree } = useApp.getState();
+	const { navigateTo, forkFrom, setLabel } = useApp.getState();
 
 	const rows = useMemo(() => flatten(tree), [tree]);
 	const onPath = useMemo(() => activePath(tree, leafId), [tree, leafId]);
@@ -89,14 +89,9 @@ export function TreePanel() {
 	const branchCount = useMemo(() => rows.filter((r) => r.branchStart).length, [rows]);
 
 	return (
-		<aside className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-panel">
-			<div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-term-bar px-3 text-xs">
-				<span className="font-medium">会话树</span>
-				<span className="text-muted">{branchCount > 0 ? `${branchCount} 个分支` : "无分支"}</span>
-				<div className="flex-1" />
-				<button type="button" onClick={() => toggleTree(false)} className="text-muted hover:text-fg">
-					✕
-				</button>
+		<div className="flex min-h-0 flex-1 flex-col">
+			<div className="border-b border-border px-3 py-1.5 text-[11px] text-muted">
+				{branchCount > 0 ? `${branchCount} 个分支` : "当前没有分支"}
 			</div>
 			<div className="term min-h-0 flex-1 overflow-y-auto py-2 text-[12px] leading-5">
 				{rows.length === 0 && <div className="px-3 text-muted">还没有消息</div>}
@@ -162,6 +157,6 @@ export function TreePanel() {
 			<div className="border-t border-border px-3 py-2 text-[11px] leading-4 text-muted">
 				回到旧节点后继续发送会形成新分支，原来的分支保留在树中。
 			</div>
-		</aside>
+		</div>
 	);
 }

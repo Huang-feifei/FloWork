@@ -8,13 +8,15 @@ import { useApp } from "../../store";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { Spinner, useElapsed } from "./Spinner";
 import { Transcript } from "./Transcript";
-import { TreePanel } from "./TreePanel";
+import { FilePreview } from "../panels/FilePreview";
+import { PANEL_TABS, RightPanel, useChangedCount } from "../panels/RightPanel";
 
 function TitleBar() {
 	const state = useApp((s) => s.state);
 	const cwd = useApp((s) => s.cwd);
-	const treeOpen = useApp((s) => s.treeOpen);
-	const toggleTree = useApp((s) => s.toggleTree);
+	const rightPanel = useApp((s) => s.rightPanel);
+	const setRightPanel = useApp((s) => s.setRightPanel);
+	const changedCount = useChangedCount();
 	const firstPrompt = useApp((s) => {
 		const first = s.messages.find((m) => m.role === "user");
 		return first?.role === "user" ? first.content.map((b) => (b.type === "text" ? b.text : "")).join("").slice(0, 60) : "";
@@ -29,14 +31,20 @@ function TitleBar() {
 			<div className="min-w-0 flex-1 truncate text-center font-mono text-xs text-muted">
 				{state?.sessionName || firstPrompt || "新会话"} — {cwd ? basename(cwd) : ""}
 			</div>
-			<button
-				type="button"
-				onClick={() => toggleTree()}
-				className={`rounded px-2 py-0.5 font-mono text-xs ${treeOpen ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
-				title="显示会话树：回到任意节点、分叉"
-			>
-				会话树
-			</button>
+			<div className="flex gap-0.5">
+				{PANEL_TABS.map((tab) => (
+					<button
+						type="button"
+						key={tab.id}
+						onClick={() => setRightPanel(rightPanel === tab.id ? null : tab.id)}
+						title={tab.hint}
+						className={`rounded px-2 py-0.5 text-xs ${rightPanel === tab.id ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
+					>
+						{tab.label}
+						{tab.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}
+					</button>
+				))}
+			</div>
 		</div>
 	);
 }
@@ -100,7 +108,8 @@ function PromptInput() {
 	// 回溯 / 分叉后把原消息填回输入框
 	useEffect(() => {
 		if (draft.seq === 0) return;
-		setText(draft.text);
+		if (draft.append) setText((prev) => (prev && !/s$/.test(prev) ? `${prev} ${draft.text} ` : `${prev}${draft.text} `));
+		else setText(draft.text);
 		ref.current?.focus();
 	}, [draft]);
 
@@ -236,7 +245,6 @@ export function TerminalView() {
 	const streaming = useApp((s) => s.streaming);
 	const isRunning = useApp((s) => s.isRunning);
 	const pendingCount = useApp((s) => s.pendingApprovals.length);
-	const treeOpen = useApp((s) => s.treeOpen);
 	const abort = useApp((s) => s.abort);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
@@ -259,8 +267,9 @@ export function TerminalView() {
 
 	return (
 		<div className="flex min-h-0 flex-1 gap-3 p-4 pt-3">
-			<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-term shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(60,40,20,0.12)]">
+			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-term shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(60,40,20,0.12)]">
 				<TitleBar />
+				<FilePreview />
 				<div
 					ref={scrollRef}
 					onScroll={(e) => {
@@ -289,7 +298,7 @@ export function TerminalView() {
 					</div>
 				</div>
 			</div>
-			{treeOpen && <TreePanel />}
+			<RightPanel />
 		</div>
 	);
 }

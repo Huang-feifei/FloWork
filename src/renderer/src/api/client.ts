@@ -18,6 +18,8 @@ export const api = {
 	info: () => call("app.info", undefined),
 	pickFolder: () => call("app.pickFolder", undefined),
 	listDirs: (path?: string) => call("fs.listDirs", { path }),
+	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
+	readWorkspaceFile: (root: string, path: string) => call("workspace.read", { root, path }),
 
 	service: <C extends ServiceCommand>(command: C) => call("service.send", command) as Promise<CommandResult<C>>,
 
