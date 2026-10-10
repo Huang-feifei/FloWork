@@ -17,6 +17,11 @@ const backend = new Backend({
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
 		return result.canceled ? null : (result.filePaths[0] ?? null);
 	},
+	pickFolders: async () => {
+		const options = { properties: ["openDirectory" as const, "multiSelections" as const] };
+		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+		return result.canceled ? [] : result.filePaths;
+	},
 });
 
 function createWindow(show = true): BrowserWindow {

@@ -4,7 +4,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ApprovalMode, ThinkingLevel } from "@shared/protocol";
 import { basename, formatTokens } from "../../lib/format";
-import { useApp } from "../../store";
+import { projectName, useApp } from "../../store";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { Spinner, useElapsed } from "./Spinner";
 import { Transcript } from "./Transcript";
@@ -15,6 +15,10 @@ import { PANEL_TABS, RightPanel, useChangedCount } from "../panels/RightPanel";
 function TitleBar() {
 	const state = useApp((s) => s.state);
 	const cwd = useApp((s) => s.cwd);
+	const projectTitle = useApp((s) => {
+		const p = s.projects.projects.find((x) => x.id === s.activeProjectId);
+		return p ? projectName(p) : null;
+	});
 	const rightPanel = useApp((s) => s.rightPanel);
 	const setRightPanel = useApp((s) => s.setRightPanel);
 	const changedCount = useChangedCount();
@@ -30,7 +34,7 @@ function TitleBar() {
 				<span className="size-2.5 rounded-full bg-[#7cc480]" />
 			</div>
 			<div className="min-w-0 flex-1 truncate text-center font-mono text-xs text-muted">
-				{state?.sessionName || firstPrompt || "新会话"} — {cwd ? basename(cwd) : ""}
+				{state?.sessionName || firstPrompt || "新会话"} — {projectTitle ?? (cwd ? basename(cwd) : "")}
 			</div>
 			<div className="flex gap-0.5">
 				{PANEL_TABS.map((tab) => (

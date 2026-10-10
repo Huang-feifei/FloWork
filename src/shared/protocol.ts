@@ -225,7 +225,7 @@ export type SessionCommand =
 /** 不依赖活动会话的服务类命令，由常驻的 service worker 处理 */
 export type ServiceCommand =
 	| { type: "ping" }
-	| { type: "list_sessions"; cwd?: string }
+	| { type: "list_sessions"; cwd?: string; /** 列出所有目录时使用的会话根目录，默认 FloWork 自己的 */ sessionDir?: string }
 	| { type: "list_providers" }
 	| { type: "list_models"; availableOnly?: boolean }
 	| { type: "auth_login"; flowId: string; provider: string; method: "api_key" | "oauth" }
@@ -393,9 +393,68 @@ export interface FileSearchResult {
 
 export const WRITE_CONFLICT_PREFIX = "WRITE_CONFLICT:";
 
+// ---------------------------------------------------------------------------
+// 项目（侧边栏中导入的工作区）
+// ---------------------------------------------------------------------------
+
+export interface ProjectGroup {
+	id: string;
+	name: string;
+	collapsed?: boolean;
+}
+
+export interface Project {
+	id: string;
+	/** 文件夹绝对路径 */
+	path: string;
+	/** 自定义显示名；未设置时显示文件夹名 */
+	name?: string;
+	groupId?: string;
+	pinned?: boolean;
+	/** 同一区域（置顶 / 分组 / 未分组）内的排序 */
+	order: number;
+	addedAt: number;
+	lastOpenedAt?: number;
+	/** 文件夹当前是否存在（读取时计算，不持久化） */
+	missing?: boolean;
+}
+
+export interface ProjectsState {
+	projects: Project[];
+	groups: ProjectGroup[];
+}
+
+export interface ProjectPatch {
+	name?: string | null;
+	groupId?: string | null;
+	pinned?: boolean;
+}
+
+export interface DiscoveredProject {
+	path: string;
+	sessionCount: number;
+	lastModified: number;
+	/** 会话来自 FloWork 还是 pi 命令行 */
+	sources: Array<"flowork" | "pi-cli">;
+	exists: boolean;
+}
+
 export interface BackendMethods {
 	"app.info": { params: undefined; result: AppInfo };
 	"app.pickFolder": { params: undefined; result: string | null };
+	/** 系统对话框多选文件夹（仅桌面版） */
+	"app.pickFolders": { params: undefined; result: string[] };
+	"projects.get": { params: undefined; result: ProjectsState };
+	"projects.add": { params: { paths: string[]; groupId?: string }; result: { state: ProjectsState; added: Project[]; skipped: string[] } };
+	"projects.update": { params: { id: string; patch: ProjectPatch }; result: ProjectsState };
+	"projects.remove": { params: { id: string }; result: ProjectsState };
+	"projects.touch": { params: { id: string }; result: ProjectsState };
+	/** 把 ids 按顺序放入目标区域：pinned 为置顶区，否则为 groupId（null 表示未分组） */
+	"projects.move": { params: { ids: string[]; pinned: boolean; groupId: string | null }; result: ProjectsState };
+	"projects.groupCreate": { params: { name: string }; result: { state: ProjectsState; group: ProjectGroup } };
+	"projects.groupUpdate": { params: { id: string; name?: string; collapsed?: boolean }; result: ProjectsState };
+	"projects.groupRemove": { params: { id: string }; result: ProjectsState };
+	"projects.discover": { params: undefined; result: DiscoveredProject[] };
 	"fs.listDirs": { params: { path?: string }; result: DirListing };
 	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
 	"workspace.read": { params: { root: string; path: string }; result: FilePreview };
@@ -420,7 +479,8 @@ export type BackendPush =
 	| { type: "session_exit"; handleId: string; code: number }
 	| { type: "auth"; event: AuthFlowEvent }
 	/** 凭据或配置文件变更，界面应刷新模型与供应商列表 */
-	| { type: "config_changed" };
+	| { type: "config_changed" }
+	| { type: "projects_changed"; state: ProjectsState };
 
 /** 网页版 WebSocket 帧 */
 export type ClientFrame = { id: string; method: BackendMethod; params: unknown };

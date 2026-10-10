@@ -11,3 +11,13 @@ import { join } from "node:path";
 export function getPiAgentDir(): string {
 	return process.env.FLOWORK_PI_AGENT_DIR || join(homedir(), ".flowork", "agent");
 }
+
+/** FloWork 自身的数据目录（项目列表等），与 pi 配置目录分开 */
+export function getFloworkDataDir(): string {
+	return process.env.FLOWORK_DATA_DIR || join(homedir(), ".flowork");
+}
+
+/** pi CLI 默认的会话目录；用于“发现项目”时一并扫描（只读） */
+export function getPiCliSessionsDir(): string {
+	return join(homedir(), ".pi", "agent", "sessions");
+}

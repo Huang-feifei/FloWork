@@ -59,7 +59,7 @@ export class ServiceHost {
 			case "ping":
 				return { pid: process.pid, versions: { ...process.versions }, agentDir: getAgentDir() };
 			case "list_sessions":
-				return this.listSessions(command.cwd);
+				return this.listSessions(command.cwd, command.sessionDir);
 			case "list_providers":
 				return this.listProviders();
 			case "list_models":
@@ -86,8 +86,14 @@ export class ServiceHost {
 
 	// ----- 会话 -----
 
-	private async listSessions(cwd?: string): Promise<SessionSummary[]> {
-		const infos = cwd ? await SessionManager.list(cwd) : await SessionManager.listAll();
+	private async listSessions(cwd?: string, sessionDir?: string): Promise<SessionSummary[]> {
+		const infos = cwd
+			? await SessionManager.list(cwd)
+			: sessionDir
+				? existsSync(sessionDir)
+					? await SessionManager.listAll(sessionDir)
+					: []
+				: await SessionManager.listAll();
 		return infos.map((info) => ({
 			path: info.path,
 			id: info.id,

@@ -6,6 +6,7 @@
  *     node node_modules/electron/cli.js scripts/screenshot.cjs
  *
  * SHOT_STEPS 中每段脚本执行后等待 SHOT_WAIT 毫秒；若 SHOT_OUT 含 {n}，每一步都截一张图。
+ * 步骤也可以写成对象 { js, wait, shot }：自定义等待时长；shot 指定时只在该步截图并以它替换 {n}。
  */
 const { app, BrowserWindow } = require("electron");
 const { writeFileSync } = require("node:fs");
@@ -29,11 +30,14 @@ app.whenReady().then(async () => {
 			writeFileSync(path, (await win.webContents.capturePage()).toPNG());
 			console.log(`saved ${path}`);
 		};
-		if (out.includes("{n}")) await capture(0);
+		const named = steps.some((s) => typeof s === "object" && s.shot);
+		if (out.includes("{n}") && !named) await capture(0);
 		for (let i = 0; i < steps.length; i++) {
-			await win.webContents.executeJavaScript(steps[i]);
-			await sleep(wait);
-			if (out.includes("{n}")) await capture(i + 1);
+			const step = typeof steps[i] === "string" ? { js: steps[i] } : steps[i];
+			if (step.js) await win.webContents.executeJavaScript(step.js);
+			await sleep(step.wait ?? wait);
+			if (step.shot) await capture(step.shot);
+			else if (out.includes("{n}") && !named) await capture(i + 1);
 		}
 		if (!out.includes("{n}")) await capture(0);
 		app.exit(0);

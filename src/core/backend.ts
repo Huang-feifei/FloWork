@@ -4,6 +4,9 @@
  */
 import {
 	type AppInfo,
+	type DiscoveredProject,
+	type ProjectsState,
+	type SessionSummary,
 	type BackendMethod,
 	type BackendMethods,
 	type BackendPush,
@@ -11,7 +14,8 @@ import {
 	type ServiceCommand,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
-import { getPiAgentDir } from "./paths";
+import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
+import { ProjectStore, samePath } from "./projects";
 import { listWorkspaceDir, readWorkspaceFile, searchWorkspaceFiles, writeWorkspaceFile } from "./workspace-fs";
 import { WorkerManager } from "./worker-manager";
 import type { WorkerSpawner } from "./worker-process";
@@ -22,12 +26,15 @@ export interface BackendHost {
 	spawnWorker: WorkerSpawner;
 	/** 系统原生文件夹对话框；网页版不提供 */
 	pickFolder?: () => Promise<string | null>;
+	/** 系统原生文件夹对话框（多选）；网页版不提供 */
+	pickFolders?: () => Promise<string[]>;
 }
 
 type PushListener = (push: BackendPush) => void;
 
 export class Backend {
 	readonly workers: WorkerManager;
+	readonly projects = new ProjectStore();
 	private readonly listeners = new Set<PushListener>();
 	/** clientId → 该客户端打开的会话，客户端断开时一并关闭 */
 	private readonly clientSessions = new Map<string, Set<string>>();
@@ -66,6 +73,49 @@ export class Backend {
 			case "app.pickFolder":
 				if (!this.host.pickFolder) throw new Error("当前外壳不支持系统文件夹对话框");
 				return this.host.pickFolder();
+			case "app.pickFolders":
+				if (!this.host.pickFolders) throw new Error("当前外壳不支持系统文件夹对话框");
+				return this.host.pickFolders();
+			case "projects.get":
+				return this.projects.get();
+			case "projects.add": {
+				const params = rawParams as BackendMethods["projects.add"]["params"];
+				const r = await this.projects.add(params.paths, params.groupId);
+				this.projectsChanged(r.state);
+				return { state: r.state, ...r.result };
+			}
+			case "projects.update": {
+				const params = rawParams as BackendMethods["projects.update"]["params"];
+				return this.projectsChanged(await this.projects.update(params.id, params.patch));
+			}
+			case "projects.remove": {
+				const params = rawParams as BackendMethods["projects.remove"]["params"];
+				return this.projectsChanged(await this.projects.remove(params.id));
+			}
+			case "projects.touch": {
+				const params = rawParams as BackendMethods["projects.touch"]["params"];
+				return this.projectsChanged(await this.projects.touch(params.id));
+			}
+			case "projects.move": {
+				const params = rawParams as BackendMethods["projects.move"]["params"];
+				return this.projectsChanged(await this.projects.move(params.ids, params.pinned, params.groupId));
+			}
+			case "projects.groupCreate": {
+				const params = rawParams as BackendMethods["projects.groupCreate"]["params"];
+				const r = await this.projects.createGroup(params.name);
+				this.projectsChanged(r.state);
+				return { state: r.state, group: r.result };
+			}
+			case "projects.groupUpdate": {
+				const params = rawParams as BackendMethods["projects.groupUpdate"]["params"];
+				return this.projectsChanged(await this.projects.updateGroup(params.id, params));
+			}
+			case "projects.groupRemove": {
+				const params = rawParams as BackendMethods["projects.groupRemove"]["params"];
+				return this.projectsChanged(await this.projects.removeGroup(params.id));
+			}
+			case "projects.discover":
+				return this.discoverProjects();
 			case "fs.listDirs": {
 				const params = rawParams as BackendMethods["fs.listDirs"]["params"];
 				return listDirs(params?.path);
@@ -135,6 +185,38 @@ export class Backend {
 				return null;
 			}
 		}
+	}
+
+	private projectsChanged(state: ProjectsState): ProjectsState {
+		this.push({ type: "projects_changed", state });
+		return state;
+	}
+
+	/** 从 FloWork 与 pi CLI 的已有会话中找出涉及的目录，排除已导入的项目 */
+	private async discoverProjects(): Promise<DiscoveredProject[]> {
+		const service = await this.workers.getService();
+		const [own, cli] = await Promise.all([
+			service.send({ type: "list_sessions" }) as Promise<SessionSummary[]>,
+			service.send({ type: "list_sessions", sessionDir: getPiCliSessionsDir() }).catch(() => []) as Promise<SessionSummary[]>,
+		]);
+		const { projects } = await this.projects.get();
+		const found = new Map<string, DiscoveredProject>();
+		const collect = (sessions: SessionSummary[], source: "flowork" | "pi-cli") => {
+			for (const s of sessions) {
+				if (!s.cwd || projects.some((p) => samePath(p.path, s.cwd))) continue;
+				const key = process.platform === "win32" ? s.cwd.toLowerCase() : s.cwd;
+				const entry = found.get(key) ?? { path: s.cwd, sessionCount: 0, lastModified: 0, sources: [], exists: false };
+				entry.sessionCount++;
+				entry.lastModified = Math.max(entry.lastModified, s.modified);
+				if (!entry.sources.includes(source)) entry.sources.push(source);
+				found.set(key, entry);
+			}
+		};
+		collect(own, "flowork");
+		collect(cli, "pi-cli");
+		const list = [...found.values()];
+		await Promise.all(list.map(async (d) => (d.exists = await isDirectory(d.path))));
+		return list.sort((a, b) => b.lastModified - a.lastModified);
 	}
 
 	/** 客户端断开（网页标签关闭）时，关闭它打开的会话 */

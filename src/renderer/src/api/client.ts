@@ -1,6 +1,7 @@
 /** 基于 Transport 的类型化 API，界面只通过这里访问后端 */
 import type {
 	ApprovalMode,
+	ProjectPatch,
 	BackendMethod,
 	BackendMethods,
 	BackendPush,
@@ -17,6 +18,19 @@ function call<M extends BackendMethod>(method: M, params: BackendMethods[M]["par
 export const api = {
 	info: () => call("app.info", undefined),
 	pickFolder: () => call("app.pickFolder", undefined),
+	pickFolders: () => call("app.pickFolders", undefined),
+	projects: {
+		get: () => call("projects.get", undefined),
+		add: (paths: string[], groupId?: string) => call("projects.add", { paths, groupId }),
+		update: (id: string, patch: ProjectPatch) => call("projects.update", { id, patch }),
+		remove: (id: string) => call("projects.remove", { id }),
+		touch: (id: string) => call("projects.touch", { id }),
+		move: (ids: string[], pinned: boolean, groupId: string | null) => call("projects.move", { ids, pinned, groupId }),
+		groupCreate: (name: string) => call("projects.groupCreate", { name }),
+		groupUpdate: (id: string, patch: { name?: string; collapsed?: boolean }) => call("projects.groupUpdate", { id, ...patch }),
+		groupRemove: (id: string) => call("projects.groupRemove", { id }),
+		discover: () => call("projects.discover", undefined),
+	},
 	listDirs: (path?: string) => call("fs.listDirs", { path }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
 	readWorkspaceFile: (root: string, path: string) => call("workspace.read", { root, path }),
@@ -27,7 +41,8 @@ export const api = {
 
 	service: <C extends ServiceCommand>(command: C) => call("service.send", command) as Promise<CommandResult<C>>,
 
-	openSession: (cwd: string, approvalMode?: ApprovalMode) => call("session.open", { cwd, approvalMode }),
+	openSession: (cwd: string, approvalMode?: ApprovalMode, sessionPath?: string) =>
+		call("session.open", { cwd, approvalMode, sessionPath }),
 	session: <C extends SessionCommand>(handleId: string, command: C) =>
 		call("session.send", { handleId, command }) as Promise<CommandResult<C>>,
 	closeSession: (handleId: string) => call("session.close", { handleId }),
