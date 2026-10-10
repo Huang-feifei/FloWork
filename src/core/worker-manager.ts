@@ -5,6 +5,7 @@
 import { randomUUID } from "node:crypto";
 import type {
 	AnyCommand,
+	ApprovalMode,
 	AuthFlowEvent,
 	MainToWorker,
 	SessionCommand,
@@ -12,6 +13,7 @@ import type {
 	SessionState,
 	WorkerInit,
 } from "@shared/protocol";
+import { withGitBashOnPath } from "./git-bash";
 import { getPiAgentDir } from "./paths";
 import type { WorkerProcess, WorkerSpawner } from "./worker-process";
 
@@ -46,11 +48,11 @@ export class WorkerClient {
 		const id = randomUUID();
 		const proc = spawn({
 			serviceName: `flowork-pi-${init.role}`,
-			env: {
+			env: withGitBashOnPath({
 				...process.env,
 				PI_CODING_AGENT_DIR: getPiAgentDir(),
 				PI_SKIP_VERSION_CHECK: "1",
-			},
+			}),
 		});
 		const client = new WorkerClient(id, proc);
 		const tag = `[pi-worker:${init.role}:${id.slice(0, 8)}]`;
@@ -176,13 +178,13 @@ export class WorkerManager {
 	}
 
 	async openSession(
-		options: { cwd: string; sessionPath?: string },
+		options: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode },
 		callbacks: SessionCallbacks,
 	): Promise<{ handleId: string; state: SessionState }> {
 		let handleId = "";
 		const { client, state } = await WorkerClient.start(
 			this.spawn,
-			{ role: "session", cwd: options.cwd, sessionPath: options.sessionPath },
+			{ role: "session", cwd: options.cwd, sessionPath: options.sessionPath, approvalMode: options.approvalMode },
 			{
 				onEvent: (event) => callbacks.onEvent(handleId, event),
 				onExit: (code) => {

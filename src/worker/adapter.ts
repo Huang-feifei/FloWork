@@ -164,7 +164,7 @@ function entryPreview(entry: LooseRecord): { role?: string; preview: string } {
 		if (!msg) return { role: "system", preview: "" };
 		if (msg.role === "note") return { role: msg.kind, preview: msg.text.slice(0, 120) };
 		const text = msg.content
-			.map((b) => (b.type === "text" ? b.text : b.type === "toolCall" ? `[${b.name}]` : ""))
+			.map((b) => (b.type === "text" ? b.text : b.type === "toolCall" ? `${b.name}(…)` : ""))
 			.join(" ")
 			.trim();
 		return { role: msg.role, preview: text.slice(0, 120) };

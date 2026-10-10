@@ -90,6 +90,19 @@ export interface SessionState {
 	messageCount: number;
 }
 
+/**
+ * 工具审批模式：
+ * - auto：全部自动执行
+ * - ask_writes：修改文件、执行命令及其他非只读工具前确认（默认）
+ * - ask_all：所有工具都需确认
+ */
+export type ApprovalMode = "auto" | "ask_writes" | "ask_all";
+export const DEFAULT_APPROVAL_MODE: ApprovalMode = "ask_writes";
+/** 只读工具：ask_writes 模式下自动执行 */
+export const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
+
+export type ApprovalDecision = "allow" | "allow_session" | "deny";
+
 export interface SessionSummary {
 	path: string;
 	id: string;
@@ -165,6 +178,18 @@ export interface ConfigFile {
 	text: string;
 }
 
+export interface ShellInfo {
+	/** pi 的 bash 工具实际会使用的 shell；无法解析时为 null */
+	resolved: string | null;
+	error?: string;
+	/** 解析结果是否为 WSL 启动器（System32\bash.exe） */
+	isWsl: boolean;
+	/** 自动识别到的 Git Bash */
+	gitBash: string | null;
+	/** settings.json 中的 shellPath */
+	shellPathSetting?: string;
+}
+
 export interface TestResult {
 	ok: boolean;
 	latencyMs: number;
@@ -183,12 +208,17 @@ export type SessionCommand =
 	| { type: "get_messages" }
 	| { type: "get_tree" }
 	| { type: "navigate_tree"; entryId: string; summarize?: boolean }
+	/** 从某个条目分叉出新会话；position = before 时 entryId 必须是用户消息，其文本会返回给输入框 */
+	| { type: "fork"; entryId: string; position?: "before" | "at" }
+	| { type: "set_label"; entryId: string; label: string }
 	| { type: "get_available_models" }
 	| { type: "set_model"; provider: string; modelId: string }
 	| { type: "set_thinking_level"; level: ThinkingLevel }
 	| { type: "new_session" }
 	| { type: "switch_session"; sessionPath: string }
 	| { type: "set_session_name"; name: string }
+	| { type: "set_approval_mode"; mode: ApprovalMode }
+	| { type: "respond_approval"; toolCallId: string; decision: ApprovalDecision }
 	/** 配置（凭据 / models.json / settings.json）变化后重新加载 */
 	| { type: "refresh_config" };
 
@@ -203,7 +233,8 @@ export type ServiceCommand =
 	| { type: "test_model"; provider: string; modelId: string }
 	| { type: "get_config_file"; name: ConfigFileName }
 	| { type: "save_config_file"; name: ConfigFileName; text: string }
-	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string };
+	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string }
+	| { type: "get_shell_info" };
 
 export interface CommandResultMap {
 	prompt: { disposition: "started" | "queued" | "handled" };
@@ -212,12 +243,16 @@ export interface CommandResultMap {
 	get_messages: ChatMessage[];
 	get_tree: { tree: SessionTreeNode[]; leafId: string | null };
 	navigate_tree: { cancelled: boolean; editorText?: string };
+	fork: { cancelled: boolean; editorText?: string; state: SessionState };
+	set_label: null;
 	get_available_models: ModelInfo[];
 	set_model: SessionState;
 	set_thinking_level: SessionState;
 	new_session: SessionState;
 	switch_session: SessionState;
 	set_session_name: null;
+	set_approval_mode: null;
+	respond_approval: null;
 	refresh_config: SessionState;
 	ping: { pid: number; versions: Record<string, string | undefined>; agentDir: string };
 	list_sessions: SessionSummary[];
@@ -229,6 +264,7 @@ export interface CommandResultMap {
 	get_config_file: ConfigFile;
 	save_config_file: ConfigFile;
 	fetch_remote_models: string[];
+	get_shell_info: ShellInfo;
 }
 
 export type AnyCommand = SessionCommand | ServiceCommand;
@@ -265,6 +301,8 @@ export type SessionEvent =
 	| { type: "session_info_changed"; name?: string }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| { type: "notice"; level: "info" | "warning" | "error"; text: string }
+	| { type: "approval_request"; toolCallId: string; toolName: string; args: unknown }
+	| { type: "approval_resolved"; toolCallId: string; decision: ApprovalDecision }
 	/** 会话被替换（新建 / 切换）或当前分支移动（树导航），界面需要重新拉取消息 */
 	| { type: "session_changed"; state: SessionState };
 
@@ -278,6 +316,7 @@ export interface WorkerInit {
 	cwd: string;
 	/** 打开已有会话；不传则新建 */
 	sessionPath?: string;
+	approvalMode?: ApprovalMode;
 }
 
 export type MainToWorker =
@@ -323,7 +362,7 @@ export interface BackendMethods {
 	"app.pickFolder": { params: undefined; result: string | null };
 	"fs.listDirs": { params: { path?: string }; result: DirListing };
 	"service.send": { params: ServiceCommand; result: unknown };
-	"session.open": { params: { cwd: string; sessionPath?: string }; result: { handleId: string; state: SessionState } };
+	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };
 	"session.close": { params: { handleId: string }; result: null };
 	"auth.answer": { params: { flowId: string; promptId: string; value?: string; cancel?: boolean }; result: null };

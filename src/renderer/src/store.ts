@@ -3,6 +3,12 @@
  * “新会话 / 切换历史会话”在同一个 worker 内通过 new_session / switch_session 完成。
  */
 import { create } from "zustand";
+import {
+	type ApprovalDecision,
+	type ApprovalMode,
+	DEFAULT_APPROVAL_MODE,
+	type SessionTreeNode,
+} from "@shared/protocol";
 import type {
 	AppInfo,
 	BackendPush,
@@ -25,6 +31,12 @@ export interface ToolRun {
 	partialResult?: unknown;
 	result?: { content: ContentBlock[]; details?: unknown };
 	durationMs?: number;
+}
+
+export interface PendingApproval {
+	toolCallId: string;
+	toolName: string;
+	args: unknown;
 }
 
 export interface Notice {
@@ -61,6 +73,14 @@ interface AppState {
 	models: ModelInfo[];
 	notices: Notice[];
 	connecting: boolean;
+	approvalMode: ApprovalMode;
+	/** 等待用户确认的工具调用，按到达顺序 */
+	pendingApprovals: PendingApproval[];
+	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息）；seq 变化时输入框读取 */
+	draft: { text: string; seq: number };
+	treeOpen: boolean;
+	tree: SessionTreeNode[];
+	leafId: string | null;
 
 	init(): Promise<void>;
 	setView(view: View, tab?: SettingsTab): void;
@@ -77,11 +97,25 @@ interface AppState {
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	pushNotice(level: Notice["level"], text: string): void;
 	dismissNotice(id: number): void;
+	setApprovalMode(mode: ApprovalMode): Promise<void>;
+	respondApproval(toolCallId: string, decision: ApprovalDecision): Promise<void>;
+	toggleTree(open?: boolean): void;
+	loadTree(): Promise<void>;
+	navigateTo(entryId: string): Promise<void>;
+	forkFrom(entryId: string, position: "before" | "at"): Promise<void>;
+	setLabel(entryId: string, label: string): Promise<void>;
 	applyPush(push: BackendPush): void;
 	applyEvent(event: SessionEvent): void;
 }
 
 const LAST_CWD_KEY = "flowork.lastCwd";
+const APPROVAL_KEY = "flowork.approvalMode";
+const TREE_KEY = "flowork.treeOpen";
+
+function storedApprovalMode(): ApprovalMode {
+	const v = localStorage.getItem(APPROVAL_KEY);
+	return v === "auto" || v === "ask_writes" || v === "ask_all" ? v : DEFAULT_APPROVAL_MODE;
+}
 let noticeSeq = 0;
 let initialized = false;
 
@@ -104,8 +138,10 @@ export const useApp = create<AppState>()((set, get) => {
 			streaming: null,
 			toolArgsText: {},
 			toolRuns: {},
+			pendingApprovals: [],
 			...(state ? { state } : {}),
 		});
+		if (get().treeOpen) void get().loadTree();
 	}
 
 	return {
@@ -127,6 +163,12 @@ export const useApp = create<AppState>()((set, get) => {
 		models: [],
 		notices: [],
 		connecting: false,
+		approvalMode: storedApprovalMode(),
+		pendingApprovals: [],
+		draft: { text: "", seq: 0 },
+		treeOpen: localStorage.getItem(TREE_KEY) === "1",
+		tree: [],
+		leafId: null,
 
 		async init() {
 			if (initialized) return;
@@ -181,13 +223,16 @@ export const useApp = create<AppState>()((set, get) => {
 				streaming: null,
 				models: [],
 				isRunning: false,
+				pendingApprovals: [],
+				tree: [],
+				leafId: null,
 			});
 			localStorage.setItem(LAST_CWD_KEY, cwd);
 			rememberCwd(cwd);
 			rememberCwd(cwd);
 			if (previous) void api.closeSession(previous).catch(() => undefined);
 			try {
-				const { handleId, state } = await api.openSession(cwd);
+				const { handleId, state } = await api.openSession(cwd, get().approvalMode);
 				set({ handleId, state, connecting: false });
 				await Promise.all([reloadMessages(), get().loadModels(), get().refreshSessions()]);
 			} catch (error) {
@@ -246,6 +291,55 @@ export const useApp = create<AppState>()((set, get) => {
 			if (state) set({ state });
 		},
 
+		async setApprovalMode(mode) {
+			localStorage.setItem(APPROVAL_KEY, mode);
+			set({ approvalMode: mode });
+			await sessionCall((h) => api.session(h, { type: "set_approval_mode", mode }));
+		},
+
+		async respondApproval(toolCallId, decision) {
+			set((s) => ({ pendingApprovals: s.pendingApprovals.filter((p) => p.toolCallId !== toolCallId) }));
+			await sessionCall((h) => api.session(h, { type: "respond_approval", toolCallId, decision }));
+		},
+
+		toggleTree(open) {
+			const next = open ?? !get().treeOpen;
+			localStorage.setItem(TREE_KEY, next ? "1" : "0");
+			set({ treeOpen: next });
+			if (next) void get().loadTree();
+		},
+
+		async loadTree() {
+			const result = await sessionCall((h) => api.session(h, { type: "get_tree" }));
+			if (result) set({ tree: result.tree, leafId: result.leafId });
+		},
+
+		async navigateTo(entryId) {
+			if (get().isRunning) {
+				get().pushNotice("warning", "请先等待当前运行结束，或按 Esc 中断");
+				return;
+			}
+			const result = await sessionCall((h) => api.session(h, { type: "navigate_tree", entryId }));
+			if (result?.editorText) set((s) => ({ draft: { text: result.editorText ?? "", seq: s.draft.seq + 1 } }));
+		},
+
+		async forkFrom(entryId, position) {
+			if (get().isRunning) {
+				get().pushNotice("warning", "请先等待当前运行结束，或按 Esc 中断");
+				return;
+			}
+			const result = await sessionCall((h) => api.session(h, { type: "fork", entryId, position }));
+			if (!result || result.cancelled) return;
+			if (result.editorText) set((s) => ({ draft: { text: result.editorText ?? "", seq: s.draft.seq + 1 } }));
+			get().pushNotice("info", "已分叉为新会话");
+			await get().refreshSessions();
+		},
+
+		async setLabel(entryId, label) {
+			await sessionCall((h) => api.session(h, { type: "set_label", entryId, label }));
+			await get().loadTree();
+		},
+
 		pushNotice(level, text) {
 			const id = ++noticeSeq;
 			set((s) => ({ notices: [...s.notices.slice(-4), { id, level, text }] }));
@@ -285,8 +379,9 @@ export const useApp = create<AppState>()((set, get) => {
 					set({ isRunning: true });
 					return;
 				case "agent_settled":
-					set({ isRunning: false });
+					set({ isRunning: false, pendingApprovals: [] });
 					void get().refreshSessions();
+					if (get().treeOpen) void get().loadTree();
 					return;
 				case "message_start":
 					if (event.message.role === "assistant") set({ streaming: { ...event.message, content: [] } });
@@ -374,6 +469,17 @@ export const useApp = create<AppState>()((set, get) => {
 					return;
 				case "notice":
 					get().pushNotice(event.level, event.text);
+					return;
+				case "approval_request":
+					set((s) => ({
+						pendingApprovals: [
+							...s.pendingApprovals.filter((p) => p.toolCallId !== event.toolCallId),
+							{ toolCallId: event.toolCallId, toolName: event.toolName, args: event.args },
+						],
+					}));
+					return;
+				case "approval_resolved":
+					set((s) => ({ pendingApprovals: s.pendingApprovals.filter((p) => p.toolCallId !== event.toolCallId) }));
 					return;
 				case "queue_update":
 					return;

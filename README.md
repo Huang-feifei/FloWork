@@ -94,8 +94,26 @@ npm run typecheck     # 类型检查（全部代码）
 
 Electron 二进制在首次运行时下载；网络受限时可以设置镜像：`set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
 
+## 已实现
+
+- 对话：流式输出、思考过程、终端式工具调用展示、Markdown 渲染
+- 工具审批：修改与命令前确认（默认）/ 全部确认 / 关闭；可“本会话始终允许”某个工具；拒绝原因会告诉模型
+- 修改 diff：edit 使用 pi 自带的 diff；write 由 FloWork 扩展在执行前快照、执行后生成 diff
+- 会话树：查看分支、回到任意节点继续（用户消息会填回输入框以便修改重发）、分叉为新会话、节点标签
+- Windows：自动识别 Git Bash（包括非默认安装位置），避免 bash 工具落到 WSL；设置页显示实际使用的 shell
+- 设置：模型供应商（API Key / 订阅登录 / 测试连接）、自定义端点、偏好设置、配置文件编辑
+
+FloWork 对 pi 的扩展集中在 `src/worker/flowork-extension.ts`（以内联扩展方式注入，不修改 pi 本身）。
+
+## 开发辅助脚本
+
+```bash
+node scripts/ws-call.mjs service.send '{"type":"get_shell_info"}'   # 向运行中的后端发一个请求
+node scripts/e2e-session.mjs <目录> <provider/model> allow|deny|deny-bash "<提示词>"   # 端到端会话测试（会真实调用模型）
+node scripts/shoot-ui.mjs <输出目录>                                  # 对 dev:web 页面截图（注入示例会话）
+```
+
 ## 路线图
 
-- **M1**：工具审批（pi 扩展 `tool_call` + 确认对话框）、write 修改前快照与 diff、Markdown 渲染、会话树视图与导航、Git Bash 检测。
-- **M2**：多工作区并行、Skills / Extensions 导入与管理、会话分叉 / 标签。
+- **M2**：多工作区并行、Skills / Extensions 导入与管理、第三方扩展的对话框（select / confirm / input）、会话重命名与删除。
 - **M3**：内置终端与文件树；转为桌面版发布（凭据改用系统加密存储、electron-builder 打包、收紧 CSP）。

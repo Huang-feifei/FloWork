@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { type ModelEntry, THINKING_LEVELS } from "@shared/protocol";
+import { type ModelEntry, type ShellInfo, THINKING_LEVELS } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Button, Field, Input, Select, TextArea } from "../ui";
@@ -34,6 +34,37 @@ function assign(target: Settings, key: string, value: unknown): void {
 	else target[key] = value;
 }
 
+function ShellStatus({ shell, onUse }: { shell: ShellInfo; onUse: (path: string) => void }) {
+	const bad = shell.resolved === null || shell.isWsl;
+	return (
+		<div
+			className={`rounded-lg border px-3 py-2 text-[12px] leading-5 ${bad ? "border-err/40 bg-err/5" : "border-border bg-panel"}`}
+		>
+			<div>
+				bash 工具当前使用：
+				<span className="font-mono">{shell.resolved ?? "（未找到）"}</span>
+				{shell.isWsl && <span className="ml-1 text-err">— 这是 WSL 启动器，命令会在 WSL 中执行或直接失败</span>}
+				{!bad && shell.resolved === shell.gitBash && !shell.shellPathSetting && <span className="ml-1 text-muted">（自动识别的 Git Bash）</span>}
+				{shell.shellPathSetting && <span className="ml-1 text-muted">（来自 shellPath 设置）</span>}
+			</div>
+			{shell.error && <div className="text-err">{shell.error}</div>}
+			{bad && shell.gitBash && (
+				<div className="mt-1 flex items-center gap-2">
+					<span className="text-muted">检测到 Git Bash：<span className="font-mono">{shell.gitBash}</span></span>
+					<Button size="sm" onClick={() => onUse(shell.gitBash as string)}>
+						填入 shellPath
+					</Button>
+				</div>
+			)}
+			{bad && !shell.gitBash && (
+				<div className="mt-1 text-muted">
+					未找到 Git Bash。请安装 Git for Windows，或在下方填写 bash.exe 路径；也可以在“工具”中改用 powershell。
+				</div>
+			)}
+		</div>
+	);
+}
+
 export function PreferencesTab() {
 	const { file, error, save } = useConfigFile("settings");
 	const pushNotice = useApp((s) => s.pushNotice);
@@ -41,6 +72,7 @@ export function PreferencesTab() {
 	const [draft, setDraft] = useState<Settings | null>(null);
 	const [models, setModels] = useState<ModelEntry[]>([]);
 	const [saving, setSaving] = useState(false);
+	const [shell, setShell] = useState<ShellInfo | null>(null);
 
 	const base = useMemo(() => {
 		try {
@@ -53,6 +85,13 @@ export function PreferencesTab() {
 	useEffect(() => {
 		if (base) setDraft(structuredClone(base));
 	}, [base]);
+
+	useEffect(() => {
+		void api
+			.service({ type: "get_shell_info" })
+			.then(setShell)
+			.catch(() => undefined);
+	}, [configVersion]);
 
 	useEffect(() => {
 		void api
@@ -176,8 +215,9 @@ export function PreferencesTab() {
 
 			<section className="space-y-3">
 				<h3 className="text-sm font-semibold">Shell 与网络</h3>
+				{shell && <ShellStatus shell={shell} onUse={(path) => set("shellPath", path)} />}
 				<div className="grid grid-cols-2 gap-4">
-					<Field label="Bash 路径（shellPath）" hint="留空时依次查找 Git Bash、PATH 上的 bash.exe">
+					<Field label="Bash 路径（shellPath）" hint="留空时自动使用识别到的 Git Bash；Windows 上请勿使用 WSL 的 bash.exe">
 						<Input value={str(draft.shellPath)} onChange={(e) => set("shellPath", e.target.value)} placeholder="C:\Program Files\Git\bin\bash.exe" />
 					</Field>
 					<Field label="命令前缀（shellCommandPrefix）" hint="拼接在每条 bash 命令前，例如加载别名">

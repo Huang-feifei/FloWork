@@ -10,7 +10,7 @@ import {
 	CONFIG_MUTATING_COMMANDS,
 	type ServiceCommand,
 } from "@shared/protocol";
-import { listDirs } from "./fs";
+import { isDirectory, listDirs } from "./fs";
 import { getPiAgentDir } from "./paths";
 import { WorkerManager } from "./worker-manager";
 import type { WorkerSpawner } from "./worker-process";
@@ -81,6 +81,7 @@ export class Backend {
 			}
 			case "session.open": {
 				const params = rawParams as BackendMethods["session.open"]["params"];
+				if (!(await isDirectory(params.cwd))) throw new Error(`工作区不存在或不是文件夹：${params.cwd}`);
 				const opened = await this.workers.openSession(params, {
 					onEvent: (handleId, event) => this.push({ type: "session_event", handleId, event }),
 					onExit: (handleId, code) => {

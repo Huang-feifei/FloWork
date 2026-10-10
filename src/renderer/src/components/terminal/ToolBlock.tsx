@@ -6,7 +6,7 @@
  */
 import { useState } from "react";
 import type { ContentBlock } from "@shared/protocol";
-import type { ToolRun } from "../../store";
+import { type ToolRun, useApp } from "../../store";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -87,7 +87,9 @@ function DiffView({ diff }: { diff: string }) {
 
 export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 	const [expanded, setExpanded] = useState(false);
-	const status = run?.status ?? (result ? (result.isError ? "error" : "done") : "pending");
+	const awaiting = useApp((s) => s.pendingApprovals.some((p) => p.toolCallId === call.id));
+	const isRunning = useApp((s) => s.isRunning);
+	const status = run?.status ?? (result ? (result.isError ? "error" : "done") : isRunning ? "pending" : "skipped");
 	const final = run?.result ?? result;
 	const diff = getDiff(final?.details);
 	const output = textOf(final?.content);
@@ -95,14 +97,20 @@ export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 	const summary = describe(call.name, call.arguments, cwd) || argsText || "";
 
 	let resultLine: React.ReactNode = null;
-	if (status === "pending" || status === "running") {
+	if (awaiting) {
+		resultLine = <span className="text-warn">等待你的确认…</span>;
+	} else if (status === "pending" || status === "running") {
 		resultLine = <span className="text-muted">{status === "running" ? "执行中…" : "等待执行…"}</span>;
+	} else if (status === "skipped") {
+		resultLine = <span className="text-muted">未执行</span>;
 	} else if (diff) {
+		const created = (final?.details as { created?: unknown } | undefined)?.created === true;
 		const added = diff.split("\n").filter((l) => l.startsWith("+")).length;
 		const removed = diff.split("\n").filter((l) => l.startsWith("-")).length;
 		resultLine = (
 			<span>
-				已修改 <span className="text-ok">+{added}</span> <span className="text-err">−{removed}</span>
+				{created ? "新建文件" : "已修改"} <span className="text-ok">+{added}</span>
+				{!created && <span className="text-err"> −{removed}</span>}
 			</span>
 		);
 	} else if (call.name === "read" && status === "done") {
@@ -120,6 +128,8 @@ export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 			<Spinner className="text-warn" />
 		) : status === "error" ? (
 			<span className="text-err">●</span>
+		) : status === "skipped" ? (
+			<span className="text-muted">○</span>
 		) : (
 			<span className="text-ok">●</span>
 		);

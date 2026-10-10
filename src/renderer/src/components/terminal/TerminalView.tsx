@@ -2,15 +2,23 @@
  * 终端窗口式的会话区：标题栏 + 会话记录 + 输入行 + 状态栏（参考 pi / Claude Code 的 TUI 布局）。
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ThinkingLevel } from "@shared/protocol";
+import type { ApprovalMode, ThinkingLevel } from "@shared/protocol";
 import { basename, formatTokens } from "../../lib/format";
 import { useApp } from "../../store";
+import { ApprovalPanel } from "./ApprovalPanel";
 import { Spinner, useElapsed } from "./Spinner";
 import { Transcript } from "./Transcript";
+import { TreePanel } from "./TreePanel";
 
 function TitleBar() {
 	const state = useApp((s) => s.state);
 	const cwd = useApp((s) => s.cwd);
+	const treeOpen = useApp((s) => s.treeOpen);
+	const toggleTree = useApp((s) => s.toggleTree);
+	const firstPrompt = useApp((s) => {
+		const first = s.messages.find((m) => m.role === "user");
+		return first?.role === "user" ? first.content.map((b) => (b.type === "text" ? b.text : "")).join("").slice(0, 60) : "";
+	});
 	return (
 		<div className="flex h-9 shrink-0 items-center gap-3 border-b border-border bg-term-bar px-4">
 			<div className="flex gap-1.5">
@@ -19,9 +27,16 @@ function TitleBar() {
 				<span className="size-2.5 rounded-full bg-[#7cc480]" />
 			</div>
 			<div className="min-w-0 flex-1 truncate text-center font-mono text-xs text-muted">
-				{state?.sessionName || "新会话"} — {cwd ? basename(cwd) : ""}
+				{state?.sessionName || firstPrompt || "新会话"} — {cwd ? basename(cwd) : ""}
 			</div>
-			<div className="w-10" />
+			<button
+				type="button"
+				onClick={() => toggleTree()}
+				className={`rounded px-2 py-0.5 font-mono text-xs ${treeOpen ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
+				title="显示会话树：回到任意节点、分叉"
+			>
+				会话树
+			</button>
 		</div>
 	);
 }
@@ -55,10 +70,11 @@ function Welcome() {
 
 function RunningLine() {
 	const isRunning = useApp((s) => s.isRunning);
+	const waiting = useApp((s) => s.pendingApprovals.length > 0);
 	const [since, setSince] = useState<number | null>(null);
 	useEffect(() => setSince(isRunning ? Date.now() : null), [isRunning]);
 	const elapsed = useElapsed(since);
-	if (!isRunning) return null;
+	if (!isRunning || waiting) return null;
 	return (
 		<div className="grid grid-cols-[2ch_1fr] gap-x-1 text-accent">
 			<Spinner />
@@ -75,10 +91,18 @@ function PromptInput() {
 	const ready = useApp((s) => s.handleId !== null);
 	const { sendPrompt, abort } = useApp.getState();
 	const ref = useRef<HTMLTextAreaElement>(null);
+	const draft = useApp((s) => s.draft);
 
 	useEffect(() => {
 		if (ready) ref.current?.focus();
 	}, [ready]);
+
+	// 回溯 / 分叉后把原消息填回输入框
+	useEffect(() => {
+		if (draft.seq === 0) return;
+		setText(draft.text);
+		ref.current?.focus();
+	}, [draft]);
 
 	// 自适应高度
 	useLayoutEffect(() => {
@@ -126,7 +150,8 @@ function StatusLine() {
 	const models = useApp((s) => s.models);
 	const messages = useApp((s) => s.messages);
 	const cwd = useApp((s) => s.cwd);
-	const { setModel, setThinkingLevel } = useApp.getState();
+	const approvalMode = useApp((s) => s.approvalMode);
+	const { setModel, setThinkingLevel, setApprovalMode } = useApp.getState();
 
 	const totals = useMemo(() => {
 		let input = 0;
@@ -148,18 +173,27 @@ function StatusLine() {
 	const contextPct = contextWindow && totals.lastContext ? Math.round((totals.lastContext / contextWindow) * 100) : null;
 
 	return (
-		<div className="flex items-center gap-3 px-1 pt-1.5 text-[11.5px] text-muted">
-			<span className="truncate" title={cwd ?? undefined}>
+		<div className="flex items-center gap-3 px-1 pt-1.5 text-[11.5px] whitespace-nowrap text-muted [&>select]:shrink-0">
+			<span className="min-w-0 flex-1 truncate" title={cwd ?? undefined}>
 				{cwd}
 			</span>
-			<div className="flex-1" />
 			{totals.input + totals.output > 0 && (
-				<span title="累计输入 / 输出 token">
+				<span className="shrink-0" title="累计输入 / 输出 token">
 					↑{formatTokens(totals.input)} ↓{formatTokens(totals.output)}
 					{totals.cost > 0 ? ` $${totals.cost.toFixed(3)}` : ""}
 					{contextPct !== null ? ` · 上下文 ${contextPct}%` : ""}
 				</span>
 			)}
+			<select
+				value={approvalMode}
+				onChange={(e) => void setApprovalMode(e.target.value as ApprovalMode)}
+				className={`bg-transparent outline-none hover:text-fg ${approvalMode === "auto" ? "text-warn" : "text-muted"}`}
+				title="工具审批"
+			>
+				<option value="ask_writes">审批：修改与命令</option>
+				<option value="ask_all">审批：全部工具</option>
+				<option value="auto">审批：关闭（自动执行）</option>
+			</select>
 			{state && state.availableThinkingLevels.length > 1 && (
 				<select
 					value={state.thinkingLevel}
@@ -201,6 +235,8 @@ export function TerminalView() {
 	const messages = useApp((s) => s.messages);
 	const streaming = useApp((s) => s.streaming);
 	const isRunning = useApp((s) => s.isRunning);
+	const pendingCount = useApp((s) => s.pendingApprovals.length);
+	const treeOpen = useApp((s) => s.treeOpen);
 	const abort = useApp((s) => s.abort);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
@@ -209,7 +245,7 @@ export function TerminalView() {
 	useEffect(() => {
 		const el = scrollRef.current;
 		if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
-	}, [messages, streaming, isRunning]);
+	}, [messages, streaming, isRunning, pendingCount]);
 
 	// 运行中按 Esc 中断（焦点不在输入框时也生效）
 	useEffect(() => {
@@ -222,8 +258,8 @@ export function TerminalView() {
 	}, [isRunning, abort]);
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col p-4 pt-3">
-			<div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-term shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(60,40,20,0.12)]">
+		<div className="flex min-h-0 flex-1 gap-3 p-4 pt-3">
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-term shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(60,40,20,0.12)]">
 				<TitleBar />
 				<div
 					ref={scrollRef}
@@ -242,6 +278,7 @@ export function TerminalView() {
 						) : (
 							<Transcript />
 						)}
+						<ApprovalPanel />
 						<RunningLine />
 					</div>
 				</div>
@@ -252,6 +289,7 @@ export function TerminalView() {
 					</div>
 				</div>
 			</div>
+			{treeOpen && <TreePanel />}
 		</div>
 	);
 }

@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { getAgentDir, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, getShellConfig, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
 	AuthFlowEvent,
 	AuthNotice,
@@ -18,6 +18,7 @@ import type {
 	ProviderInfo,
 	ServiceCommand,
 	SessionSummary,
+	ShellInfo,
 	TestResult,
 } from "@shared/protocol";
 import { toModelInfo } from "./adapter";
@@ -78,6 +79,8 @@ export class ServiceHost {
 				return this.saveConfig(command.name, command.text);
 			case "fetch_remote_models":
 				return this.fetchRemoteModels(command.baseUrl, command.apiKey);
+			case "get_shell_info":
+				return this.shellInfo();
 		}
 	}
 
@@ -96,6 +99,26 @@ export class ServiceHost {
 			modified: info.modified.getTime(),
 			parentSessionPath: info.parentSessionPath,
 		}));
+	}
+
+	// ----- Shell -----
+
+	private async shellInfo(): Promise<ShellInfo> {
+		let shellPathSetting: string | undefined;
+		try {
+			const value = (JSON.parse((await this.readConfig("settings")).text || "{}") as { shellPath?: unknown }).shellPath;
+			if (typeof value === "string" && value.trim()) shellPathSetting = value.trim();
+		} catch {
+			// settings.json 解析失败时按未设置处理
+		}
+		const gitBash = process.env.FLOWORK_GIT_BASH || null;
+		try {
+			const resolved = getShellConfig(shellPathSetting).shell;
+			const isWsl = /^[a-z]:\\windows\\(system32|sysnative)\\bash\.exe$/i.test(resolved.replaceAll("/", "\\"));
+			return { resolved, isWsl, gitBash, shellPathSetting };
+		} catch (error) {
+			return { resolved: null, error: error instanceof Error ? error.message : String(error), isWsl: false, gitBash, shellPathSetting };
+		}
 	}
 
 	// ----- 供应商与模型 -----

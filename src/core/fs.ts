@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import type { DirListing } from "@shared/protocol";
@@ -30,4 +30,12 @@ export async function listDirs(path?: string): Promise<DirListing> {
 		roots: listRoots(),
 		home: homedir(),
 	};
+}
+
+export async function isDirectory(path: string): Promise<boolean> {
+	try {
+		return (await stat(path)).isDirectory();
+	} catch {
+		return false;
+	}
 }

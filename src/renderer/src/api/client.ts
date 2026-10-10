@@ -1,5 +1,6 @@
 /** 基于 Transport 的类型化 API，界面只通过这里访问后端 */
 import type {
+	ApprovalMode,
 	BackendMethod,
 	BackendMethods,
 	BackendPush,
@@ -20,7 +21,7 @@ export const api = {
 
 	service: <C extends ServiceCommand>(command: C) => call("service.send", command) as Promise<CommandResult<C>>,
 
-	openSession: (cwd: string, sessionPath?: string) => call("session.open", { cwd, sessionPath }),
+	openSession: (cwd: string, approvalMode?: ApprovalMode) => call("session.open", { cwd, approvalMode }),
 	session: <C extends SessionCommand>(handleId: string, command: C) =>
 		call("session.send", { handleId, command }) as Promise<CommandResult<C>>,
 	closeSession: (handleId: string) => call("session.close", { handleId }),
