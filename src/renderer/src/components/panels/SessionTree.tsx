@@ -5,6 +5,7 @@
 import { useMemo } from "react";
 import type { SessionTreeNode } from "@shared/protocol";
 import { useApp } from "../../store";
+import { askText } from "../PromptDialog";
 
 interface Row {
 	node: SessionTreeNode;
@@ -140,8 +141,8 @@ export function SessionTree() {
 									)}
 									<button
 										type="button"
-										onClick={() => {
-											const label = window.prompt("为该节点设置标签（留空清除）", node.label ?? "");
+										onClick={async () => {
+											const label = await askText({ title: "节点标签", defaultValue: node.label ?? "", placeholder: "留空清除标签", allowEmpty: true });
 											if (label !== null) void setLabel(node.id, label.trim());
 										}}
 										className="rounded px-1 text-muted hover:bg-panel hover:text-fg"

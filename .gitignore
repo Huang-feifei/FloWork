@@ -8,3 +8,6 @@ release/
 Thumbs.db
 .env
 .env.*
+
+# 设计工具的工程文件，不进版本库
+flowork-desktop.vetd/

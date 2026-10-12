@@ -11,6 +11,7 @@ import {
 	type BackendMethods,
 	type BackendPush,
 	CONFIG_MUTATING_COMMANDS,
+	RESOURCE_MUTATING_COMMANDS,
 	type ServiceCommand,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
@@ -143,6 +144,10 @@ export class Backend {
 				if (CONFIG_MUTATING_COMMANDS.has(command.type)) {
 					await this.workers.broadcastToSessions({ type: "refresh_config" });
 					this.push({ type: "config_changed" });
+				}
+				if (RESOURCE_MUTATING_COMMANDS.has(command.type)) {
+					await this.workers.broadcastToSessions({ type: "reload_resources" });
+					this.push({ type: "resources_changed" });
 				}
 				return result;
 			}

@@ -78,6 +78,46 @@ export type ChatMessage =
 			timestamp: number;
 	  };
 
+export interface ProjectTrust {
+	/** not_needed：项目没有需要信任的配置 */
+	state: "trusted" | "untrusted" | "not_needed";
+	/** 用户是否已做过决定（未决定时界面提示） */
+	decided: boolean;
+	/** 需要信任才会加载的项目配置，如 .pi/extensions */
+	items: string[];
+}
+
+export type ResourceKind = "skill" | "extension" | "prompt";
+
+export interface ResourceInfo {
+	kind: ResourceKind;
+	name: string;
+	description?: string;
+	/** 资源文件或目录的绝对路径 */
+	path: string;
+	enabled: boolean;
+	/** user：所有项目可用；project：仅当前项目 */
+	scope: string;
+	/** pi 发现它的方式：auto（约定目录）、local（settings 中的路径）、npm / git 包等 */
+	source: string;
+	origin: "package" | "top-level";
+	/** 位于配置目录或项目 .pi 内、可由 FloWork 删除的副本 */
+	removable: boolean;
+}
+
+export interface ResourcesResult {
+	resources: ResourceInfo[];
+	packages: Array<{ source: string; scope: "user" | "project"; installedPath?: string }>;
+	trust: ProjectTrust;
+	dirs: { user: Record<ResourceKind, string>; project: Record<ResourceKind, string> };
+}
+
+export interface SlashCommand {
+	name: string;
+	description?: string;
+	source: "extension" | "prompt" | "skill";
+}
+
 export interface SessionState {
 	sessionId: string;
 	sessionFile?: string;
@@ -88,6 +128,7 @@ export interface SessionState {
 	availableThinkingLevels: ThinkingLevel[];
 	isStreaming: boolean;
 	messageCount: number;
+	trust?: ProjectTrust;
 }
 
 /**
@@ -219,6 +260,11 @@ export type SessionCommand =
 	| { type: "set_session_name"; name: string }
 	| { type: "set_approval_mode"; mode: ApprovalMode }
 	| { type: "respond_approval"; toolCallId: string; decision: ApprovalDecision }
+	/** 记录对当前项目的信任决定并重新加载会话 */
+	| { type: "set_project_trust"; trusted: boolean }
+	/** 重新加载技能、扩展、提示模板；运行中时推迟到本轮结束 */
+	| { type: "reload_resources" }
+	| { type: "get_commands" }
 	/** 配置（凭据 / models.json / settings.json）变化后重新加载 */
 	| { type: "refresh_config" };
 
@@ -234,7 +280,13 @@ export type ServiceCommand =
 	| { type: "get_config_file"; name: ConfigFileName }
 	| { type: "save_config_file"; name: ConfigFileName; text: string }
 	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string }
-	| { type: "get_shell_info" };
+	| { type: "get_shell_info" }
+	| { type: "list_resources"; cwd: string }
+	| { type: "set_resource_enabled"; cwd: string; kind: ResourceKind; path: string; enabled: boolean }
+	| { type: "import_resource"; cwd: string; kind: ResourceKind; sourcePath: string; scope: "user" | "project" }
+	| { type: "remove_resource"; cwd: string; kind: ResourceKind; path: string }
+	| { type: "install_package"; cwd: string; source: string; scope: "user" | "project" }
+	| { type: "remove_package"; cwd: string; source: string; scope: "user" | "project" };
 
 export interface CommandResultMap {
 	prompt: { disposition: "started" | "queued" | "handled" };
@@ -253,6 +305,9 @@ export interface CommandResultMap {
 	set_session_name: null;
 	set_approval_mode: null;
 	respond_approval: null;
+	set_project_trust: SessionState;
+	reload_resources: { deferred: boolean };
+	get_commands: SlashCommand[];
 	refresh_config: SessionState;
 	ping: { pid: number; versions: Record<string, string | undefined>; agentDir: string };
 	list_sessions: SessionSummary[];
@@ -265,6 +320,12 @@ export interface CommandResultMap {
 	save_config_file: ConfigFile;
 	fetch_remote_models: string[];
 	get_shell_info: ShellInfo;
+	list_resources: ResourcesResult;
+	set_resource_enabled: null;
+	import_resource: { path: string; name: string };
+	remove_resource: null;
+	install_package: null;
+	remove_package: null;
 }
 
 export type AnyCommand = SessionCommand | ServiceCommand;
@@ -272,6 +333,15 @@ export type CommandResult<C extends AnyCommand> = CommandResultMap[C["type"]];
 
 /** 会修改配置、需要通知各会话刷新的服务命令 */
 export const CONFIG_MUTATING_COMMANDS = new Set<ServiceCommand["type"]>(["auth_login", "logout", "save_config_file"]);
+
+/** 会改变技能 / 扩展 / 提示模板、需要各会话重新加载资源的服务命令 */
+export const RESOURCE_MUTATING_COMMANDS = new Set<ServiceCommand["type"]>([
+	"set_resource_enabled",
+	"import_resource",
+	"remove_resource",
+	"install_package",
+	"remove_package",
+]);
 
 // ---------------------------------------------------------------------------
 // 会话事件（worker → 界面）
@@ -480,7 +550,9 @@ export type BackendPush =
 	| { type: "auth"; event: AuthFlowEvent }
 	/** 凭据或配置文件变更，界面应刷新模型与供应商列表 */
 	| { type: "config_changed" }
-	| { type: "projects_changed"; state: ProjectsState };
+	| { type: "projects_changed"; state: ProjectsState }
+	/** 技能 / 扩展变化，设置页与斜杠命令列表应刷新 */
+	| { type: "resources_changed" };
 
 /** 网页版 WebSocket 帧 */
 export type ClientFrame = { id: string; method: BackendMethod; params: unknown };

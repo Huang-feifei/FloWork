@@ -1,11 +1,14 @@
 import { useEffect } from "react";
 import { FolderPicker } from "./components/FolderPicker";
 import { Notices } from "./components/Notices";
+import { PromptDialog } from "./components/PromptDialog";
 import { AuthDialog } from "./components/settings/AuthDialog";
 import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
+import { StatusBar } from "./components/StatusBar";
 import { TerminalView } from "./components/terminal/TerminalView";
+import { TitleBar } from "./components/TitleBar";
 import { Button } from "./components/ui";
 import { useApp } from "./store";
 
@@ -39,21 +42,27 @@ function EmptyState() {
 export function App() {
 	const view = useApp((s) => s.view);
 	const activeProjectId = useApp((s) => s.activeProjectId);
+	const sidebarOpen = useApp((s) => s.sidebarOpen);
 
 	useEffect(() => {
 		void useApp.getState().init();
 	}, []);
 
 	return (
-		<div className="flex h-full">
-			<Sidebar />
-			<main className="relative flex min-w-0 flex-1 flex-col">
-				{view === "settings" ? <SettingsView /> : activeProjectId ? <TerminalView /> : <EmptyState />}
-				<Notices />
-			</main>
+		<div className="flex h-full flex-col">
+			<TitleBar />
+			<div className="flex min-h-0 flex-1">
+				{sidebarOpen && <Sidebar />}
+				<main className="relative flex min-w-0 flex-1 flex-col">
+					{view === "settings" ? <SettingsView /> : activeProjectId ? <TerminalView /> : <EmptyState />}
+					<Notices />
+				</main>
+			</div>
+			<StatusBar />
 			<FolderPicker />
 			<DiscoverDialog />
 			<AuthDialog />
+			<PromptDialog />
 		</div>
 	);
 }

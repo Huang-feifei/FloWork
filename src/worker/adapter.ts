@@ -15,6 +15,7 @@ import type {
 	ThinkingLevel,
 	Usage,
 } from "@shared/protocol";
+import { displayUserText } from "@shared/skill-text";
 
 // pi 的消息是可扩展联合类型，这里按需读取字段，避免与其内部类型强绑定。
 type LooseRecord = Record<string, unknown>;
@@ -163,10 +164,11 @@ function entryPreview(entry: LooseRecord): { role?: string; preview: string } {
 		const msg = toChatMessage(entry.message);
 		if (!msg) return { role: "system", preview: "" };
 		if (msg.role === "note") return { role: msg.kind, preview: msg.text.slice(0, 120) };
-		const text = msg.content
+		const raw = msg.content
 			.map((b) => (b.type === "text" ? b.text : b.type === "toolCall" ? `${b.name}(…)` : ""))
 			.join(" ")
 			.trim();
+		const text = msg.role === "user" ? displayUserText(raw) : raw;
 		return { role: msg.role, preview: text.slice(0, 120) };
 	}
 	if (entry.type === "model_change") return { preview: `模型 → ${str(entry.provider)}/${str(entry.modelId)}` };

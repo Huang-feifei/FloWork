@@ -61,6 +61,12 @@ const SERVICE_COMMANDS = new Set<AnyCommand["type"]>([
 	"save_config_file",
 	"fetch_remote_models",
 	"get_shell_info",
+	"list_resources",
+	"set_resource_enabled",
+	"import_resource",
+	"remove_resource",
+	"install_package",
+	"remove_package",
 ]);
 
 function getServiceHost(): ServiceHost {

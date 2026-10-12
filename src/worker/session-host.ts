@@ -1,6 +1,7 @@
 /**
  * 在 worker 内承载一个 pi 会话（AgentSessionRuntime），处理 SessionCommand 并转发事件。
  */
+import { existsSync } from "node:fs";
 import {
 	type AgentSession,
 	type AgentSessionRuntime,
@@ -10,6 +11,7 @@ import {
 	createAgentSessionServices,
 	getAgentDir,
 	SessionManager,
+	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import {
 	type ApprovalDecision,
@@ -20,9 +22,11 @@ import {
 	type SessionCommand,
 	type SessionEvent,
 	type SessionState,
+	type SlashCommand,
 } from "@shared/protocol";
 import { toChatMessage, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
+import { getProjectTrust, isProjectTrusted, setProjectTrust } from "./trust";
 
 interface PendingApproval {
 	toolName: string;
@@ -36,6 +40,8 @@ export class SessionHost {
 	/** 本会话中用户选择“始终允许”的工具 */
 	private readonly allowedTools = new Set<string>();
 	private readonly pendingApprovals = new Map<string, PendingApproval>();
+	/** 运行中收到的资源重新加载请求，推迟到本轮结束 */
+	private reloadPending = false;
 
 	constructor(
 		private readonly emit: (event: SessionEvent) => void,
@@ -53,6 +59,8 @@ export class SessionHost {
 	private readonly createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
 		const services = await createAgentSessionServices({
 			cwd,
+			// SDK 默认信任所有项目；这里按用户的信任决定加载项目级配置（见 trust.ts）
+			settingsManager: SettingsManager.create(cwd, getAgentDir(), { projectTrusted: isProjectTrusted(cwd) }),
 			resourceLoaderOptions: {
 				extensionFactories: [createFloworkExtension({ approve: (req, signal) => this.approve(req, signal) })],
 			},
@@ -71,7 +79,7 @@ export class SessionHost {
 			this.emit({ type: "notice", level: "warning", text: formatDiagnostic(diagnostic) });
 		}
 		await this.bind();
-		return toSessionState(this.session);
+		return this.stateOf();
 	}
 
 	/** 运行时替换会话后，事件订阅属于旧会话，必须重新绑定 */
@@ -82,11 +90,20 @@ export class SessionHost {
 		await session.bindExtensions({});
 		this.unsubscribe = session.subscribe((event) => {
 			for (const out of toSessionEvents(event)) this.emit(out);
+			if (event.type === "agent_settled" && this.reloadPending) {
+				this.reloadPending = false;
+				void this.reloadResources();
+			}
 		});
 	}
 
+	private stateOf(): SessionState {
+		const session = this.session;
+		return { ...toSessionState(session), trust: getProjectTrust(session.sessionManager.getCwd()) };
+	}
+
 	private changed(): SessionState {
-		const state = toSessionState(this.session);
+		const state = this.stateOf();
 		this.emit({ type: "session_changed", state });
 		return state;
 	}
@@ -152,7 +169,7 @@ export class SessionHost {
 				await session.abort();
 				return null;
 			case "get_state":
-				return toSessionState(session);
+				return this.stateOf();
 			case "get_messages":
 				return session.messages.flatMap((m) => toChatMessage(m) ?? []);
 			case "get_tree":
@@ -183,11 +200,11 @@ export class SessionHost {
 				const model = session.modelRuntime.getModel(command.provider, command.modelId);
 				if (!model) throw new Error(`找不到模型：${command.provider}/${command.modelId}`);
 				await session.setModel(model);
-				return toSessionState(session);
+				return this.stateOf();
 			}
 			case "set_thinking_level":
 				session.setThinkingLevel(command.level);
-				return toSessionState(session);
+				return this.stateOf();
 			case "new_session":
 				this.resetApprovals();
 				await this.requireRuntime().newSession();
@@ -209,12 +226,56 @@ export class SessionHost {
 			case "respond_approval":
 				this.resolveApproval(command.toolCallId, command.decision);
 				return null;
+			case "set_project_trust": {
+				const cwd = session.sessionManager.getCwd();
+				if (session.isStreaming) throw new Error("请先等待当前运行结束");
+				setProjectTrust(cwd, command.trusted);
+				// 重建运行时，使新的信任状态生效（保留当前会话）
+				this.resetApprovals();
+				const file = session.sessionFile;
+				if (file && existsSync(file)) await this.requireRuntime().switchSession(file);
+				else await this.requireRuntime().newSession();
+				await this.bind();
+				return this.changed();
+			}
+			case "reload_resources":
+				if (session.isStreaming) {
+					this.reloadPending = true;
+					return { deferred: true };
+				}
+				await this.reloadResources();
+				return { deferred: false };
+			case "get_commands":
+				return this.commands();
 			case "refresh_config":
 				// 凭据与 models.json 由 ModelRuntime 重新加载；settings.json 由 SettingsManager 重新读取
 				await session.settingsManager.reload();
 				await session.modelRuntime.refresh();
-				return toSessionState(session);
+				return this.stateOf();
 		}
+	}
+
+	private async reloadResources(): Promise<void> {
+		try {
+			await this.session.reload();
+			this.emit({ type: "notice", level: "info", text: "技能与扩展已重新加载" });
+			this.changed();
+		} catch (error) {
+			this.emit({ type: "notice", level: "error", text: `重新加载失败：${errorText(error)}` });
+		}
+	}
+
+	private commands(): SlashCommand[] {
+		const session = this.session;
+		const out: SlashCommand[] = [];
+		for (const c of session.extensionRunner.getRegisteredCommands()) {
+			out.push({ name: c.invocationName, description: c.description, source: "extension" });
+		}
+		for (const t of session.promptTemplates) out.push({ name: t.name, description: t.description, source: "prompt" });
+		for (const s of session.resourceLoader.getSkills().skills) {
+			out.push({ name: `skill:${s.name}`, description: s.description, source: "skill" });
+		}
+		return out;
 	}
 
 	/**

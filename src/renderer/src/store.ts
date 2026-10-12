@@ -36,7 +36,7 @@ export interface Notice {
 
 export type View = "chat" | "settings";
 export type RightPanel = "files" | "session" | "tree";
-export type SettingsTab = "providers" | "custom" | "preferences" | "raw";
+export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "raw";
 
 /** 侧边栏显示的项目运行状态 */
 export interface ProjectStatus {
@@ -73,8 +73,14 @@ interface AppState extends SessionSlice {
 	draft: { text: string; seq: number; append?: boolean };
 	/** 右侧面板：项目文件 / 会话文件 / 会话树；null 表示收起 */
 	rightPanel: RightPanel | null;
+	/** 左侧项目栏是否展开（Ctrl+B） */
+	sidebarOpen: boolean;
+	/** Ctrl+P 快速打开文件弹窗 */
+	quickOpen: boolean;
 	/** 工作区文件可能变化时递增，文件面板据此刷新 */
 	filesVersion: number;
+	/** 技能 / 扩展可能变化时递增，斜杠命令与资源页据此刷新 */
+	resourcesVersion: number;
 
 	init(): Promise<void>;
 	setView(view: View, tab?: SettingsTab): void;
@@ -105,6 +111,8 @@ interface AppState extends SessionSlice {
 	setApprovalMode(mode: ApprovalMode): Promise<void>;
 	respondApproval(toolCallId: string, decision: ApprovalDecision): Promise<void>;
 	setRightPanel(panel: RightPanel | null): void;
+	toggleSidebar(): void;
+	setQuickOpen(open: boolean): void;
 	openPreview(path: string | null): void;
 	/** 把文本追加到输入框（例如引用文件路径） */
 	insertIntoPrompt(text: string): void;
@@ -123,6 +131,7 @@ const LAST_PROJECT_KEY = "flowork.lastProject";
 const LEGACY_LAST_CWD_KEY = "flowork.lastCwd";
 const APPROVAL_KEY = "flowork.approvalMode";
 const PANEL_KEY = "flowork.rightPanel";
+const SIDEBAR_KEY = "flowork.sidebarOpen";
 const EXPANDED_KEY = "flowork.expandedProjects";
 
 function storedPanel(): RightPanel | null {
@@ -239,6 +248,7 @@ export const useApp = create<AppState>()((set, get) => {
 				return;
 			case "session_changed":
 				void reloadMessages(pid, event.state);
+				if (isActive) set((st) => ({ resourcesVersion: st.resourcesVersion + 1 }));
 				return;
 			case "notice":
 				if (isActive) get().pushNotice(event.level, event.text);
@@ -269,7 +279,10 @@ export const useApp = create<AppState>()((set, get) => {
 		approvalMode: storedApprovalMode(),
 		draft: { text: "", seq: 0 },
 		rightPanel: storedPanel(),
+		sidebarOpen: localStorage.getItem(SIDEBAR_KEY) !== "0",
+		quickOpen: false,
 		filesVersion: 0,
+		resourcesVersion: 0,
 
 		async init() {
 			if (initialized) return;
@@ -534,6 +547,16 @@ export const useApp = create<AppState>()((set, get) => {
 			if (panel === "tree") void get().loadTree();
 		},
 
+		toggleSidebar() {
+			const next = !get().sidebarOpen;
+			localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+			set({ sidebarOpen: next });
+		},
+
+		setQuickOpen(open) {
+			set({ quickOpen: open && !!get().cwd });
+		},
+
 		openPreview(path) {
 			set({ preview: path });
 		},
@@ -619,6 +642,9 @@ export const useApp = create<AppState>()((set, get) => {
 				}
 				case "projects_changed":
 					set({ projects: push.state });
+					return;
+				case "resources_changed":
+					set((st) => ({ resourcesVersion: st.resourcesVersion + 1 }));
 					return;
 				case "auth":
 					// 由 authStore 处理

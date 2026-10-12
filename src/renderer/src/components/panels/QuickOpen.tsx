@@ -5,10 +5,10 @@ import { useApp } from "../../store";
 import { SearchResultLabel } from "./SearchResultRow";
 
 export function QuickOpen() {
-	const cwd = useApp((s) => s.cwd);
+	const open = useApp((s) => s.quickOpen);
+	const setOpen = useApp((s) => s.setQuickOpen);
 	const openPreview = useApp((s) => s.openPreview);
 	const insertIntoPrompt = useApp((s) => s.insertIntoPrompt);
-	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 	const [active, setActive] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -19,16 +19,19 @@ export function QuickOpen() {
 		const onKey = (e: KeyboardEvent) => {
 			if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "p") {
 				e.preventDefault();
-				if (cwd) {
-					setOpen(true);
-					setQuery("");
-					setActive(0);
-				}
+				setOpen(true);
 			}
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);
-	}, [cwd]);
+	}, [setOpen]);
+
+	// 每次打开都从空白搜索开始
+	useEffect(() => {
+		if (!open) return;
+		setQuery("");
+		setActive(0);
+	}, [open]);
 
 	useEffect(() => {
 		if (open) inputRef.current?.focus();

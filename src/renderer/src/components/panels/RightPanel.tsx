@@ -28,15 +28,15 @@ export function RightPanel() {
 	if (!panel) return null;
 
 	return (
-		<aside className="flex w-80 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-panel">
-			<div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-border bg-term-bar px-1.5 text-xs">
+		<aside className="flex w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-panel">
+			<div className="flex h-11 shrink-0 items-center gap-0.5 border-b border-border px-2 text-xs">
 				{PANEL_TABS.map((t) => (
 					<button
 						type="button"
 						key={t.id}
 						onClick={() => setRightPanel(t.id)}
 						title={t.hint}
-						className={`rounded px-2 py-1 ${t.id === panel ? "bg-panel font-medium text-fg shadow-[0_1px_1px_rgba(0,0,0,0.05)]" : "text-muted hover:text-fg"}`}
+						className={`rounded-md px-2 py-1 ${t.id === panel ? "bg-panel-2 font-medium text-fg" : "text-muted hover:text-fg"}`}
 					>
 						{t.label}
 						{t.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}

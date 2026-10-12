@@ -7,6 +7,7 @@
  */
 import { useMemo, useState } from "react";
 import type { ChatMessage, ContentBlock } from "@shared/protocol";
+import { parseSkillInvocation } from "@shared/skill-text";
 import { useApp } from "../../store";
 import { Markdown } from "./Markdown";
 import { ToolBlock } from "./ToolBlock";
@@ -27,11 +28,33 @@ function UserLine({ message }: { message: Extract<ChatMessage, { role: "user" }>
 	const text = message.content
 		.map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[图片]" : ""))
 		.join("");
+	const skill = parseSkillInvocation(text);
 	return (
 		<div className="-mx-3 rounded-md bg-term-prompt px-3 py-1.5">
 			<Gutter mark="❯" className="font-bold text-accent">
-				<div className="whitespace-pre-wrap">{text}</div>
+				{skill ? <SkillInvocation skill={skill} /> : <div className="whitespace-pre-wrap">{text}</div>}
 			</Gutter>
+		</div>
+	);
+}
+
+/** /skill:名称 调用：折叠显示，点击可查看展开进消息的技能全文 */
+function SkillInvocation({ skill }: { skill: { skill: string; args: string; body: string } }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<div>
+			<button
+				type="button"
+				onClick={() => setOpen(!open)}
+				title="查看技能内容"
+				className="mr-2 rounded bg-accent-soft px-1.5 font-bold text-accent hover:bg-accent/15"
+			>
+				/skill:{skill.skill} {open ? "▾" : "▸"}
+			</button>
+			<span className="whitespace-pre-wrap">{skill.args}</span>
+			{open && (
+				<div className="mt-1 max-h-72 overflow-y-auto border-l-2 border-accent/30 pl-3 whitespace-pre-wrap text-muted">{skill.body}</div>
+			)}
 		</div>
 	);
 }

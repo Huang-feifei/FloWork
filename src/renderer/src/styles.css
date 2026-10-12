@@ -6,12 +6,16 @@
 	--color-panel: #ffffff;
 	--color-panel-2: #f2f0eb;
 	--color-sidebar: #f3f1ec;
+	/* 窗口标题栏 / 状态栏（与主进程 titleBarOverlay.color 保持一致） */
+	--color-chrome: #ebe8e1;
 	--color-border: #e5e1d8;
 	--color-border-strong: #d6d1c6;
 	--color-fg: #1f1e1b;
 	--color-muted: #77736a;
+	--color-faint: #a39e93;
 	--color-accent: #c96442;
 	--color-accent-soft: #f6e8e1;
+	--color-accent-strong: #b0532f;
 	--color-ok: #2f8a4c;
 	--color-warn: #b7791f;
 	--color-err: #c2402f;
@@ -67,6 +71,21 @@ body {
 
 select {
 	cursor: pointer;
+}
+
+/* ---------- 桌面版窗口拖拽区 ---------- */
+
+.app-drag {
+	-webkit-app-region: drag;
+	app-region: drag;
+}
+.app-drag button,
+.app-drag a,
+.app-drag input,
+.app-drag select,
+.app-no-drag {
+	-webkit-app-region: no-drag;
+	app-region: no-drag;
 }
 
 /* ---------- 终端式会话区 ---------- */

@@ -1,49 +1,57 @@
 /**
- * 终端窗口式的会话区：标题栏 + 会话记录 + 输入行 + 状态栏（参考 pi / Claude Code 的 TUI 布局）。
+ * 会话区：会话头 + 会话记录（终端风格）+ 输入区（含工具栏）+ 右侧面板。
+ * 窗口级的标题栏与状态栏在 App 中。
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ApprovalMode, ThinkingLevel } from "@shared/protocol";
-import { basename, formatTokens } from "../../lib/format";
-import { projectName, useApp } from "../../store";
+import { useApp } from "../../store";
+import { Icon } from "../Icon";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { Spinner, useElapsed } from "./Spinner";
+import { SlashMenu, useSlashMenu } from "./SlashMenu";
 import { Transcript } from "./Transcript";
+import { TrustBanner } from "./TrustBanner";
 import { FilePreview } from "../panels/FilePreview";
 import { QuickOpen } from "../panels/QuickOpen";
 import { PANEL_TABS, RightPanel, useChangedCount } from "../panels/RightPanel";
+import { displayUserText } from "@shared/skill-text";
 
-function TitleBar() {
+function SessionHeader() {
 	const state = useApp((s) => s.state);
-	const cwd = useApp((s) => s.cwd);
-	const projectTitle = useApp((s) => {
-		const p = s.projects.projects.find((x) => x.id === s.activeProjectId);
-		return p ? projectName(p) : null;
-	});
+	const isRunning = useApp((s) => s.isRunning);
+	const waiting = useApp((s) => s.pendingApprovals.length);
 	const rightPanel = useApp((s) => s.rightPanel);
 	const setRightPanel = useApp((s) => s.setRightPanel);
 	const changedCount = useChangedCount();
 	const firstPrompt = useApp((s) => {
 		const first = s.messages.find((m) => m.role === "user");
-		return first?.role === "user" ? first.content.map((b) => (b.type === "text" ? b.text : "")).join("").slice(0, 60) : "";
+		return first?.role === "user" ? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 80) : "";
 	});
 	return (
-		<div className="flex h-9 shrink-0 items-center gap-3 border-b border-border bg-term-bar px-4">
-			<div className="flex gap-1.5">
-				<span className="size-2.5 rounded-full bg-[#e8786b]" />
-				<span className="size-2.5 rounded-full bg-[#e8bb5a]" />
-				<span className="size-2.5 rounded-full bg-[#7cc480]" />
-			</div>
-			<div className="min-w-0 flex-1 truncate text-center font-mono text-xs text-muted">
-				{state?.sessionName || firstPrompt || "新会话"} — {projectTitle ?? (cwd ? basename(cwd) : "")}
-			</div>
-			<div className="flex gap-0.5">
+		<div className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-5">
+			<h1 className="min-w-0 truncate text-[13.5px] font-semibold">{state?.sessionName || firstPrompt || "新会话"}</h1>
+			{waiting > 0 ? (
+				<span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-medium text-warn">
+					<span className="size-1.5 rounded-full bg-warn" />
+					等待确认
+				</span>
+			) : (
+				isRunning && (
+					<span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
+						<span className="size-1.5 rounded-full bg-accent" />
+					运行中
+					</span>
+				)
+			)}
+			<div className="flex-1" />
+			<div className="flex shrink-0 gap-0.5">
 				{PANEL_TABS.map((tab) => (
 					<button
 						type="button"
 						key={tab.id}
 						onClick={() => setRightPanel(rightPanel === tab.id ? null : tab.id)}
 						title={tab.hint}
-						className={`rounded px-2 py-0.5 text-xs ${rightPanel === tab.id ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
+						className={`rounded-md px-2 py-1 text-[12px] ${rightPanel === tab.id ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
 					>
 						{tab.label}
 						{tab.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}
@@ -113,7 +121,7 @@ function PromptInput() {
 	// 回溯 / 分叉后把原消息填回输入框
 	useEffect(() => {
 		if (draft.seq === 0) return;
-		if (draft.append) setText((prev) => (prev && !/s$/.test(prev) ? `${prev} ${draft.text} ` : `${prev}${draft.text} `));
+		if (draft.append) setText((prev) => (prev && !/\s$/.test(prev) ? `${prev} ${draft.text} ` : `${prev}${draft.text} `));
 		else setText(draft.text);
 		ref.current?.focus();
 	}, [draft]);
@@ -126,6 +134,12 @@ function PromptInput() {
 		el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
 	}, [text]);
 
+	const menu = useSlashMenu(text);
+	const pickCommand = (name: string) => {
+		setText(`/${name} `);
+		ref.current?.focus();
+	};
+
 	const submit = () => {
 		if (!text.trim() || !ready) return;
 		void sendPrompt(text);
@@ -133,9 +147,10 @@ function PromptInput() {
 	};
 
 	return (
-		<div className="rounded-md border border-border-strong bg-panel px-3 py-2 focus-within:border-accent">
-			<div className="grid grid-cols-[2ch_1fr] gap-x-1">
-				<span className="font-bold text-accent">❯</span>
+		<div className="relative rounded-xl border border-border-strong bg-panel shadow-[0_1px_2px_rgba(60,40,20,0.05),0_8px_24px_-16px_rgba(60,40,20,0.25)] focus-within:border-accent/70">
+			<SlashMenu menu={menu} onPick={(c) => pickCommand(c.name)} />
+			<div className="grid grid-cols-[2ch_1fr] gap-x-1 px-3.5 pt-3 pb-1">
+				<span className="term font-bold text-accent">❯</span>
 				<textarea
 					ref={ref}
 					value={text}
@@ -143,6 +158,26 @@ function PromptInput() {
 					disabled={!ready}
 					onChange={(e) => setText(e.target.value)}
 					onKeyDown={(e) => {
+						if (menu.open && !e.nativeEvent.isComposing) {
+							const picked = menu.matches[menu.active];
+							if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+								e.preventDefault();
+								const n = menu.matches.length;
+								menu.setActive((menu.active + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+								return;
+							}
+							if ((e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) && picked) {
+								e.preventDefault();
+								pickCommand(picked.name);
+								return;
+							}
+							if (e.key === "Escape") {
+								e.preventDefault();
+								e.stopPropagation();
+								menu.dismiss();
+								return;
+							}
+						}
 						if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 							e.preventDefault();
 							submit();
@@ -151,57 +186,34 @@ function PromptInput() {
 							void abort();
 						}
 					}}
-					placeholder={ready ? (isRunning ? "运行中，输入的消息会排在当前任务之后" : "输入任务…") : "正在启动 pi…"}
+					placeholder={ready ? (isRunning ? "运行中，输入的消息会排在当前任务之后" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
 					className="term min-h-[1.65em] w-full resize-none bg-transparent outline-none placeholder:text-muted/70"
 				/>
 			</div>
+			<ComposerToolbar
+				canSend={ready && text.trim().length > 0}
+				onSend={submit}
+			/>
 		</div>
 	);
 }
 
-function StatusLine() {
+/** 输入框底部：审批模式、思考等级、模型，以及发送 / 中断按钮 */
+function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => void }) {
 	const state = useApp((s) => s.state);
 	const models = useApp((s) => s.models);
-	const messages = useApp((s) => s.messages);
-	const cwd = useApp((s) => s.cwd);
+	const isRunning = useApp((s) => s.isRunning);
 	const approvalMode = useApp((s) => s.approvalMode);
-	const { setModel, setThinkingLevel, setApprovalMode } = useApp.getState();
-
-	const totals = useMemo(() => {
-		let input = 0;
-		let output = 0;
-		let cost = 0;
-		let lastContext = 0;
-		for (const m of messages) {
-			if (m.role !== "assistant" || !m.usage) continue;
-			input += m.usage.input + m.usage.cacheRead;
-			output += m.usage.output;
-			cost += m.usage.cost.total;
-			if (m.usage.totalTokens > 0) lastContext = m.usage.totalTokens;
-		}
-		return { input, output, cost, lastContext };
-	}, [messages]);
-
+	const { setModel, setThinkingLevel, setApprovalMode, abort } = useApp.getState();
 	const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : "";
-	const contextWindow = state?.model?.contextWindow;
-	const contextPct = contextWindow && totals.lastContext ? Math.round((totals.lastContext / contextWindow) * 100) : null;
+	const selectCls = "h-7 shrink-0 rounded-md bg-transparent px-1.5 text-[12px] outline-none hover:bg-panel-2";
 
 	return (
-		<div className="flex items-center gap-3 px-1 pt-1.5 text-[11.5px] whitespace-nowrap text-muted [&>select]:shrink-0">
-			<span className="min-w-0 flex-1 truncate" title={cwd ?? undefined}>
-				{cwd}
-			</span>
-			{totals.input + totals.output > 0 && (
-				<span className="shrink-0" title="累计输入 / 输出 token">
-					↑{formatTokens(totals.input)} ↓{formatTokens(totals.output)}
-					{totals.cost > 0 ? ` $${totals.cost.toFixed(3)}` : ""}
-					{contextPct !== null ? ` · 上下文 ${contextPct}%` : ""}
-				</span>
-			)}
+		<div className="flex items-center gap-1 px-2 pb-2 whitespace-nowrap">
 			<select
 				value={approvalMode}
 				onChange={(e) => void setApprovalMode(e.target.value as ApprovalMode)}
-				className={`bg-transparent outline-none hover:text-fg ${approvalMode === "auto" ? "text-warn" : "text-muted"}`}
+				className={`${selectCls} ${approvalMode === "auto" ? "text-warn" : "text-muted hover:text-fg"}`}
 				title="工具审批"
 			>
 				<option value="ask_writes">审批：修改与命令</option>
@@ -212,16 +224,20 @@ function StatusLine() {
 				<select
 					value={state.thinkingLevel}
 					onChange={(e) => void setThinkingLevel(e.target.value as ThinkingLevel)}
-					className="bg-transparent text-muted outline-none hover:text-fg"
+					className={`${selectCls} text-muted hover:text-fg`}
 					title="思考等级"
 				>
 					{state.availableThinkingLevels.map((level) => (
-						<option key={level} value={level}>
+						<option
+							key={level}
+							value={level}
+						>
 							思考 {level}
 						</option>
 					))}
 				</select>
 			)}
+			<div className="flex-1" />
 			{models.length > 0 && (
 				<select
 					value={currentKey}
@@ -229,16 +245,44 @@ function StatusLine() {
 						const model = models.find((m) => `${m.provider}/${m.id}` === e.target.value);
 						if (model) void setModel(model);
 					}}
-					className="max-w-72 bg-transparent font-medium text-fg outline-none"
+					className={`${selectCls} max-w-72 min-w-0 font-medium text-fg`}
 					title="切换模型"
 				>
 					{!currentKey && <option value="">选择模型</option>}
 					{models.map((m) => (
-						<option key={`${m.provider}/${m.id}`} value={`${m.provider}/${m.id}`}>
+						<option
+							key={`${m.provider}/${m.id}`}
+							value={`${m.provider}/${m.id}`}
+						>
 							{m.provider}/{m.id}
 						</option>
 					))}
 				</select>
+			)}
+			{isRunning && !canSend ? (
+				<button
+					type="button"
+					onClick={() => void abort()}
+					title="中断当前任务"
+					className="ml-1 flex h-8 items-center gap-1.5 rounded-lg bg-fg px-3 text-[12.5px] font-medium text-white hover:bg-fg/85"
+				>
+					<Icon
+						name="stop"
+						className="size-3.5"
+					/>
+					中断
+					<kbd className="font-mono text-[11px] text-white/55">Esc</kbd>
+				</button>
+			) : (
+				<button
+					type="button"
+					disabled={!canSend}
+					onClick={onSend}
+					title={isRunning ? "加入队列（Enter）" : "发送（Enter）"}
+					className="ml-1 flex size-8 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-strong disabled:bg-border-strong disabled:text-white/90"
+				>
+					<Icon name="arrow-up" />
+				</button>
 			)}
 		</div>
 	);
@@ -272,9 +316,9 @@ export function TerminalView() {
 	}, [isRunning, abort]);
 
 	return (
-		<div className="flex min-h-0 flex-1 gap-3 p-4 pt-3">
-			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-term shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(60,40,20,0.12)]">
-				<TitleBar />
+		<div className="flex min-h-0 flex-1">
+			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-term">
+				<SessionHeader />
 				<FilePreview />
 				<div
 					ref={scrollRef}
@@ -286,6 +330,7 @@ export function TerminalView() {
 				>
 					<div className="mx-auto flex max-w-4xl flex-col gap-3">
 						<Welcome />
+						<TrustBanner />
 						{connecting ? (
 							<div className="text-muted">
 								<Spinner /> 正在启动 pi…
@@ -297,10 +342,9 @@ export function TerminalView() {
 						<RunningLine />
 					</div>
 				</div>
-				<div className="term shrink-0 border-t border-border bg-term px-6 pt-3 pb-2">
+				<div className="shrink-0 px-6 pt-1 pb-4">
 					<div className="mx-auto max-w-4xl">
 						<PromptInput />
-						<StatusLine />
 					</div>
 				</div>
 			</div>

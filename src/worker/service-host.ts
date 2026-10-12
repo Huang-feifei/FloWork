@@ -21,7 +21,9 @@ import type {
 	ShellInfo,
 	TestResult,
 } from "@shared/protocol";
+import { displayUserText } from "@shared/skill-text";
 import { toModelInfo } from "./adapter";
+import { importResource, installPackage, listResources, removePackage, removeResource, setResourceEnabled } from "./resources";
 
 const CONFIG_FILES: Record<ConfigFileName, string> = {
 	settings: "settings.json",
@@ -81,6 +83,22 @@ export class ServiceHost {
 				return this.fetchRemoteModels(command.baseUrl, command.apiKey);
 			case "get_shell_info":
 				return this.shellInfo();
+			case "list_resources":
+				return listResources(command.cwd);
+			case "set_resource_enabled":
+				await setResourceEnabled(command.kind, command.path, command.enabled);
+				return null;
+			case "import_resource":
+				return importResource(command.cwd, command.kind, command.sourcePath, command.scope);
+			case "remove_resource":
+				await removeResource(command.cwd, command.kind, command.path);
+				return null;
+			case "install_package":
+				await installPackage(command.cwd, command.source, command.scope);
+				return null;
+			case "remove_package":
+				await removePackage(command.cwd, command.source, command.scope);
+				return null;
 		}
 	}
 
@@ -99,7 +117,7 @@ export class ServiceHost {
 			id: info.id,
 			cwd: info.cwd,
 			name: info.name,
-			firstMessage: info.firstMessage,
+			firstMessage: displayUserText(info.firstMessage),
 			messageCount: info.messageCount,
 			created: info.created.getTime(),
 			modified: info.modified.getTime(),

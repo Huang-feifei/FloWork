@@ -1,41 +1,51 @@
 import { useState } from "react";
 import { api, errorText } from "../api/client";
 import { useApp } from "../store";
+import { Icon } from "./Icon";
+import { askText } from "./PromptDialog";
 import { Menu } from "./sidebar/Menu";
 import { ProjectTree } from "./sidebar/ProjectTree";
 
+/** 选中 / 主按钮的浮起效果 */
+const raised = "bg-panel shadow-[0_1px_2px_rgba(60,40,20,0.08)]";
+
 export function Sidebar() {
 	const view = useApp((s) => s.view);
-	const info = useApp((s) => s.info);
-	const connection = useApp((s) => s.connection);
-	const { importProjects, setView, setDiscoverOpen, pushNotice } = useApp.getState();
+	const canNewSession = useApp((s) => s.handleId !== null && s.activeProjectId !== null);
+	const { importProjects, setView, setDiscoverOpen, pushNotice, newSession } = useApp.getState();
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
 	return (
-		<aside className="flex w-[272px] shrink-0 flex-col border-r border-border bg-sidebar">
-			<div className="flex items-center gap-2 px-4 pt-4 pb-3">
-				<span className="flex size-6 items-center justify-center rounded-md bg-accent font-mono text-xs text-white">✻</span>
-				<span className="text-[15px] font-semibold tracking-tight">FloWork</span>
-				{info && <span className="text-[11px] text-muted">{info.shell === "web" ? "网页版" : "桌面版"}</span>}
-				<div className="flex-1" />
-				{connection !== "open" && (
-					<span className="flex items-center gap-1 text-[11px] text-warn">
-						<span className="size-1.5 rounded-full bg-warn" />
-						{connection === "connecting" ? "连接中" : "已断开"}
-					</span>
-				)}
-			</div>
-
-			<div className="flex items-center gap-1 px-4 pb-1">
-				<span className="flex-1 text-[11px] font-medium tracking-wide text-muted">项目</span>
+		<aside className="flex w-[264px] shrink-0 flex-col bg-sidebar">
+			<div className="flex gap-1.5 px-3 pt-3 pb-2">
+				<button
+					type="button"
+					disabled={!canNewSession}
+					onClick={() => {
+						setView("chat");
+						void newSession();
+					}}
+					title="在当前项目中新建会话"
+					className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 text-[13px] font-medium ${raised} hover:bg-white disabled:opacity-50`}
+				>
+					<Icon
+						name="square-pen"
+						className="size-4 text-accent"
+					/>
+					新会话
+				</button>
 				<button
 					type="button"
 					onClick={() => void importProjects()}
 					title="导入文件夹（可多选）"
-					className="rounded px-1.5 text-[15px] leading-5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex size-8 items-center justify-center rounded-md text-muted hover:bg-black/[0.05] hover:text-fg"
 				>
-					+
+					<Icon name="folder-plus" />
 				</button>
+			</div>
+
+			<div className="flex h-7 items-center pt-1 pr-2 pl-4">
+				<span className="flex-1 text-[11px] font-medium tracking-wide text-faint">项目</span>
 				<button
 					type="button"
 					onClick={(e) => {
@@ -43,9 +53,9 @@ export function Sidebar() {
 						setMenu({ x: rect.left - 120, y: rect.bottom + 4 });
 					}}
 					title="更多"
-					className="rounded px-1.5 leading-5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex size-6 items-center justify-center rounded text-muted hover:bg-black/[0.05] hover:text-fg"
 				>
-					⋯
+					<Icon name="ellipsis" />
 				</button>
 			</div>
 
@@ -53,15 +63,16 @@ export function Sidebar() {
 				<ProjectTree />
 			</nav>
 
-			<div className="border-t border-border p-3">
+			<div className="px-3 pt-1 pb-3">
 				<button
 					type="button"
 					onClick={() => setView(view === "settings" ? "chat" : "settings")}
-					className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] ${
-						view === "settings" ? "bg-panel font-medium shadow-[0_1px_2px_rgba(0,0,0,0.05)]" : "hover:bg-panel-2"
+					className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] ${
+						view === "settings" ? `${raised} font-medium` : "text-muted hover:bg-black/[0.04] hover:text-fg"
 					}`}
 				>
-					<span className="text-muted">⚙</span> 设置
+					<Icon name="settings" />
+					设置
 				</button>
 			</div>
 
@@ -75,9 +86,9 @@ export function Sidebar() {
 						{ separator: true, label: "" },
 						{
 							label: "新建分组…",
-							onClick: () => {
-								const name = window.prompt("分组名称", "");
-								if (name?.trim()) void api.projects.groupCreate(name).catch((e: unknown) => pushNotice("error", errorText(e)));
+							onClick: async () => {
+								const name = await askText({ title: "新建分组", placeholder: "分组名称" });
+								if (name?.trim()) void api.projects.groupCreate(name.trim()).catch((e: unknown) => pushNotice("error", errorText(e)));
 							},
 						},
 					]}

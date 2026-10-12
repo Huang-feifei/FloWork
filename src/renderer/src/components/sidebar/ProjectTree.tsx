@@ -9,6 +9,7 @@ import { api, errorText } from "../../api/client";
 import { relativeTime } from "../../lib/format";
 import { projectName, useApp } from "../../store";
 import { Spinner } from "../terminal/Spinner";
+import { askText } from "../PromptDialog";
 import { Menu, type MenuItem } from "./Menu";
 
 /** 一个排序区域：置顶 / 某个分组 / 未分组 */
@@ -145,7 +146,7 @@ function ProjectRow({
 		void api.projects.update(project.id, patch).catch((e: unknown) => pushNotice("error", errorText(e)));
 
 	const createGroupAndMove = async () => {
-		const groupName = window.prompt("新分组名称", "");
+		const groupName = (await askText({ title: "移到新分组", placeholder: "分组名称" }))?.trim();
 		if (!groupName?.trim()) return;
 		try {
 			const { group } = await api.projects.groupCreate(groupName);
@@ -281,9 +282,9 @@ function SectionHeader({ section, onDropOn }: { section: Section; onDropOn: (e: 
 		? [
 				{
 					label: "重命名分组",
-					onClick: () => {
-						const name = window.prompt("分组名称", group.name);
-						if (name?.trim()) void api.projects.groupUpdate(group.id, { name }).catch((e: unknown) => pushNotice("error", errorText(e)));
+					onClick: async () => {
+						const name = (await askText({ title: "重命名分组", defaultValue: group.name }))?.trim();
+						if (name) void api.projects.groupUpdate(group.id, { name }).catch((e: unknown) => pushNotice("error", errorText(e)));
 					},
 				},
 				{
