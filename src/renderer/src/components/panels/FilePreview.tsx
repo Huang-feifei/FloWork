@@ -20,7 +20,7 @@ function DiffBlock({ diff }: { diff: string }) {
 					// biome-ignore lint/suspicious/noArrayIndexKey: diff 行没有稳定 id
 					key={i}
 					className={`px-2 whitespace-pre ${
-						line[0] === "+" ? "bg-diff-add text-[#1e5e33]" : line[0] === "-" ? "bg-diff-del text-[#8f2a1d]" : "text-muted"
+						line[0] === "+" ? "bg-diff-add text-diff-add-fg" : line[0] === "-" ? "bg-diff-del text-diff-del-fg" : "text-muted"
 					}`}
 				>
 					{line || " "}
@@ -183,7 +183,7 @@ export function FilePreview() {
 							type="button"
 							disabled={!dirty || saving}
 							onClick={() => void save()}
-							className="rounded bg-accent px-2 py-0.5 font-medium text-white disabled:opacity-40"
+							className="rounded bg-accent px-2 py-0.5 font-medium text-accent-foreground disabled:opacity-40"
 							title="Ctrl+S"
 						>
 							{saving ? "保存中…" : "保存"}
@@ -208,7 +208,7 @@ export function FilePreview() {
 			</div>
 
 			{conflict && (
-				<div className="flex items-center gap-3 border-b border-warn/40 bg-[#fdf6e9] px-3 py-1.5 text-xs">
+				<div className="flex items-center gap-3 border-b border-warn/40 bg-warn-soft px-3 py-1.5 text-xs">
 					<span className="flex-1">文件在你打开之后已被修改（可能是 AI 或其他程序）。保存会被拒绝，以免覆盖对方的改动。</span>
 					<button
 						type="button"

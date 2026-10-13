@@ -44,7 +44,7 @@ export function Menu({
 	return (
 		<div
 			ref={ref}
-			className="fixed z-50 min-w-44 rounded-lg border border-border bg-panel py-1 text-[13px] shadow-[0_10px_30px_-10px_rgba(40,30,20,0.3)]"
+			className="fw-float fixed z-50 min-w-44 rounded-lg border border-border-strong py-1 text-[13px]"
 			style={{ left: position.x, top: Math.max(8, top) }}
 		>
 			{items.map((item, i) =>

@@ -1,16 +1,21 @@
 import { useEffect } from "react";
+import { useApp } from "./store";
 import { FolderPicker } from "./components/FolderPicker";
 import { Notices } from "./components/Notices";
-import { PromptDialog } from "./components/PromptDialog";
 import { AuthDialog } from "./components/settings/AuthDialog";
+import { Button } from "./components/ui";
+import { ActivityBar } from "./components/ActivityBar";
+import { CommandPalette } from "./components/palette/CommandPalette";
+import { PromptDialog } from "./components/PromptDialog";
+import { ReviewView } from "./components/review/ReviewView";
 import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
 import { StatusBar } from "./components/StatusBar";
+import { BottomPanel } from "./components/terminal/BottomPanel";
 import { TerminalView } from "./components/terminal/TerminalView";
 import { TitleBar } from "./components/TitleBar";
-import { Button } from "./components/ui";
-import { useApp } from "./store";
+import { WelcomeView } from "./components/welcome/WelcomeView";
 
 function EmptyState() {
 	const { importProjects, setView, setDiscoverOpen } = useApp.getState();
@@ -18,9 +23,7 @@ function EmptyState() {
 	return (
 		<div className="flex flex-1 items-center justify-center p-8">
 			<div className="w-full max-w-lg text-center">
-				<div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-accent-soft font-mono text-xl text-accent">
-					✻
-				</div>
+				<div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-accent-soft font-mono text-xl text-accent">✻</div>
 				<h1 className="mb-2 text-2xl font-semibold tracking-tight">{hasProjects ? "选择一个项目" : "导入你的第一个项目"}</h1>
 				<p className="mb-6 text-muted">
 					{hasProjects
@@ -28,7 +31,10 @@ function EmptyState() {
 						: "导入项目文件夹，FloWork 会在其中运行 pi，读写代码、执行命令。可以一次导入多个。"}
 				</p>
 				<div className="flex justify-center gap-2">
-					<Button variant="primary" onClick={() => void importProjects()}>
+					<Button
+						variant="primary"
+						onClick={() => void importProjects()}
+					>
 						导入文件夹
 					</Button>
 					<Button onClick={() => setDiscoverOpen(true)}>从已有会话发现</Button>
@@ -49,20 +55,50 @@ export function App() {
 	}, []);
 
 	return (
-		<div className="flex h-full flex-col">
-			<TitleBar />
-			<div className="flex min-h-0 flex-1">
-				{sidebarOpen && <Sidebar />}
-				<main className="relative flex min-w-0 flex-1 flex-col">
-					{view === "settings" ? <SettingsView /> : activeProjectId ? <TerminalView /> : <EmptyState />}
-					<Notices />
-				</main>
+		<div className="relative h-full overflow-hidden font-sans text-[13px] text-fg antialiased">
+			{/* 窗口背后的桌面：桌面版由系统材质（Acrylic / vibrancy）透出，网页版用这一层模拟 */}
+			<div className="fw-wallpaper absolute inset-0" />
+
+			{/* 整个窗口是一层模糊：各区域再用不同透明度叠出层次 */}
+			<div className="relative flex h-full flex-col backdrop-blur-[40px] backdrop-saturate-150">
+				<TitleBar />
+
+				{view === "welcome" ? (
+					<div className="min-h-0 flex-1">
+						<WelcomeView />
+					</div>
+				) : (
+					<>
+						<div className="flex min-h-0 flex-1">
+							<ActivityBar />
+							{sidebarOpen && <Sidebar />}
+							{/* 底部面板位于会话内容之下、状态栏之上，与设计稿的层次一致 */}
+							<div className="flex min-w-0 flex-1 flex-col">
+								<main className="relative flex min-h-0 flex-1 flex-col">
+									{view === "settings" ? (
+										<SettingsView />
+									) : view === "review" ? (
+										<ReviewView />
+									) : activeProjectId ? (
+										<TerminalView />
+									) : (
+										<EmptyState />
+									)}
+									<Notices />
+								</main>
+								<BottomPanel />
+							</div>
+						</div>
+						<StatusBar />
+					</>
+				)}
+
+				<FolderPicker />
+				<DiscoverDialog />
+				<AuthDialog />
+				<PromptDialog />
+				<CommandPalette />
 			</div>
-			<StatusBar />
-			<FolderPicker />
-			<DiscoverDialog />
-			<AuthDialog />
-			<PromptDialog />
 		</div>
 	);
 }

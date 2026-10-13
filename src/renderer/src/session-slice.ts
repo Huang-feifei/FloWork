@@ -6,6 +6,7 @@
 import type {
 	ChatMessage,
 	ContentBlock,
+	ExtUIRequest,
 	ModelInfo,
 	SessionEvent,
 	SessionState,
@@ -48,6 +49,22 @@ export interface SessionSlice {
 	leafId: string | null;
 	/** 正在预览的文件（相对工作区的路径） */
 	preview: string | null;
+	/** 第三方扩展发起、等待用户应答的对话框，按到达顺序 */
+	extDialogs: ExtUIRequest[];
+	/** 扩展通过 ctx.ui.setStatus 设置的状态文字 */
+	extStatus: Record<string, string>;
+	/** 扩展通过 ctx.ui.setWidget 设置的文本块 */
+	extWidgets: Record<string, ExtWidget>;
+}
+
+export interface ExtWidget {
+	lines: string[];
+	placement: "aboveEditor" | "belowEditor";
+}
+
+/** 需要用户处理的项目数：工具审批 + 扩展对话框 */
+export function waitingCount(s: Pick<SessionSlice, "pendingApprovals" | "extDialogs">): number {
+	return s.pendingApprovals.length + s.extDialogs.length;
 }
 
 export const SLICE_KEYS = [
@@ -65,6 +82,9 @@ export const SLICE_KEYS = [
 	"tree",
 	"leafId",
 	"preview",
+	"extDialogs",
+	"extStatus",
+	"extWidgets",
 ] as const satisfies ReadonlyArray<keyof SessionSlice>;
 
 export function emptySlice(cwd: string | null = null): SessionSlice {
@@ -83,6 +103,9 @@ export function emptySlice(cwd: string | null = null): SessionSlice {
 		tree: [],
 		leafId: null,
 		preview: null,
+		extDialogs: [],
+		extStatus: {},
+		extWidgets: {},
 	};
 }
 
@@ -167,7 +190,20 @@ export function reduceEvent(s: SessionSlice, event: SessionEvent): Partial<Sessi
 			};
 		case "approval_resolved":
 			return { pendingApprovals: s.pendingApprovals.filter((p) => p.toolCallId !== event.toolCallId) };
+		case "ext_ui_request":
+			return { extDialogs: [...s.extDialogs.filter((d) => d.id !== event.request.id), event.request] };
+		case "ext_ui_closed":
+			return { extDialogs: s.extDialogs.filter((d) => d.id !== event.id) };
+		case "ext_status": {
+			const { [event.key]: _, ...rest } = s.extStatus;
+			return { extStatus: event.text ? { ...rest, [event.key]: event.text } : rest };
+		}
+		case "ext_widget": {
+			const { [event.key]: _, ...rest } = s.extWidgets;
+			return { extWidgets: event.lines ? { ...rest, [event.key]: { lines: event.lines, placement: event.placement } } : rest };
+		}
 		case "session_changed":
+		case "ext_editor_text":
 		case "notice":
 		case "queue_update":
 			return null;

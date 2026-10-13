@@ -73,7 +73,7 @@ function DiffView({ diff }: { diff: string }) {
 			{lines.map((line, i) => {
 				const kind = line[0];
 				const cls =
-					kind === "+" ? "bg-diff-add text-[#1e5e33]" : kind === "-" ? "bg-diff-del text-[#8f2a1d]" : "text-muted";
+					kind === "+" ? "bg-diff-add text-diff-add-fg" : kind === "-" ? "bg-diff-del text-diff-del-fg" : "text-muted";
 				return (
 					// biome-ignore lint/suspicious/noArrayIndexKey: diff 行没有稳定 id
 					<div key={i} className={`px-2 whitespace-pre ${cls}`}>

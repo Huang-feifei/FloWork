@@ -18,22 +18,21 @@ import { highlightStyle, languageKeyForPath, loadLanguage } from "../../lib/code
 
 const theme = EditorView.theme({
 	"&": { height: "100%", fontSize: "12.5px", backgroundColor: "var(--color-term)" },
-	".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.6" },
 	".cm-gutters": {
-		backgroundColor: "var(--color-term)",
-		color: "#b3ada2",
+		backgroundColor: "var(--color-term-bar)",
+		color: "#66707c",
 		borderRight: "1px solid var(--color-border)",
 	},
-	".cm-activeLineGutter": { backgroundColor: "#f1eee8", color: "var(--color-fg)" },
-	".cm-activeLine": { backgroundColor: "#f6f3ee" },
+	".cm-activeLineGutter": { backgroundColor: "var(--color-panel-2)", color: "var(--color-fg)" },
+	".cm-activeLine": { backgroundColor: "rgb(255 255 255 / 0.04)" },
 	"&.cm-focused": { outline: "none" },
 	".cm-cursor": { borderLeftColor: "var(--color-accent)" },
-	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "#f0d5c8 !important" },
-	".cm-searchMatch": { backgroundColor: "#fbe7a8" },
-	".cm-searchMatch-selected": { backgroundColor: "#f3c96b" },
+	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "rgb(240 136 62 / 0.28) !important" },
+	".cm-searchMatch": { backgroundColor: "rgb(227 179 65 / 0.3)" },
+	".cm-searchMatch-selected": { backgroundColor: "rgb(227 179 65 / 0.5)" },
 	".cm-panels": { backgroundColor: "var(--color-term-bar)", borderColor: "var(--color-border)" },
 	".cm-panel input, .cm-panel button": { fontFamily: "var(--font-sans)", fontSize: "12px" },
-	".cm-foldGutter span": { color: "#b3ada2" },
+	".cm-foldGutter span": { color: "#66707c" },
 });
 
 interface Props {

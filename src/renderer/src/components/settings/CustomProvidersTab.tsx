@@ -170,7 +170,7 @@ function Editor({
 								key={id}
 								onClick={() => toggle(id)}
 								className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
-									selected.includes(id) ? "bg-accent text-white" : "bg-panel-2 text-muted hover:text-fg"
+									selected.includes(id) ? "bg-accent text-accent-foreground" : "bg-panel-2 text-muted hover:text-fg"
 								}`}
 							>
 								{id}

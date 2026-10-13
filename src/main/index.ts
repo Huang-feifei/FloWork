@@ -24,25 +24,21 @@ const backend = new Backend({
 	},
 });
 
-/** 标题栏高度，与渲染进程 TitleBar 的 h-10 保持一致 */
-const TITLE_BAR_HEIGHT = 40;
-
 function createWindow(show = true): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const win = new BrowserWindow({
-		width: 1280,
-		height: 820,
-		minWidth: 900,
-		minHeight: 600,
+		width: 1440,
+		height: 900,
+		minWidth: 1000,
+		minHeight: 640,
 		show: false,
 		title: "FloWork",
-		backgroundColor: "#faf9f6",
+		backgroundColor: "#0d1222",
 		autoHideMenuBar: true,
-		// 自绘标题栏：Windows / Linux 保留系统窗口按钮（支持贴靠布局），macOS 保留红绿灯
+		// 自绘标题栏：整条栏为拖拽区，最小化 / 最大化 / 关闭由界面自绘（与设计稿一致），
+		// 因此 Windows / Linux 不再使用系统 titleBarOverlay；macOS 保留红绿灯。
 		titleBarStyle: "hidden",
-		...(isMac
-			? { trafficLightPosition: { x: 14, y: 13 } }
-			: { titleBarOverlay: { color: "#ebe8e1", symbolColor: "#1f1e1b", height: TITLE_BAR_HEIGHT } }),
+		...(isMac ? { trafficLightPosition: { x: 14, y: 13 } } : {}),
 		webPreferences: {
 			preload: join(import.meta.dirname, "../preload/index.cjs"),
 			sandbox: true,

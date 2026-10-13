@@ -49,10 +49,10 @@ export function QuickOpen() {
 
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: 点击遮罩关闭
-		<div className="fixed inset-0 z-50 flex justify-center bg-[#2a2520]/15 pt-[12vh]" onMouseDown={() => setOpen(false)}>
+		<div className="fixed inset-0 z-50 flex justify-center bg-scrim pt-[12vh]" onMouseDown={() => setOpen(false)}>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: 阻止冒泡到遮罩 */}
 			<div
-				className="flex h-fit max-h-[60vh] w-[640px] max-w-[90vw] flex-col overflow-hidden rounded-xl border border-border bg-panel shadow-[0_20px_60px_-15px_rgba(40,30,20,0.35)]"
+				className="fw-float flex h-fit max-h-[60vh] w-[640px] max-w-[90vw] flex-col overflow-hidden rounded-xl border border-border-strong"
 				onMouseDown={(e) => e.stopPropagation()}
 			>
 				<input

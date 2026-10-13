@@ -69,7 +69,7 @@ export function useSlashMenu(text: string): SlashMenuState {
 export function SlashMenu({ menu, onPick }: { menu: SlashMenuState; onPick: (c: SlashCommand) => void }) {
 	if (!menu.open) return null;
 	return (
-		<div className="absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-lg border border-border bg-panel shadow-[0_10px_30px_-10px_rgba(40,30,20,0.3)]">
+		<div className="fw-float absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-lg border border-border-strong">
 			<div className="border-b border-border px-3 py-1 text-[11px] text-muted">斜杠命令 · ↑↓ 选择 · Tab / Enter 补全 · Esc 关闭</div>
 			<div className="term max-h-72 overflow-y-auto py-1 text-[12.5px]">
 				{menu.matches.map((c, i) => (

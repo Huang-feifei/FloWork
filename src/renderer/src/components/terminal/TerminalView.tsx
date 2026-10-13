@@ -4,9 +4,10 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ApprovalMode, ThinkingLevel } from "@shared/protocol";
-import { useApp } from "../../store";
+import { useApp, waitingCount } from "../../store";
 import { Icon } from "../Icon";
 import { ApprovalPanel } from "./ApprovalPanel";
+import { ExtDialogPanel, ExtWidgets } from "./ExtDialogPanel";
 import { Spinner, useElapsed } from "./Spinner";
 import { SlashMenu, useSlashMenu } from "./SlashMenu";
 import { Transcript } from "./Transcript";
@@ -19,7 +20,7 @@ import { displayUserText } from "@shared/skill-text";
 function SessionHeader() {
 	const state = useApp((s) => s.state);
 	const isRunning = useApp((s) => s.isRunning);
-	const waiting = useApp((s) => s.pendingApprovals.length);
+	const waiting = useApp((s) => waitingCount(s));
 	const rightPanel = useApp((s) => s.rightPanel);
 	const setRightPanel = useApp((s) => s.setRightPanel);
 	const changedCount = useChangedCount();
@@ -91,7 +92,7 @@ function Welcome() {
 
 function RunningLine() {
 	const isRunning = useApp((s) => s.isRunning);
-	const waiting = useApp((s) => s.pendingApprovals.length > 0);
+	const waiting = useApp((s) => waitingCount(s) > 0);
 	const [since, setSince] = useState<number | null>(null);
 	useEffect(() => setSince(isRunning ? Date.now() : null), [isRunning]);
 	const elapsed = useElapsed(since);
@@ -147,7 +148,7 @@ function PromptInput() {
 	};
 
 	return (
-		<div className="relative rounded-xl border border-border-strong bg-panel shadow-[0_1px_2px_rgba(60,40,20,0.05),0_8px_24px_-16px_rgba(60,40,20,0.25)] focus-within:border-accent/70">
+		<div className="fw-float relative rounded-xl border border-border-strong focus-within:border-accent/70">
 			<SlashMenu menu={menu} onPick={(c) => pickCommand(c.name)} />
 			<div className="grid grid-cols-[2ch_1fr] gap-x-1 px-3.5 pt-3 pb-1">
 				<span className="term font-bold text-accent">❯</span>
@@ -264,14 +265,14 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					type="button"
 					onClick={() => void abort()}
 					title="中断当前任务"
-					className="ml-1 flex h-8 items-center gap-1.5 rounded-lg bg-fg px-3 text-[12.5px] font-medium text-white hover:bg-fg/85"
+					className="ml-1 flex h-8 items-center gap-1.5 rounded-lg bg-panel-2 px-3 text-[12.5px] font-medium text-fg hover:bg-highlight"
 				>
 					<Icon
 						name="stop"
 						className="size-3.5"
 					/>
 					中断
-					<kbd className="font-mono text-[11px] text-white/55">Esc</kbd>
+					<kbd className="font-mono text-[11px] text-faint">Esc</kbd>
 				</button>
 			) : (
 				<button
@@ -279,7 +280,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					disabled={!canSend}
 					onClick={onSend}
 					title={isRunning ? "加入队列（Enter）" : "发送（Enter）"}
-					className="ml-1 flex size-8 items-center justify-center rounded-lg bg-accent text-white hover:bg-accent-strong disabled:bg-border-strong disabled:text-white/90"
+					className="ml-1 flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground hover:bg-accent-strong disabled:bg-panel-2 disabled:text-faint"
 				>
 					<Icon name="arrow-up" />
 				</button>
@@ -293,7 +294,7 @@ export function TerminalView() {
 	const messages = useApp((s) => s.messages);
 	const streaming = useApp((s) => s.streaming);
 	const isRunning = useApp((s) => s.isRunning);
-	const pendingCount = useApp((s) => s.pendingApprovals.length);
+	const pendingCount = useApp((s) => waitingCount(s));
 	const abort = useApp((s) => s.abort);
 	const scrollRef = useRef<HTMLDivElement>(null);
 	const stickToBottom = useRef(true);
@@ -339,12 +340,15 @@ export function TerminalView() {
 							<Transcript />
 						)}
 						<ApprovalPanel />
+						<ExtDialogPanel />
 						<RunningLine />
 					</div>
 				</div>
 				<div className="shrink-0 px-6 pt-1 pb-4">
 					<div className="mx-auto max-w-4xl">
+						<ExtWidgets placement="aboveEditor" />
 						<PromptInput />
+						<ExtWidgets placement="belowEditor" />
 					</div>
 				</div>
 			</div>

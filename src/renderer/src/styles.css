@@ -1,32 +1,54 @@
 @import "tailwindcss";
 
-/* 浅色简洁主题：暖白底、低对比边框、陶土色强调（参考 Claude 桌面端） */
+/* 深色毛玻璃主题：石墨底 + 琥珀橙强调（✻ 品牌色）。
+ * 窗口背后是桌面壁纸，界面各层是不同透明度的深石墨色，越往外越透；
+ * token 名称与原型（flowork-desktop.vetd/theme.css）对齐，便于两边同步。 */
 @theme {
-	--color-bg: #faf9f6;
-	--color-panel: #ffffff;
-	--color-panel-2: #f2f0eb;
-	--color-sidebar: #f3f1ec;
-	/* 窗口标题栏 / 状态栏（与主进程 titleBarOverlay.color 保持一致） */
-	--color-chrome: #ebe8e1;
-	--color-border: #e5e1d8;
-	--color-border-strong: #d6d1c6;
-	--color-fg: #1f1e1b;
-	--color-muted: #77736a;
-	--color-faint: #a39e93;
-	--color-accent: #c96442;
-	--color-accent-soft: #f6e8e1;
-	--color-accent-strong: #b0532f;
-	--color-ok: #2f8a4c;
-	--color-warn: #b7791f;
-	--color-err: #c2402f;
-	--color-info: #2f6fb3;
+	/* 玻璃表面：透明度从外到内递增（窗口框架最透，编辑区最实） */
+	--color-chrome: rgb(8 10 14 / 0.34);
+	--color-sidebar: rgb(14 17 22 / 0.4);
+	--color-bg: rgb(17 20 26 / 0.64);
+	--color-term: rgb(17 20 26 / 0.64);
+	--color-term-bar: rgb(30 35 44 / 0.62);
+	--color-term-prompt: rgb(255 255 255 / 0.06);
+	--color-panel: rgb(30 35 44 / 0.62);
+	--color-panel-2: rgb(255 255 255 / 0.06);
+	--color-glass: rgb(22 26 33 / 0.72);
+	--color-border: rgb(255 255 255 / 0.08);
+	--color-border-strong: rgb(255 255 255 / 0.15);
+	--color-highlight: rgb(255 255 255 / 0.1);
 
-	/* 终端区 */
-	--color-term: #fdfcfa;
-	--color-term-bar: #f4f2ed;
-	--color-term-prompt: #f1eee8;
-	--color-diff-add: #e6f4ea;
-	--color-diff-del: #fbe9e7;
+	/* 文字 */
+	--color-fg: #dfe3ea;
+	--color-muted: #949daa;
+	--color-faint: #66707c;
+
+	/* 强调 */
+	--color-accent: #f0883e;
+	--color-accent-strong: #ff9f5a;
+	--color-accent-soft: rgb(240 136 62 / 0.15);
+	--color-accent-foreground: #1a0e05;
+
+	/* 状态 */
+	--color-ok: #56d364;
+	--color-ok-soft: rgb(86 211 100 / 0.13);
+	--color-warn: #e3b341;
+	--color-warn-soft: rgb(227 179 65 / 0.12);
+	--color-err: #f85149;
+	--color-err-soft: rgb(248 81 73 / 0.13);
+	--color-info: #6cb6ff;
+
+	/* diff */
+	--color-diff-add: rgb(46 160 67 / 0.17);
+	--color-diff-add-fg: #8ee69a;
+	--color-diff-del: rgb(248 81 73 / 0.16);
+	--color-diff-del-fg: #ffa198;
+
+	/* 遮罩、窗口关闭按钮 */
+	--color-scrim: rgb(0 0 0 / 0.35);
+	--color-win-close: #c42b1c;
+
+	--radius-card: 8px;
 
 	--font-sans: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
 	--font-mono: "Cascadia Mono", "JetBrains Mono", "Sarasa Mono SC", Consolas, "Microsoft YaHei UI", monospace;
@@ -40,7 +62,7 @@ body,
 
 body {
 	margin: 0;
-	background: var(--color-bg);
+	background: #0d1222;
 	color: var(--color-fg);
 	font-family: var(--font-sans);
 	font-size: 14px;
@@ -48,7 +70,7 @@ body {
 }
 
 ::selection {
-	background: #f0d5c8;
+	background: rgb(240 136 62 / 0.32);
 }
 
 ::-webkit-scrollbar {
@@ -56,13 +78,13 @@ body {
 	height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-	background: #d9d4ca;
+	background: rgb(255 255 255 / 0.16);
 	border-radius: 6px;
 	border: 3px solid transparent;
 	background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-	background: #c4bdb0;
+	background: rgb(255 255 255 / 0.28);
 	background-clip: content-box;
 }
 ::-webkit-scrollbar-track {
@@ -71,6 +93,12 @@ body {
 
 select {
 	cursor: pointer;
+}
+
+/* 表单控件在深色底色下使用系统深色外观 */
+select option {
+	background: #1e232c;
+	color: var(--color-fg);
 }
 
 /* ---------- 桌面版窗口拖拽区 ---------- */
@@ -86,6 +114,27 @@ select {
 .app-no-drag {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
+}
+
+/* ---------- 壁纸与浮层玻璃 ---------- */
+
+/* 窗口背后的桌面：桌面版由 Acrylic / vibrancy 材质透出，网页版与截图场景用这一层模拟 */
+.fw-wallpaper {
+	background:
+		radial-gradient(42% 55% at 12% 18%, rgb(64 78 140 / 0.9), transparent 70%),
+		radial-gradient(38% 50% at 88% 82%, rgb(176 92 40 / 0.85), transparent 72%),
+		radial-gradient(30% 40% at 62% 30%, rgb(30 110 120 / 0.7), transparent 70%),
+		radial-gradient(28% 36% at 30% 88%, rgb(110 52 120 / 0.6), transparent 70%),
+		linear-gradient(160deg, #0d1222, #121018 55%, #160f0c);
+}
+
+/* 浮层玻璃：命令面板、审批卡片、输入框等悬浮在内容上方的元素 */
+.fw-float {
+	background: var(--color-glass);
+	backdrop-filter: blur(24px) saturate(160%);
+	box-shadow:
+		inset 0 1px 0 var(--color-highlight),
+		0 18px 48px -18px rgb(0 0 0 / 0.6);
 }
 
 /* ---------- 终端式会话区 ---------- */
@@ -183,15 +232,15 @@ select {
 	font-style: italic;
 }
 .term-md code {
-	color: #9a3f22;
-	background: #f4ebe5;
+	color: #ffb37a;
+	background: rgb(240 136 62 / 0.14);
 	border-radius: 4px;
 	padding: 0.05em 0.35em;
 }
 .term-md pre {
 	margin: 0.4em 0 0.8em;
 	padding: 0.7em 0.9em;
-	background: #f5f3ee;
+	background: rgb(0 0 0 / 0.28);
 	border: 1px solid var(--color-border);
 	border-radius: 6px;
 	overflow-x: auto;

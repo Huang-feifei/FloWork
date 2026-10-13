@@ -260,6 +260,8 @@ export type SessionCommand =
 	| { type: "set_session_name"; name: string }
 	| { type: "set_approval_mode"; mode: ApprovalMode }
 	| { type: "respond_approval"; toolCallId: string; decision: ApprovalDecision }
+	/** 应答扩展对话框：select / input / editor 传 value，confirm 传 confirmed，取消传 cancelled */
+	| { type: "respond_ext_ui"; id: string; value?: string; confirmed?: boolean; cancelled?: boolean }
 	/** 记录对当前项目的信任决定并重新加载会话 */
 	| { type: "set_project_trust"; trusted: boolean }
 	/** 重新加载技能、扩展、提示模板；运行中时推迟到本轮结束 */
@@ -305,6 +307,7 @@ export interface CommandResultMap {
 	set_session_name: null;
 	set_approval_mode: null;
 	respond_approval: null;
+	respond_ext_ui: null;
 	set_project_trust: SessionState;
 	reload_resources: { deferred: boolean };
 	get_commands: SlashCommand[];
@@ -349,6 +352,25 @@ export const RESOURCE_MUTATING_COMMANDS = new Set<ServiceCommand["type"]>([
 
 export type BlockKind = "text" | "thinking" | "toolCall";
 
+/** 扩展发起的对话框请求 */
+export interface ExtUIRequest {
+	id: string;
+	method: "select" | "confirm" | "input" | "editor";
+	title: string;
+	/** confirm 的正文 */
+	message?: string;
+	/** select 的选项 */
+	options?: string[];
+	/** input 的占位提示 */
+	placeholder?: string;
+	/** editor 的初始内容 */
+	prefill?: string;
+	/** 超时毫秒数；到期后按取消处理 */
+	timeoutMs?: number;
+	/** 请求到达的时间戳（worker 时钟），用于显示倒计时 */
+	startedAt: number;
+}
+
 export type SessionEvent =
 	| { type: "agent_start" }
 	| { type: "agent_settled"; aborted: boolean }
@@ -373,6 +395,16 @@ export type SessionEvent =
 	| { type: "notice"; level: "info" | "warning" | "error"; text: string }
 	| { type: "approval_request"; toolCallId: string; toolName: string; args: unknown }
 	| { type: "approval_resolved"; toolCallId: string; decision: ApprovalDecision }
+	/** 第三方扩展请求用户输入（ctx.ui.select / confirm / input / editor） */
+	| { type: "ext_ui_request"; request: ExtUIRequest }
+	/** 对话框已结束（用户应答、超时或被扩展取消） */
+	| { type: "ext_ui_closed"; id: string }
+	/** ctx.ui.setStatus：状态栏文字，text 为空表示移除 */
+	| { type: "ext_status"; key: string; text?: string }
+	/** ctx.ui.setWidget：输入框上方 / 下方的文本块，lines 为空表示移除 */
+	| { type: "ext_widget"; key: string; lines?: string[]; placement: "aboveEditor" | "belowEditor" }
+	/** ctx.ui.setEditorText / pasteToEditor：替换输入框内容 */
+	| { type: "ext_editor_text"; text: string }
 	/** 会话被替换（新建 / 切换）或当前分支移动（树导航），界面需要重新拉取消息 */
 	| { type: "session_changed"; state: SessionState };
 
@@ -570,4 +602,6 @@ export interface Transport {
 export const ELECTRON_CHANNELS = {
 	request: "flowork:request",
 	push: "flowork:push",
+	/** 自绘标题栏的窗口按钮（最小化 / 最大化 / 关闭） */
+	windowControl: "flowork:window-control",
 } as const;

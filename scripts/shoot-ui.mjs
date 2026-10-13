@@ -17,19 +17,18 @@ mkdirSync(outDir, { recursive: true });
 
 const mock = readFileSync(join(root, "scripts/mock-transcript.js"), "utf8");
 const cwd = root;
-const clickText = (selector, text) =>
-	`[...document.querySelectorAll(${JSON.stringify(selector)})].find((b) => b.textContent.includes(${JSON.stringify(text)}))?.click()`;
+const clickTitle = (title) => `document.querySelector(${JSON.stringify(`button[title='${title}']`)})?.click()`;
+/** 切到某个视图（截图辅助：直接改界面状态，不经过交互） */
+const setView = (view) => `window.__floworkStore.setState({ view: ${JSON.stringify(view)} })`;
 
 const scenes = {
-	empty: [`localStorage.removeItem("flowork.lastCwd"); location.reload()`],
-	chat: [`localStorage.setItem("flowork.lastCwd", ${JSON.stringify(cwd)}); location.reload()`, mock],
-	chatTop: [
-		`localStorage.setItem("flowork.lastCwd", ${JSON.stringify(cwd)}); location.reload()`,
-		mock,
-		`document.querySelector(".term.overflow-y-auto").scrollTop = 0`,
-	],
-	settings: [clickText("aside button", "设置")],
-	custom: [clickText("aside button", "设置"), clickText("main button", "自定义端点"), clickText("main button", "硅基流动")],
+	welcome: [setView("welcome")],
+	empty: [`window.__floworkStore.setState({ view: "chat", activeProjectId: null, cwd: null, handleId: null, messages: [], state: null })`],
+	chat: [mock],
+	review: [mock, clickTitle("本会话的修改")],
+	palette: [mock, `document.querySelector("header button[title='搜索文件、会话、命令']")?.click()`],
+	terminal: [mock, clickTitle("终端")],
+	settings: [clickTitle("设置")],
 };
 
 const electronCli = join(root, "node_modules/electron/cli.js");
@@ -44,7 +43,7 @@ for (const [name, steps] of Object.entries(scenes)) {
 			SHOT_OUT: out,
 			SHOT_STEPS_FILE: stepsFile,
 			SHOT_WAIT: "2000",
-			SHOT_SIZE: "1360x880",
+			SHOT_SIZE: "1440x900",
 		},
 		encoding: "utf8",
 		timeout: 60_000,

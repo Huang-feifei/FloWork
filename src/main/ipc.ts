@@ -8,6 +8,15 @@ export function registerIpc(backend: Backend, getWindow: () => BrowserWindow | u
 		backend.handle(method, params as never),
 	);
 
+	// 自绘标题栏的窗口按钮（Windows / Linux 上标题栏里是自绘按钮）
+	ipcMain.handle(ELECTRON_CHANNELS.windowControl, (_e, action: string) => {
+		const win = getWindow();
+		if (!win || win.isDestroyed()) return;
+		if (action === "minimize") win.minimize();
+		else if (action === "toggleMaximize") (win.isMaximized() ? win.unmaximize() : win.maximize());
+		else if (action === "close") win.close();
+	});
+
 	backend.onPush((push) => {
 		const win = getWindow();
 		if (win && !win.isDestroyed()) win.webContents.send(ELECTRON_CHANNELS.push, push);

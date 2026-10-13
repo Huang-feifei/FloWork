@@ -4,9 +4,9 @@ import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
 type Variant = "primary" | "default" | "danger" | "ghost";
 
 const VARIANT: Record<Variant, string> = {
-	primary: "bg-accent text-white hover:bg-[#b5573a] font-medium shadow-[0_1px_2px_rgba(0,0,0,0.08)]",
-	default: "border border-border bg-panel hover:border-border-strong hover:bg-panel-2 shadow-[0_1px_1px_rgba(0,0,0,0.03)]",
-	danger: "border border-err/50 text-err hover:bg-err/10",
+	primary: "bg-accent text-accent-foreground hover:bg-accent-strong font-medium",
+	default: "border border-border-strong bg-panel-2 hover:border-border-strong hover:bg-highlight",
+	danger: "border border-err/50 text-err hover:bg-err-soft",
 	ghost: "text-muted hover:text-fg hover:bg-panel-2",
 };
 
@@ -88,8 +88,8 @@ export function Modal({
 	width?: string;
 }) {
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-[#2a2520]/25 p-6 backdrop-blur-[2px]">
-			<div className={`flex max-h-full ${width} max-w-full flex-col rounded-xl border border-border bg-panel shadow-[0_20px_60px_-15px_rgba(40,30,20,0.35)]`}>
+		<div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
+			<div className={`fw-float flex max-h-full ${width} max-w-full flex-col rounded-xl border border-border-strong`}>
 				<div className="flex items-center gap-2 border-b border-border px-4 py-3">
 					<div className="min-w-0 flex-1 truncate font-medium">{title}</div>
 					<button type="button" onClick={onClose} className="text-muted hover:text-fg">

@@ -25,6 +25,7 @@ import {
 	type SlashCommand,
 } from "@shared/protocol";
 import { toChatMessage, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
+import { ExtensionUI } from "./extension-ui";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
 import { getProjectTrust, isProjectTrusted, setProjectTrust } from "./trust";
 
@@ -42,12 +43,15 @@ export class SessionHost {
 	private readonly pendingApprovals = new Map<string, PendingApproval>();
 	/** 运行中收到的资源重新加载请求，推迟到本轮结束 */
 	private reloadPending = false;
+	/** 第三方扩展的 ctx.ui（对话框、状态、小组件） */
+	private readonly extUI: ExtensionUI;
 
 	constructor(
 		private readonly emit: (event: SessionEvent) => void,
 		approvalMode: ApprovalMode = DEFAULT_APPROVAL_MODE,
 	) {
 		this.approvalMode = approvalMode;
+		this.extUI = new ExtensionUI(emit);
 	}
 
 	private get session(): AgentSession {
@@ -75,6 +79,13 @@ export class SessionHost {
 	async init(cwd: string, sessionPath?: string): Promise<SessionState> {
 		const sessionManager = sessionPath ? SessionManager.open(sessionPath) : SessionManager.create(cwd);
 		this.runtime = await createAgentSessionRuntime(this.createRuntime, { cwd, agentDir: getAgentDir(), sessionManager });
+		// 新建 / 切换 / 分叉会话（无论由界面还是扩展命令发起）后 pi 先调用它，再执行扩展传入的 withSession 回调。
+		// 在这里通知界面，使 withSession 中弹出的对话框出现时界面已切到新会话
+		this.runtime.setRebindSession(async () => {
+			this.resetApprovals();
+			await this.bind();
+			this.changed();
+		});
 		for (const diagnostic of this.runtime.diagnostics ?? []) {
 			this.emit({ type: "notice", level: "warning", text: formatDiagnostic(diagnostic) });
 		}
@@ -82,12 +93,35 @@ export class SessionHost {
 		return this.stateOf();
 	}
 
-	/** 运行时替换会话后，事件订阅属于旧会话，必须重新绑定 */
+	/** 运行时替换会话后，事件订阅与扩展绑定都属于旧会话，必须重新绑定 */
 	private async bind(): Promise<void> {
 		this.unsubscribe?.();
+		this.extUI.cancelAll();
 		const session = this.session;
-		// TODO: 传入 uiContext，支持第三方扩展的 select / confirm / input 对话框
-		await session.bindExtensions({});
+		const runtime = this.requireRuntime();
+		await session.bindExtensions({
+			uiContext: this.extUI.createContext(),
+			mode: "rpc",
+			commandContextActions: {
+				waitForIdle: () => this.session.waitForIdle(),
+				newSession: (options) => runtime.newSession(options),
+				fork: async (entryId, options) => ({ cancelled: (await runtime.fork(entryId, options)).cancelled }),
+				navigateTree: async (targetId, options) => {
+					const result = await this.session.navigateTree(targetId, options);
+					if (!result.cancelled) this.changed();
+					return { cancelled: result.cancelled };
+				},
+				switchSession: (sessionPath, options) => runtime.switchSession(sessionPath, options),
+				reload: async () => {
+					await this.session.reload();
+					this.changed();
+				},
+			},
+			onError: (err) => {
+				this.emit({ type: "notice", level: "error", text: `扩展出错（${err.event}）：${err.error}
+${err.extensionPath}` });
+			},
+		});
 		this.unsubscribe = session.subscribe((event) => {
 			for (const out of toSessionEvents(event)) this.emit(out);
 			if (event.type === "agent_settled" && this.reloadPending) {
@@ -185,8 +219,7 @@ export class SessionHost {
 			case "fork": {
 				this.resetApprovals();
 				const result = await this.requireRuntime().fork(command.entryId, { position: command.position });
-				await this.bind();
-				const state = this.changed();
+				const state = this.stateOf();
 				return { cancelled: result.cancelled, editorText: result.selectedText, state };
 			}
 			case "set_label":
@@ -208,13 +241,11 @@ export class SessionHost {
 			case "new_session":
 				this.resetApprovals();
 				await this.requireRuntime().newSession();
-				await this.bind();
-				return this.changed();
+				return this.stateOf();
 			case "switch_session":
 				this.resetApprovals();
 				await this.requireRuntime().switchSession(command.sessionPath);
-				await this.bind();
-				return this.changed();
+				return this.stateOf();
 			case "set_session_name":
 				session.setSessionName(command.name);
 				return null;
@@ -226,6 +257,9 @@ export class SessionHost {
 			case "respond_approval":
 				this.resolveApproval(command.toolCallId, command.decision);
 				return null;
+			case "respond_ext_ui":
+				this.extUI.respond(command.id, command);
+				return null;
 			case "set_project_trust": {
 				const cwd = session.sessionManager.getCwd();
 				if (session.isStreaming) throw new Error("请先等待当前运行结束");
@@ -235,8 +269,7 @@ export class SessionHost {
 				const file = session.sessionFile;
 				if (file && existsSync(file)) await this.requireRuntime().switchSession(file);
 				else await this.requireRuntime().newSession();
-				await this.bind();
-				return this.changed();
+				return this.stateOf();
 			}
 			case "reload_resources":
 				if (session.isStreaming) {
@@ -315,6 +348,7 @@ export class SessionHost {
 
 	async dispose(): Promise<void> {
 		this.denyAllPending("会话已关闭");
+		this.extUI.cancelAll();
 		this.unsubscribe?.();
 		await this.runtime?.dispose();
 		this.runtime = undefined;

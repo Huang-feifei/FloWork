@@ -28,7 +28,7 @@ export function TrustBanner() {
 	};
 
 	return (
-		<div className="rounded-md border border-warn/50 bg-[#fdf6e9] px-4 py-3 font-sans text-[13px] leading-5">
+		<div className="rounded-md border border-warn/50 bg-warn-soft px-4 py-3 font-sans text-[13px] leading-5">
 			<div className="font-medium">这个项目包含 pi 的项目级配置，目前没有加载</div>
 			<div className="mt-1 text-muted">
 				发现：<span className="font-mono text-[12px] text-fg">{trust.items.join("、")}</span>。其中的扩展是会在本机执行的代码，技能和设置会影响
@@ -39,7 +39,7 @@ export function TrustBanner() {
 					type="button"
 					disabled={busy || isRunning}
 					onClick={() => void decide(true)}
-					className="rounded-md bg-accent px-3 py-1 text-[12px] font-medium text-white disabled:opacity-40"
+					className="rounded-md bg-accent px-3 py-1 text-[12px] font-medium text-accent-foreground disabled:opacity-40"
 				>
 					信任并加载
 				</button>

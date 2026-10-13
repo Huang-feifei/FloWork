@@ -5,25 +5,25 @@
 import { HighlightStyle, type LanguageSupport, StreamLanguage, type StreamParser } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 
-/** 浅色主题配色，与界面的暖白底、陶土色强调一致 */
+/** 深色主题配色，与界面的石墨底、琥珀橙强调一致 */
 export const highlightStyle = HighlightStyle.define([
-	{ tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword, t.definitionKeyword], color: "#a3367a" },
-	{ tag: [t.string, t.special(t.string), t.regexp], color: "#2f7a3b" },
-	{ tag: [t.number, t.bool, t.null, t.atom], color: "#b35a1f" },
-	{ tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: "#8f8a80", fontStyle: "italic" },
-	{ tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#2c5f9e" },
-	{ tag: [t.typeName, t.className, t.namespace], color: "#8a5a00" },
-	{ tag: [t.definition(t.variableName), t.definition(t.propertyName)], color: "#1f1e1b" },
-	{ tag: [t.propertyName, t.attributeName], color: "#37618c" },
-	{ tag: [t.tagName, t.angleBracket], color: "#a23b2b" },
-	{ tag: [t.heading], color: "#c96442", fontWeight: "700" },
+	{ tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword, t.definitionKeyword], color: "#ff9fd0" },
+	{ tag: [t.string, t.special(t.string), t.regexp], color: "#9ce29f" },
+	{ tag: [t.number, t.bool, t.null, t.atom], color: "#ffb37a" },
+	{ tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: "#7b8494", fontStyle: "italic" },
+	{ tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#7cc4ff" },
+	{ tag: [t.typeName, t.className, t.namespace], color: "#e3c07a" },
+	{ tag: [t.definition(t.variableName), t.definition(t.propertyName)], color: "#e6eaf2" },
+	{ tag: [t.propertyName, t.attributeName], color: "#9fc7f0" },
+	{ tag: [t.tagName, t.angleBracket], color: "#ff9d8a" },
+	{ tag: [t.heading], color: "#f0883e", fontWeight: "700" },
 	{ tag: [t.emphasis], fontStyle: "italic" },
 	{ tag: [t.strong], fontWeight: "700" },
-	{ tag: [t.link, t.url], color: "#2f6fb3", textDecoration: "underline" },
-	{ tag: [t.meta, t.processingInstruction], color: "#7a6f60" },
-	{ tag: [t.inserted], color: "#1e5e33", backgroundColor: "#e6f4ea" },
-	{ tag: [t.deleted], color: "#8f2a1d", backgroundColor: "#fbe9e7" },
-	{ tag: [t.invalid], color: "#c2402f" },
+	{ tag: [t.link, t.url], color: "#6cb6ff", textDecoration: "underline" },
+	{ tag: [t.meta, t.processingInstruction], color: "#9aa1ac" },
+	{ tag: [t.inserted], color: "#8ee69a", backgroundColor: "rgb(46 160 67 / 0.17)" },
+	{ tag: [t.deleted], color: "#ffa198", backgroundColor: "rgb(248 81 73 / 0.16)" },
+	{ tag: [t.invalid], color: "#f85149" },
 ]);
 
 type Loader = () => Promise<LanguageSupport | StreamLanguage<unknown>>;

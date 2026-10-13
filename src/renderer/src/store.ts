@@ -24,9 +24,10 @@ import {
 import { api, errorText } from "./api/client";
 import type { ConnectionStatus } from "./api/transport";
 import { getRecentCwds } from "./lib/recent";
-import { emptySlice, pickSlice, reduceEvent, type SessionSlice } from "./session-slice";
+import { emptySlice, pickSlice, reduceEvent, type SessionSlice, waitingCount } from "./session-slice";
 
-export type { PendingApproval, ToolRun } from "./session-slice";
+export type { ExtWidget, PendingApproval, ToolRun } from "./session-slice";
+export { waitingCount } from "./session-slice";
 
 export interface Notice {
 	id: number;
@@ -34,9 +35,13 @@ export interface Notice {
 	text: string;
 }
 
-export type View = "chat" | "settings";
+export type View = "welcome" | "chat" | "review" | "settings";
 export type RightPanel = "files" | "session" | "tree";
 export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "raw";
+/** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
+export type PaletteMode = "all" | "commands" | "files" | "sessions";
+/** 底部面板的页签 */
+export type BottomTab = "terminal" | "output" | "logs";
 
 /** 侧边栏显示的项目运行状态 */
 export interface ProjectStatus {
@@ -77,6 +82,11 @@ interface AppState extends SessionSlice {
 	sidebarOpen: boolean;
 	/** Ctrl+P 快速打开文件弹窗 */
 	quickOpen: boolean;
+	/** Ctrl+K 命令面板 */
+	palette: { open: boolean; query: string; mode: PaletteMode };
+	/** 底部面板（终端 / 输出 / pi 日志）是否展开 */
+	terminalPanel: boolean;
+	panelTab: BottomTab;
 	/** 工作区文件可能变化时递增，文件面板据此刷新 */
 	filesVersion: number;
 	/** 技能 / 扩展可能变化时递增，斜杠命令与资源页据此刷新 */
@@ -110,9 +120,14 @@ interface AppState extends SessionSlice {
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	setApprovalMode(mode: ApprovalMode): Promise<void>;
 	respondApproval(toolCallId: string, decision: ApprovalDecision): Promise<void>;
+	/** 应答扩展对话框；response 为空表示取消 */
+	respondExtUI(id: string, response: { value?: string; confirmed?: boolean } | null): Promise<void>;
 	setRightPanel(panel: RightPanel | null): void;
 	toggleSidebar(): void;
 	setQuickOpen(open: boolean): void;
+	setPalette(open: boolean, mode?: PaletteMode): void;
+	setTerminalPanel(open: boolean): void;
+	setPanelTab(tab: BottomTab): void;
 	openPreview(path: string | null): void;
 	/** 把文本追加到输入框（例如引用文件路径） */
 	insertIntoPrompt(text: string): void;
@@ -257,6 +272,12 @@ export const useApp = create<AppState>()((set, get) => {
 			case "approval_request":
 				if (!isActive) get().pushNotice("warning", `「${name}」正在等待你确认 ${event.toolName}`);
 				return;
+			case "ext_ui_request":
+				if (!isActive) get().pushNotice("warning", `「${name}」的扩展正在等待你回应：${event.request.title}`);
+				return;
+			case "ext_editor_text":
+				if (isActive) set((st) => ({ draft: { text: event.text, seq: st.draft.seq + 1 } }));
+				return;
 		}
 	}
 
@@ -264,7 +285,8 @@ export const useApp = create<AppState>()((set, get) => {
 		...emptySlice(),
 		info: null,
 		connection: "connecting",
-		view: "chat",
+		// 启动时先进入欢迎页（环境自检 + 发现项目）；已导入过项目时 init() 会直接进入会话
+		view: "welcome",
 		settingsTab: "providers",
 		configVersion: 0,
 		folderPicker: { open: false },
@@ -281,6 +303,9 @@ export const useApp = create<AppState>()((set, get) => {
 		rightPanel: storedPanel(),
 		sidebarOpen: localStorage.getItem(SIDEBAR_KEY) !== "0",
 		quickOpen: false,
+		palette: { open: false, query: "", mode: "all" },
+		terminalPanel: false,
+		panelTab: "terminal",
 		filesVersion: 0,
 		resourcesVersion: 0,
 
@@ -464,7 +489,7 @@ export const useApp = create<AppState>()((set, get) => {
 			return {
 				open: !!s?.handleId,
 				running: !!s?.isRunning,
-				waiting: s?.pendingApprovals.length ?? 0,
+				waiting: s ? waitingCount(s) : 0,
 				unread: !!get().unread[pid],
 			};
 		},
@@ -536,6 +561,11 @@ export const useApp = create<AppState>()((set, get) => {
 			await Promise.all(pids.map((pid) => call(pid, (h) => api.session(h, { type: "set_approval_mode", mode }))));
 		},
 
+		async respondExtUI(id, response) {
+			set((s) => ({ extDialogs: s.extDialogs.filter((d) => d.id !== id) }));
+			await active((h) => api.session(h, { type: "respond_ext_ui", id, ...(response ?? { cancelled: true }) }));
+		},
+
 		async respondApproval(toolCallId, decision) {
 			set((s) => ({ pendingApprovals: s.pendingApprovals.filter((p) => p.toolCallId !== toolCallId) }));
 			await active((h) => api.session(h, { type: "respond_approval", toolCallId, decision }));
@@ -555,6 +585,18 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setQuickOpen(open) {
 			set({ quickOpen: open && !!get().cwd });
+		},
+
+		setPalette(open, mode = "all") {
+			set({ palette: { open, query: "", mode } });
+		},
+
+		setTerminalPanel(open) {
+			set({ terminalPanel: open });
+		},
+
+		setPanelTab(tab) {
+			set({ panelTab: tab });
 		},
 
 		openPreview(path) {
@@ -621,7 +663,7 @@ export const useApp = create<AppState>()((set, get) => {
 					const pid = projectByHandle(push.handleId);
 					if (!pid) return;
 					const name = project(pid) ? projectName(project(pid) as Project) : "项目";
-					if (pid === get().activeProjectId) set({ handleId: null, isRunning: false, pendingApprovals: [] });
+					if (pid === get().activeProjectId) set({ handleId: null, isRunning: false, pendingApprovals: [], extDialogs: [] });
 					else
 						set((st) => {
 							const background = { ...st.background };

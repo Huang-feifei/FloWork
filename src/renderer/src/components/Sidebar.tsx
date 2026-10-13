@@ -1,3 +1,4 @@
+/** 侧栏：项目分组树（含会话），等宽小标题，状态用文字标签 */
 import { useState } from "react";
 import { api, errorText } from "../api/client";
 import { useApp } from "../store";
@@ -6,18 +7,16 @@ import { askText } from "./PromptDialog";
 import { Menu } from "./sidebar/Menu";
 import { ProjectTree } from "./sidebar/ProjectTree";
 
-/** 选中 / 主按钮的浮起效果 */
-const raised = "bg-panel shadow-[0_1px_2px_rgba(60,40,20,0.08)]";
-
 export function Sidebar() {
-	const view = useApp((s) => s.view);
-	const canNewSession = useApp((s) => s.handleId !== null && s.activeProjectId !== null);
+	const hasProject = useApp((s) => s.activeProjectId !== null);
+	const canNewSession = useApp((s) => s.handleId !== null && hasProject);
 	const { importProjects, setView, setDiscoverOpen, pushNotice, newSession } = useApp.getState();
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
 	return (
-		<aside className="flex w-[264px] shrink-0 flex-col bg-sidebar">
-			<div className="flex gap-1.5 px-3 pt-3 pb-2">
+		<aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-sidebar">
+			<div className="flex h-9 shrink-0 items-center gap-0.5 pr-1.5 pl-3">
+				<span className="flex-1 font-mono text-[11px] font-semibold tracking-[0.08em] text-muted">项目</span>
 				<button
 					type="button"
 					disabled={!canNewSession}
@@ -25,27 +24,25 @@ export function Sidebar() {
 						setView("chat");
 						void newSession();
 					}}
-					title="在当前项目中新建会话"
-					className={`flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2.5 text-[13px] font-medium ${raised} hover:bg-white disabled:opacity-50`}
+					title="新会话 Ctrl+N"
+					className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
 				>
 					<Icon
 						name="square-pen"
-						className="size-4 text-accent"
+						className="size-3.5"
 					/>
-					新会话
 				</button>
 				<button
 					type="button"
 					onClick={() => void importProjects()}
 					title="导入文件夹（可多选）"
-					className="flex size-8 items-center justify-center rounded-md text-muted hover:bg-black/[0.05] hover:text-fg"
+					className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg"
 				>
-					<Icon name="folder-plus" />
+					<Icon
+						name="folder-plus"
+						className="size-3.5"
+					/>
 				</button>
-			</div>
-
-			<div className="flex h-7 items-center pt-1 pr-2 pl-4">
-				<span className="flex-1 text-[11px] font-medium tracking-wide text-faint">项目</span>
 				<button
 					type="button"
 					onClick={(e) => {
@@ -53,28 +50,18 @@ export function Sidebar() {
 						setMenu({ x: rect.left - 120, y: rect.bottom + 4 });
 					}}
 					title="更多"
-					className="flex size-6 items-center justify-center rounded text-muted hover:bg-black/[0.05] hover:text-fg"
+					className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg"
 				>
-					<Icon name="ellipsis" />
+					<Icon
+						name="ellipsis"
+						className="size-3.5"
+					/>
 				</button>
 			</div>
 
-			<nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+			<nav className="min-h-0 flex-1 overflow-y-auto pb-3">
 				<ProjectTree />
 			</nav>
-
-			<div className="px-3 pt-1 pb-3">
-				<button
-					type="button"
-					onClick={() => setView(view === "settings" ? "chat" : "settings")}
-					className={`flex h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-[13px] ${
-						view === "settings" ? `${raised} font-medium` : "text-muted hover:bg-black/[0.04] hover:text-fg"
-					}`}
-				>
-					<Icon name="settings" />
-					设置
-				</button>
-			</div>
 
 			{menu && (
 				<Menu

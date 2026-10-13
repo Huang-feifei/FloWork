@@ -198,7 +198,7 @@ export function ResourcesTab() {
 			</div>
 
 			{trust && trust.state !== "not_needed" && (
-				<div className={`rounded-lg border px-4 py-3 text-[13px] ${projectTrusted ? "border-border bg-panel" : "border-warn/50 bg-[#fdf6e9]"}`}>
+				<div className={`rounded-lg border px-4 py-3 text-[13px] ${projectTrusted ? "border-border bg-panel-2" : "border-warn/50 bg-warn-soft"}`}>
 					<div className="flex items-center gap-2">
 						<span className="font-medium">项目信任：{projectTrusted ? "已信任，项目配置已加载" : trust.decided ? "不信任，项目配置未加载" : "尚未决定，项目配置未加载"}</span>
 						<div className="flex-1" />

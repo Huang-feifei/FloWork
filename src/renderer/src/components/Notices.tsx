@@ -15,7 +15,7 @@ export function Notices() {
 			{notices.map((n) => (
 				<div
 					key={n.id}
-					className="pointer-events-auto flex items-start gap-2.5 rounded-lg border border-border bg-panel px-3.5 py-2.5 text-[13px] shadow-[0_8px_24px_-8px_rgba(40,30,20,0.25)]"
+					className="fw-float pointer-events-auto flex items-start gap-2.5 rounded-lg border border-border-strong px-3.5 py-2.5 text-[13px]"
 				>
 					<span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${LEVEL[n.level].dot}`} />
 					<div className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${LEVEL[n.level].text}`}>{n.text}</div>

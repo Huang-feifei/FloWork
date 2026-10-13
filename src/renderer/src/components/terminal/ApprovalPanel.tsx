@@ -38,7 +38,7 @@ function Preview({ approval }: { approval: PendingApproval }) {
 						写入 <span className="font-bold">{rel(str(args.path))}</span>
 						<span className="text-muted">（{content.split("\n").length} 行）</span>
 					</div>
-					<pre className="mt-1 whitespace-pre-wrap break-all text-[#1e5e33]">
+					<pre className="mt-1 whitespace-pre-wrap break-all text-diff-add-fg">
 						{clip(content.split("\n"))
 							.map((l) => `+ ${l}`)
 							.join("\n")}
@@ -58,12 +58,12 @@ function Preview({ approval }: { approval: PendingApproval }) {
 						// biome-ignore lint/suspicious/noArrayIndexKey: 编辑项没有 id
 						<pre key={i} className="mt-1 whitespace-pre-wrap break-all">
 							{clip(str(edit.oldText).split("\n")).map((l) => (
-								<div key={`o${l}`} className="bg-diff-del text-[#8f2a1d]">
+								<div key={`o${l}`} className="bg-diff-del text-diff-del-fg">
 									- {l}
 								</div>
 							))}
 							{clip(str(edit.newText).split("\n")).map((l) => (
-								<div key={`n${l}`} className="bg-diff-add text-[#1e5e33]">
+								<div key={`n${l}`} className="bg-diff-add text-diff-add-fg">
 									+ {l}
 								</div>
 							))}
@@ -90,7 +90,7 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 		// biome-ignore lint/a11y/noStaticElementInteractions: 键盘快捷键作用于内部按钮
 		<div
 			className={`grid grid-cols-[2ch_1fr] gap-x-1 rounded-md border px-3 py-2 ${
-				active ? "border-warn/60 bg-[#fdf6e9]" : "border-border opacity-70"
+				active ? "border-warn/60 bg-warn-soft" : "border-border opacity-70"
 			}`}
 			onKeyDown={(e) => {
 				const key = e.key.toLowerCase();
@@ -115,7 +115,7 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 						ref={allowRef}
 						type="button"
 						onClick={() => decide("allow")}
-						className="rounded border border-ok/50 bg-ok/10 px-2 text-ok outline-none hover:bg-ok/20 focus:ring-2 focus:ring-ok/30"
+						className="rounded border border-ok/50 bg-ok-soft px-2 text-ok outline-none hover:bg-ok/20 focus:ring-2 focus:ring-ok/30"
 					>
 						[y] 允许
 					</button>
@@ -129,7 +129,7 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 					<button
 						type="button"
 						onClick={() => decide("deny")}
-						className="rounded border border-err/40 px-2 text-err outline-none hover:bg-err/10 focus:ring-2 focus:ring-err/20"
+						className="rounded border border-err/40 px-2 text-err outline-none hover:bg-err-soft focus:ring-2 focus:ring-err/20"
 					>
 						[n] 拒绝
 					</button>
