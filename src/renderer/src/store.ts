@@ -69,6 +69,11 @@ interface AppState extends SessionSlice {
 	background: Record<string, SessionSlice>;
 	/** 各项目的会话列表（展开时加载） */
 	projectSessions: Record<string, SessionSummary[]>;
+	sessionOperations: Record<string, "rename" | "delete">;
+	sessionOperation(projectId: string, path: string): "rename" | "delete" | undefined;
+	sessionBusy(projectId: string, path: string): boolean;
+	renameSession(projectId: string, path: string, name: string): Promise<void>;
+	deleteSession(projectId: string, path: string): Promise<void>;
 	expanded: Record<string, boolean>;
 	unread: Record<string, boolean>;
 
@@ -172,6 +177,15 @@ export function projectName(p: Project): string {
 	return p.name || p.path.split(/[\\/]/).filter(Boolean).pop() || p.path;
 }
 
+export function normalizedPath(path: string): string {
+	const normalized = path.replace(/\\/g, "/").replace(/\/+$/, "");
+	return /^(?:[a-z]:|\/\/)/i.test(normalized) ? normalized.toLowerCase() : normalized;
+}
+
+function operationKey(cwd: string, path: string): string {
+	return JSON.stringify([normalizedPath(cwd), normalizedPath(path)]);
+}
+
 let noticeSeq = 0;
 let initialized = false;
 
@@ -205,6 +219,53 @@ export const useApp = create<AppState>()((set, get) => {
 		return get().projects.projects.find((p) => p.id === pid);
 	}
 
+	const projectEpochs = new Map<string, number>();
+	const historyRequests = new Map<string, number>();
+
+	function advanceProject(pid: string): number {
+		const epoch = (projectEpochs.get(pid) ?? 0) + 1;
+		projectEpochs.set(pid, epoch);
+		return epoch;
+	}
+
+	function matchesFile(slice: SessionSlice | undefined, cwd: string, path: string): boolean {
+		return !!slice?.state?.sessionFile && normalizedPath(slice.cwd ?? "") === normalizedPath(cwd) &&
+			normalizedPath(slice.state.sessionFile) === normalizedPath(path);
+	}
+
+	function owners(cwd: string, path: string): Array<[string, SessionSlice]> {
+		const st = get();
+		const slices: Array<[string, SessionSlice]> = Object.entries(st.background);
+		if (st.activeProjectId) slices.push([st.activeProjectId, pickSlice(st)]);
+		return slices.filter(([, slice]) => matchesFile(slice, cwd, path));
+	}
+
+	function clearOwner(pid: string, handleId: string): void {
+		set((st) => {
+			if (pid === st.activeProjectId) {
+				if (st.handleId !== handleId) return st;
+				return { ...emptySlice(project(pid)?.path ?? st.cwd), draft: { text: "", seq: st.draft.seq + 1 }, unread: { ...st.unread, [pid]: false } };
+			}
+			if (st.background[pid]?.handleId !== handleId) return st;
+			const background = { ...st.background };
+			delete background[pid];
+			return { background, unread: { ...st.unread, [pid]: false } };
+		});
+	}
+
+	async function refreshHistory(cwd: string): Promise<void> {
+		await Promise.all(get().projects.projects.filter((p) => normalizedPath(p.path) === normalizedPath(cwd))
+			.map((p) => get().refreshProjectSessions(p.id)));
+	}
+
+	function finishOperation(key: string): void {
+		set((st) => {
+			const sessionOperations = { ...st.sessionOperations };
+			delete sessionOperations[key];
+			return { sessionOperations };
+		});
+	}
+
 	async function call<T>(pid: string, fn: (handleId: string) => Promise<T>): Promise<T | undefined> {
 		const handleId = sliceOf(pid)?.handleId;
 		if (!handleId) return undefined;
@@ -223,21 +284,26 @@ export const useApp = create<AppState>()((set, get) => {
 	}
 
 	async function reloadMessages(pid: string, state?: SessionState): Promise<void> {
+		const owner = sliceOf(pid);
+		if (!owner?.handleId) return;
+		if (state) patchSlice(pid, { state });
+		const file = (state ?? owner.state)?.sessionFile;
 		const messages = await call(pid, (h) => api.session(h, { type: "get_messages" }));
-		patchSlice(pid, {
+		patchSlice(pid, (s) => s.handleId === owner.handleId && s.state?.sessionFile === file ? {
 			messages: messages ?? [],
 			streaming: null,
 			toolArgsText: {},
 			toolRuns: {},
 			pendingApprovals: [],
-			...(state ? { state } : {}),
-		});
-		if (pid === get().activeProjectId && get().rightPanel === "tree") void get().loadTree();
+		} : null);
+		if (sliceOf(pid)?.handleId === owner.handleId && pid === get().activeProjectId && get().rightPanel === "tree") void get().loadTree();
 	}
 
 	async function loadModelsFor(pid: string): Promise<void> {
+		const handleId = sliceOf(pid)?.handleId;
+		if (!handleId) return;
 		const models = await call(pid, (h) => api.session(h, { type: "get_available_models" }));
-		patchSlice(pid, { models: models ?? [] });
+		patchSlice(pid, (s) => s.handleId === handleId ? { models: models ?? [] } : null);
 	}
 
 	function handleEvent(pid: string, event: SessionEvent): void {
@@ -295,6 +361,7 @@ export const useApp = create<AppState>()((set, get) => {
 		activeProjectId: null,
 		background: {},
 		projectSessions: {},
+		sessionOperations: {},
 		expanded: storedExpanded(),
 		unread: {},
 		notices: [],
@@ -392,7 +459,11 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async openProject(pid, sessionPath) {
 			const target = project(pid);
-			if (!target) return;
+			if (!target || (sessionPath && get().sessionOperation(pid, sessionPath))) return;
+			const prevId = get().activeProjectId;
+			if (prevId && prevId !== pid) advanceProject(prevId);
+			advanceProject(pid);
+			if (prevId === pid && get().connecting) return;
 			set({ view: "chat" });
 			if (pid !== get().activeProjectId || !get().handleId) {
 				if (target.missing) {
@@ -443,14 +514,19 @@ export const useApp = create<AppState>()((set, get) => {
 		async stopProject(pid) {
 			const slice = sliceOf(pid);
 			if (slice?.isRunning && !window.confirm("该项目有任务正在运行，停止后任务会中断。继续？")) return;
-			if (slice?.handleId) await api.closeSession(slice.handleId).catch(() => undefined);
-			if (pid === get().activeProjectId) set({ ...emptySlice(), activeProjectId: null });
-			else
-				set((st) => {
-					const background = { ...st.background };
-					delete background[pid];
-					return { background };
-				});
+			const epoch = advanceProject(pid);
+			if (slice?.handleId) {
+				try {
+					await api.closeSession(slice.handleId);
+				} catch (error) {
+					get().pushNotice("error", `停止项目失败：${errorText(error)}`);
+					return;
+				}
+				clearOwner(pid, slice.handleId);
+			}
+			if (pid === get().activeProjectId && projectEpochs.get(pid) === epoch && !get().handleId) {
+				set({ ...emptySlice(), activeProjectId: null });
+			}
 		},
 
 		async removeProject(pid) {
@@ -476,11 +552,83 @@ export const useApp = create<AppState>()((set, get) => {
 		async refreshProjectSessions(pid) {
 			const p = project(pid);
 			if (!p || p.missing) return;
+			const request = (historyRequests.get(pid) ?? 0) + 1;
+			historyRequests.set(pid, request);
 			try {
 				const sessions = await api.service({ type: "list_sessions", cwd: p.path });
+				if (historyRequests.get(pid) !== request || normalizedPath(project(pid)?.path ?? "") !== normalizedPath(p.path)) return;
 				set((st) => ({ projectSessions: { ...st.projectSessions, [pid]: sessions } }));
 			} catch {
 				// 读取失败时保留旧列表
+			}
+		},
+
+		sessionOperation(pid, path) {
+			const p = project(pid);
+			return p ? get().sessionOperations[operationKey(p.path, path)] : undefined;
+		},
+
+		sessionBusy(pid, path) {
+			const p = project(pid);
+			return !!p && owners(p.path, path).some(([, s]) => s.isRunning || s.state?.isStreaming || waitingCount(s) > 0);
+		},
+
+		async renameSession(pid, path, name) {
+			const p = project(pid);
+			if (!p || p.missing || get().sessionOperation(pid, path)) return;
+			const key = operationKey(p.path, path);
+			set((st) => ({ sessionOperations: { ...st.sessionOperations, [key]: "rename" } }));
+			try {
+				await api.sessions.rename(p.path, path, name.trim());
+				await refreshHistory(p.path);
+			} catch (error) {
+				get().pushNotice("error", `重命名会话失败：${errorText(error)}`);
+			} finally {
+				finishOperation(key);
+			}
+		},
+
+		async deleteSession(pid, path) {
+			const p = project(pid);
+			if (!p || p.missing || get().sessionOperation(pid, path)) return;
+			if (get().sessionBusy(pid, path)) {
+				get().pushNotice("warning", "该会话正在运行或等待交互，请先中断或结束后再删除");
+				return;
+			}
+			const summary = get().projectSessions[pid]?.find((s) => normalizedPath(s.path) === normalizedPath(path));
+			if (!window.confirm(`永久删除会话「${summary?.name || summary?.firstMessage || "（空会话）"}」？\n只删除该会话记录，不删除项目文件，也不删除分叉会话。此操作无法撤销。`)) return;
+			const key = operationKey(p.path, path);
+			const targetOwners = owners(p.path, path);
+			const current = targetOwners.find(([ownerPid]) => ownerPid === get().activeProjectId);
+			const epoch = projectEpochs.get(pid) ?? 0;
+			set((st) => ({ sessionOperations: { ...st.sessionOperations, [key]: "delete" } }));
+			try {
+				await api.sessions.delete(p.path, path);
+				for (const [ownerPid, owner] of targetOwners) {
+					if (owner.handleId && matchesFile(sliceOf(ownerPid), p.path, path)) clearOwner(ownerPid, owner.handleId);
+				}
+				void refreshHistory(p.path);
+				if (!current || current[0] !== pid || get().activeProjectId !== pid || (projectEpochs.get(pid) ?? 0) !== epoch ||
+					normalizedPath(project(pid)?.path ?? "") !== normalizedPath(p.path) || get().handleId || get().connecting || get().state) return;
+				const openingEpoch = advanceProject(pid);
+				set({ connecting: true });
+				try {
+					const { handleId, state } = await api.openSession(p.path, get().approvalMode);
+					if (get().activeProjectId !== pid || projectEpochs.get(pid) !== openingEpoch || get().handleId ||
+						normalizedPath(project(pid)?.path ?? "") !== normalizedPath(p.path)) {
+						await api.closeSession(handleId).catch(() => undefined);
+						return;
+					}
+					set({ ...emptySlice(p.path), handleId, state, view: "chat" });
+					await Promise.all([reloadMessages(pid), loadModelsFor(pid)]);
+				} catch (error) {
+					if (get().activeProjectId === pid && projectEpochs.get(pid) === openingEpoch) set({ connecting: false });
+					get().pushNotice("error", `会话已删除，但新会话打开失败：${errorText(error)}`);
+				}
+			} catch (error) {
+				get().pushNotice("error", `删除会话失败：${errorText(error)}；原记录保留，可重新打开`);
+			} finally {
+				finishOperation(key);
 			}
 		},
 
@@ -514,23 +662,27 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async newSession() {
 			const pid = get().activeProjectId;
-			if (!pid) return;
+			const handleId = get().handleId;
+			if (!pid || !handleId) return;
+			const epoch = advanceProject(pid);
 			const state = await active((h) => api.session(h, { type: "new_session" }));
-			if (state) await reloadMessages(pid, state);
-			set({ view: "chat" });
-			await get().refreshSessions();
+			if (state && sliceOf(pid)?.handleId === handleId && projectEpochs.get(pid) === epoch) await reloadMessages(pid, state);
+			if (get().activeProjectId === pid) set({ view: "chat" });
+			await get().refreshProjectSessions(pid);
 		},
 
 		async switchSession(path) {
 			const pid = get().activeProjectId;
-			if (!pid) return;
+			const handleId = get().handleId;
+			if (!pid || !handleId || get().sessionOperation(pid, path)) return;
 			if (get().isRunning) {
 				get().pushNotice("warning", "当前会话正在运行，请先等待结束或按 Esc 中断");
 				return;
 			}
+			const epoch = advanceProject(pid);
 			const state = await active((h) => api.session(h, { type: "switch_session", sessionPath: path }));
-			if (state) await reloadMessages(pid, state);
-			set({ view: "chat" });
+			if (state && sliceOf(pid)?.handleId === handleId && projectEpochs.get(pid) === epoch) await reloadMessages(pid, state);
+			if (get().activeProjectId === pid) set({ view: "chat" });
 		},
 
 		async sendPrompt(text) {
@@ -663,16 +815,13 @@ export const useApp = create<AppState>()((set, get) => {
 					const pid = projectByHandle(push.handleId);
 					if (!pid) return;
 					const name = project(pid) ? projectName(project(pid) as Project) : "项目";
-					if (pid === get().activeProjectId) set({ handleId: null, isRunning: false, pendingApprovals: [], extDialogs: [] });
-					else
-						set((st) => {
-							const background = { ...st.background };
-							delete background[pid];
-							return { background };
-						});
-					get().pushNotice("error", `「${name}」的 pi 进程已退出（code ${push.code}），重新点击项目即可再次打开`);
+					clearOwner(pid, push.handleId);
+					if (!push.expected) get().pushNotice("error", `「${name}」的 pi 进程已退出（code ${push.code}），重新点击项目即可再次打开`);
 					return;
 				}
+				case "sessions_changed":
+					void refreshHistory(push.cwd);
+					return;
 				case "config_changed": {
 					set((s) => ({ configVersion: s.configVersion + 1 }));
 					const pids = [get().activeProjectId, ...Object.keys(get().background)].filter((p): p is string => !!p);

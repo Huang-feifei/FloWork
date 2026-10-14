@@ -139,6 +139,9 @@ export class Backend {
 			}
 			case "service.send": {
 				const command = rawParams as ServiceCommand;
+				if (["validate_session", "rename_session", "delete_session"].includes(command.type)) {
+					throw new Error("历史会话操作必须通过 sessions.rename/delete 协调");
+				}
 				const service = await this.workers.getService();
 				const result = await service.send(command);
 				if (CONFIG_MUTATING_COMMANDS.has(command.type)) {
@@ -156,9 +159,9 @@ export class Backend {
 				if (!(await isDirectory(params.cwd))) throw new Error(`工作区不存在或不是文件夹：${params.cwd}`);
 				const opened = await this.workers.openSession(params, {
 					onEvent: (handleId, event) => this.push({ type: "session_event", handleId, event }),
-					onExit: (handleId, code) => {
+					onExit: (handleId, code, expected) => {
 						this.clientSessions.get(clientId)?.delete(handleId);
-						this.push({ type: "session_exit", handleId, code });
+						this.push({ type: "session_exit", handleId, code, expected });
 					},
 				});
 				let owned = this.clientSessions.get(clientId);
@@ -171,12 +174,29 @@ export class Backend {
 			}
 			case "session.send": {
 				const params = rawParams as BackendMethods["session.send"]["params"];
-				return this.workers.sendToSession(params.handleId, params.command);
+				const result = await this.workers.sendToSession(params.handleId, params.command);
+				if (params.command.type === "set_session_name") {
+					const state = await this.workers.sendToSession(params.handleId, { type: "get_state" }) as { cwd: string };
+					this.push({ type: "sessions_changed", cwd: state.cwd });
+				}
+				return result;
 			}
 			case "session.close": {
 				const params = rawParams as BackendMethods["session.close"]["params"];
-				this.clientSessions.get(clientId)?.delete(params.handleId);
 				await this.workers.closeSession(params.handleId);
+				this.clientSessions.get(clientId)?.delete(params.handleId);
+				return null;
+			}
+			case "sessions.rename": {
+				const params = rawParams as BackendMethods["sessions.rename"]["params"];
+				await this.workers.renameSession(params.cwd, params.path, params.name);
+				this.push({ type: "sessions_changed", cwd: params.cwd });
+				return null;
+			}
+			case "sessions.delete": {
+				const params = rawParams as BackendMethods["sessions.delete"]["params"];
+				await this.workers.deleteSession(params.cwd, params.path);
+				this.push({ type: "sessions_changed", cwd: params.cwd });
 				return null;
 			}
 			case "auth.answer": {
@@ -228,7 +248,12 @@ export class Backend {
 	async releaseClient(clientId: string): Promise<void> {
 		const owned = this.clientSessions.get(clientId);
 		this.clientSessions.delete(clientId);
-		if (owned) await Promise.all([...owned].map((handleId) => this.workers.closeSession(handleId)));
+		if (!owned) return;
+		// 断线清理不能让单个无法确认退出的 worker 拖垮后端进程
+		const results = await Promise.allSettled([...owned].map((handleId) => this.workers.closeSession(handleId)));
+		for (const result of results) {
+			if (result.status === "rejected") console.error(`[flowork] 断开连接时关闭会话失败：${result.reason}`);
+		}
 	}
 
 	shutdown(): Promise<void> {

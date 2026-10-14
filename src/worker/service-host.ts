@@ -24,6 +24,7 @@ import type {
 import { displayUserText } from "@shared/skill-text";
 import { toModelInfo } from "./adapter";
 import { importResource, installPackage, listResources, removePackage, removeResource, setResourceEnabled } from "./resources";
+import { deleteSession, renameSession, validateSession } from "./session-files";
 
 const CONFIG_FILES: Record<ConfigFileName, string> = {
 	settings: "settings.json",
@@ -62,6 +63,14 @@ export class ServiceHost {
 				return { pid: process.pid, versions: { ...process.versions }, agentDir: getAgentDir() };
 			case "list_sessions":
 				return this.listSessions(command.cwd, command.sessionDir);
+			case "validate_session":
+				return validateSession(command.cwd, command.path);
+			case "rename_session":
+				await renameSession(command.cwd, command.path, command.name);
+				return null;
+			case "delete_session":
+				await deleteSession(command.cwd, command.path);
+				return null;
 			case "list_providers":
 				return this.listProviders();
 			case "list_models":

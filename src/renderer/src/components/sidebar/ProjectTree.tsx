@@ -4,7 +4,7 @@
  */
 import { type DragEvent, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import type { Project, ProjectGroup } from "@shared/protocol";
+import type { Project, ProjectGroup, SessionSummary } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { relativeTime } from "../../lib/format";
 import { projectName, useApp } from "../../store";
@@ -66,6 +66,75 @@ function StatusMark({ pid }: { pid: string }) {
 	return null;
 }
 
+/** 一条历史会话：点击打开；右键或 ⋯ 菜单重命名 / 删除 */
+function SessionRow({ project, session, active }: { project: Project; session: SessionSummary; active: boolean }) {
+	const busy = useApp((s) => s.sessionBusy(project.id, session.path));
+	const pending = useApp((s) => s.sessionOperation(project.id, session.path));
+	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+	const label = session.name || session.firstMessage || "（空会话）";
+	const locked = project.missing || !!pending;
+
+	const rename = async () => {
+		const value = await askText({
+			title: "重命名会话",
+			defaultValue: session.name ?? session.firstMessage ?? "",
+			placeholder: "留空恢复默认标题",
+			allowEmpty: true,
+		});
+		if (value === null) return;
+		await useApp.getState().renameSession(project.id, session.path, value);
+	};
+
+	const items: MenuItem[] = [
+		{ label: "重命名", disabled: locked, onClick: () => void rename() },
+		{
+			label: "删除会话",
+			danger: true,
+			hint: busy ? "运行中" : pending ? "处理中" : undefined,
+			disabled: locked || busy,
+			onClick: () => void useApp.getState().deleteSession(project.id, session.path),
+		},
+	];
+
+	return (
+		<div
+			onContextMenu={(e) => {
+				if (locked) return;
+				e.preventDefault();
+				setMenu({ x: e.clientX, y: e.clientY });
+			}}
+			className={`group/session relative flex items-center rounded-md ${
+				active ? "bg-panel shadow-[0_1px_2px_rgba(0,0,0,0.05)]" : "hover:bg-panel-2"
+			}`}
+		>
+			<button
+				type="button"
+				onClick={() => void useApp.getState().openProject(project.id, session.path)}
+				title={label}
+				className="min-w-0 flex-1 px-2 py-1 text-left"
+			>
+				<div className={`truncate text-[12px] ${active ? "font-medium" : ""} ${pending ? "text-muted" : ""}`}>{label}</div>
+				<div className="text-[10.5px] text-muted">
+					{relativeTime(session.modified)} · {session.messageCount} 条
+				</div>
+			</button>
+			<button
+				type="button"
+				disabled={locked}
+				onClick={(e) => {
+					const rect = e.currentTarget.getBoundingClientRect();
+					setMenu({ x: rect.left, y: rect.bottom + 4 });
+				}}
+				title="会话操作"
+				className="invisible mr-0.5 shrink-0 rounded px-1 text-muted group-hover/session:visible hover:bg-panel-2 hover:text-fg disabled:opacity-40"
+			>
+				⋯
+			</button>
+			{menu && <Menu items={items} position={menu} onClose={() => setMenu(null)} />}
+		</div>
+	);
+}
+
 function SessionList({ project }: { project: Project }) {
 	const sessions = useApp((s) => s.projectSessions[project.id]);
 	const activeProjectId = useApp((s) => s.activeProjectId);
@@ -87,25 +156,14 @@ function SessionList({ project }: { project: Project }) {
 				<span className="text-accent">+</span> 新会话
 			</button>
 			{sessions === undefined && <div className="px-2 py-1 text-[11px] text-muted">加载中…</div>}
-			{visible.map((s) => {
-				const active = activeProjectId === project.id && s.path === activeFile && view === "chat";
-				return (
-					<button
-						type="button"
-						key={s.path}
-						onClick={() => void openProject(project.id, s.path)}
-						title={s.name || s.firstMessage}
-						className={`block w-full rounded-md px-2 py-1 text-left ${
-							active ? "bg-panel shadow-[0_1px_2px_rgba(0,0,0,0.05)]" : "hover:bg-panel-2"
-						}`}
-					>
-						<div className={`truncate text-[12px] ${active ? "font-medium" : ""}`}>{s.name || s.firstMessage || "（空会话）"}</div>
-						<div className="text-[10.5px] text-muted">
-							{relativeTime(s.modified)} · {s.messageCount} 条
-						</div>
-					</button>
-				);
-			})}
+			{visible.map((s) => (
+				<SessionRow
+					key={s.path}
+					project={project}
+					session={s}
+					active={activeProjectId === project.id && s.path === activeFile && view === "chat"}
+				/>
+			))}
 			{list.length > SESSIONS_PREVIEW && (
 				<button
 					type="button"

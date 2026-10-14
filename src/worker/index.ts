@@ -52,6 +52,9 @@ let serviceHost: ServiceHost | undefined;
 const SERVICE_COMMANDS = new Set<AnyCommand["type"]>([
 	"ping",
 	"list_sessions",
+	"validate_session",
+	"rename_session",
+	"delete_session",
 	"list_providers",
 	"list_models",
 	"auth_login",

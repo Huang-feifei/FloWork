@@ -132,7 +132,7 @@ async function shutdown(code = 0): Promise<void> {
 	shuttingDown = true;
 	wss.close();
 	server.close();
-	await backend.shutdown();
+	await backend.shutdown().catch((error: unknown) => console.error(`[flowork] 关闭 worker 失败：${error}`));
 	process.exit(code);
 }
 process.on("SIGINT", () => void shutdown());

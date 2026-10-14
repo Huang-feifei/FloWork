@@ -46,6 +46,10 @@ export const api = {
 	session: <C extends SessionCommand>(handleId: string, command: C) =>
 		call("session.send", { handleId, command }) as Promise<CommandResult<C>>,
 	closeSession: (handleId: string) => call("session.close", { handleId }),
+	sessions: {
+		rename: (cwd: string, path: string, name: string) => call("sessions.rename", { cwd, path, name }),
+		delete: (cwd: string, path: string) => call("sessions.delete", { cwd, path }),
+	},
 
 	authAnswer: (flowId: string, promptId: string, value?: string, cancel?: boolean) =>
 		call("auth.answer", { flowId, promptId, value, cancel }),

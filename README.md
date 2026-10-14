@@ -55,6 +55,7 @@ src/
   worker/                   pi worker
     session-host.ts         承载 pi 会话
     service-host.ts         供应商、登录、测试连接、配置文件
+    session-files.ts        历史会话的校验、重命名与删除
     adapter.ts              pi → FloWork 数据适配
   server/                   网页版外壳（HTTP 静态页面 + WebSocket）
   main/ + preload/          桌面版外壳（Electron）
@@ -102,6 +103,7 @@ Electron 二进制在首次运行时下载；网络受限时可以设置镜像�
 - 会话树：查看分支、回到任意节点继续（用户消息会填回输入框以便修改重发）、分叉为新会话、节点标签
 - Windows：自动识别 Git Bash（包括非默认安装位置），避免 bash 工具落到 WSL；设置页显示实际使用的 shell
 - 项目：侧边栏导入多个项目（可多选、可从已有会话发现），置顶、分组、拖拽排序、重命名、移除；项目展开显示会话；切换项目时原项目的 pi 进程继续在后台运行，侧边栏显示运行中 / 待确认 / 已完成。项目列表保存在 `~/.flowork/projects.json`
+- 会话管理：历史会话可重命名（留空恢复默认标题）与删除；当前打开和后台项目的会话同样支持。删除前确认，只删除会话记录，不删除项目文件、不级联删除分叉会话；运行中或等待交互的会话拒绝删除，空闲的打开会话先关闭 pi 进程再删除，避免记录被重新写回
 - 文件：项目文件树（按 .gitignore 置灰）、会话文件（本会话读取/修改的文件与增删行数）、全项目模糊搜索与 Ctrl+P 快速打开
 - 代码查看与编辑：CodeMirror 语法高亮、查找；编辑后 Ctrl+S 保存，文件已被 AI 或外部修改时拒绝保存以免覆盖；对话中的代码块同样高亮
 - 技能与扩展：按项目列出技能、扩展、提示模板与 pi 包（含已禁用的）；导入本地文件夹（全局或仅当前项目）、启用 / 禁用、删除导入的副本、安装 npm / git pi 包；变更后各会话自动重新加载。输入框输入 / 时补全 /skill:名称、提示模板与扩展命令
@@ -117,9 +119,9 @@ FloWork 对 pi 的扩展集中在 `src/worker/flowork-extension.ts`（以内联�
 node scripts/ws-call.mjs service.send '{"type":"get_shell_info"}'   # 向运行中的后端发一个请求
 node scripts/e2e-session.mjs <目录> <provider/model> allow|deny|deny-bash "<提示词>"   # 端到端会话测试（会真实调用模型）
 node scripts/shoot-ui.mjs <输出目录>                                  # 对 dev:web 页面截图（注入示例会话）
+node scripts/test-sessions.mjs                                       # 会话重命名与删除回归（先 npm run build:web；隔离数据目录，不调用模型）
 ```
 
 ## 路线图
 
-- **M2**：会话重命名与删除。
-- **M3**：内置终端与文件树；转为桌面版发布（凭据改用系统加密存储、electron-builder 打包、收紧 CSP）。
+- **M3**：内置终端；转为桌面版发布（凭据改用系统加密存储、electron-builder 打包、收紧 CSP）。

@@ -28,6 +28,7 @@ import { toChatMessage, toModelInfo, toSessionEvents, toSessionState, toTree } f
 import { ExtensionUI } from "./extension-ui";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
 import { getProjectTrust, isProjectTrusted, setProjectTrust } from "./trust";
+import { validateSession } from "./session-files";
 
 interface PendingApproval {
 	toolName: string;
@@ -77,6 +78,7 @@ export class SessionHost {
 	};
 
 	async init(cwd: string, sessionPath?: string): Promise<SessionState> {
+		if (sessionPath) await validateSession(cwd, sessionPath);
 		const sessionManager = sessionPath ? SessionManager.open(sessionPath) : SessionManager.create(cwd);
 		this.runtime = await createAgentSessionRuntime(this.createRuntime, { cwd, agentDir: getAgentDir(), sessionManager });
 		// 新建 / 切换 / 分叉会话（无论由界面还是扩展命令发起）后 pi 先调用它，再执行扩展传入的 withSession 回调。
@@ -111,6 +113,7 @@ export class SessionHost {
 					if (!result.cancelled) this.changed();
 					return { cancelled: result.cancelled };
 				},
+				// 扩展代码本身在本机运行，其传入的会话路径不经过界面，交给 pi 校验即可
 				switchSession: (sessionPath, options) => runtime.switchSession(sessionPath, options),
 				reload: async () => {
 					await this.session.reload();
@@ -200,6 +203,7 @@ ${err.extensionPath}` });
 				return this.prompt(command.message, command.streamingBehavior);
 			case "abort":
 				this.denyAllPending("用户中断了运行");
+				this.extUI.cancelAll();
 				await session.abort();
 				return null;
 			case "get_state":
@@ -247,7 +251,7 @@ ${err.extensionPath}` });
 				await this.requireRuntime().switchSession(command.sessionPath);
 				return this.stateOf();
 			case "set_session_name":
-				session.setSessionName(command.name);
+				session.setSessionName(command.name.trim());
 				return null;
 			case "set_approval_mode":
 				this.approvalMode = command.mode;

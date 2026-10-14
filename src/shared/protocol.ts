@@ -274,6 +274,9 @@ export type SessionCommand =
 export type ServiceCommand =
 	| { type: "ping" }
 	| { type: "list_sessions"; cwd?: string; /** 列出所有目录时使用的会话根目录，默认 FloWork 自己的 */ sessionDir?: string }
+	| { type: "validate_session"; cwd: string; path: string }
+	| { type: "rename_session"; cwd: string; path: string; name: string }
+	| { type: "delete_session"; cwd: string; path: string }
 	| { type: "list_providers" }
 	| { type: "list_models"; availableOnly?: boolean }
 	| { type: "auth_login"; flowId: string; provider: string; method: "api_key" | "oauth" }
@@ -314,6 +317,9 @@ export interface CommandResultMap {
 	refresh_config: SessionState;
 	ping: { pid: number; versions: Record<string, string | undefined>; agentDir: string };
 	list_sessions: SessionSummary[];
+	validate_session: SessionSummary;
+	rename_session: null;
+	delete_session: null;
 	list_providers: ProviderInfo[];
 	list_models: ModelEntry[];
 	auth_login: { provider: string };
@@ -570,6 +576,8 @@ export interface BackendMethods {
 	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };
 	"session.close": { params: { handleId: string }; result: null };
+	"sessions.rename": { params: { cwd: string; path: string; name: string }; result: null };
+	"sessions.delete": { params: { cwd: string; path: string }; result: null };
 	"auth.answer": { params: { flowId: string; promptId: string; value?: string; cancel?: boolean }; result: null };
 	"auth.cancel": { params: { flowId: string }; result: null };
 }
@@ -578,7 +586,8 @@ export type BackendMethod = keyof BackendMethods;
 
 export type BackendPush =
 	| { type: "session_event"; handleId: string; event: SessionEvent }
-	| { type: "session_exit"; handleId: string; code: number }
+	| { type: "session_exit"; handleId: string; code: number; expected?: boolean }
+	| { type: "sessions_changed"; cwd: string }
 	| { type: "auth"; event: AuthFlowEvent }
 	/** 凭据或配置文件变更，界面应刷新模型与供应商列表 */
 	| { type: "config_changed" }
