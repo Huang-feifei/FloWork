@@ -63,7 +63,7 @@ function nvmNodeCandidates() {
 	for (const root of roots) {
 		if (!existsSync(root)) continue;
 		const versions = readdirSync(root)
-			.filter((name) => /^vd+.d+.d+$/.test(name))
+			.filter((name) => /^v\d+\.\d+\.\d+$/.test(name))
 			.sort(compareVersions);
 		for (const v of versions) {
 			candidates.push(process.platform === "win32" ? join(root, v, exe) : join(root, v, "bin", exe));
