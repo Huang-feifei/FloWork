@@ -89,12 +89,31 @@ npm run smoke:web     # 构建并运行网页版后端冒烟检查（不调用�
 # 桌面版
 npm run dev           # 开发模式
 npm run build         # 构建到 out/
+npm run pack:win      # 构建并打包成免安装目录 release/win-unpacked/（用于验证，可直接运行 FloWork.exe）
+npm run dist:win      # 构建并打包成 Windows 安装包 release/FloWork-<版本>-x64-setup.exe
 npm run smoke         # 构建并运行桌面版冒烟测试；加 --screenshot <path.png> 可保存截图
 
 npm run typecheck     # 类型检查（全部代码）
 ```
 
-Electron 二进制在首次运行时下载；网络受限时可以设置镜像：`set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`。
+Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:win` / `npm run dist:win`）时下载；网络受限时可以设置镜像：`set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`（打包时同样读这个环境变量）。
+
+## 桌面版发布
+
+打包配置在 `electron-builder.yml`，产物写到 `release/`（已忽略，不入库）：
+
+- `npm run pack:win` 出免安装目录 `release/win-unpacked/`，不需要 nsis 工具链，适合本地验证。
+- `npm run dist:win` 出 nsis 安装包（可选安装目录、创建桌面快捷方式、不要求管理员权限）。
+
+打包内容只有 `out/main`、`out/preload`、`out/renderer` 与 package.json 里的生产依赖；网页版产物（`out/web`）与源码不进安装包。`node-pty` 与 `esbuild` 带原生模块 / 可执行文件，通过 `asarUnpack` 解包到 `app.asar.unpacked/`（asar 内的 `.node` 加载不到、`esbuild.exe` 也执行不了）。`npmRebuild` 关闭：node-pty 自带 N-API 预编译二进制，跨 Electron ABI 可用，不需要本地 C++ 工具链。
+
+安装包暂时使用 Electron 默认图标；发布前把 `icon.ico` 放到 `build/`（electron-builder 的默认资源目录）即可。
+
+发布版的安全边界：
+
+- **CSP**：`renderer.config.ts` 中的插件只在生产构建往 `index.html` 注入 `Content-Security-Policy`（桌面版与网页版共用同一份策略）；开发模式不注入，否则 Vite HMR 的内联脚本与 websocket 会被挡掉。具体策略见该文件里的注释。
+- **外链白名单**：主进程只把 `http:` / `https:` 链接交给系统浏览器（`setWindowOpenHandler`），其它协议一律拒绝并打日志；页面内导航（`will-navigate`）只允许留在应用自身，其余同样交给白名单处理。
+- **凭据**：auth.json 目前仍是明文（见「pi 配置目录」），改用系统加密存储尚未实现。
 
 ## 已实现
 
@@ -134,4 +153,4 @@ node scripts/test-ext-ui.mjs      # 第三方扩展对话框与界面接口
 
 ## 路线图
 
-- **M3**：内置终端；转为桌面版发布（凭据改用系统加密存储、electron-builder 打包、收紧 CSP）。
+- **M3**：内置终端；转为桌面版发布。electron-builder 打包与收紧 CSP 已完成（见「桌面版发布」），凭据改用系统加密存储待做。

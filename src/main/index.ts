@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { Backend } from "../core/backend";
 import { registerIpc } from "./ipc";
@@ -7,6 +8,38 @@ import { spawnUtilityWorker } from "./spawn";
 
 const isSmoke = process.argv.includes("--smoke");
 let mainWindow: BrowserWindow | undefined;
+
+/** 应用自身地址：开发模式是 Vite dev server，生产是打包进 asar 的 index.html */
+const devUrl = process.env.ELECTRON_RENDERER_URL;
+const appUrl = devUrl ?? pathToFileURL(join(import.meta.dirname, "../renderer/index.html")).href;
+
+/** 只允许 http/https 交给系统浏览器：页面里的链接与 OAuth 跳转都可能带 file:、自定义 scheme 等协议 */
+function openExternalIfAllowed(url: string): void {
+	let parsed: URL;
+	try {
+		parsed = new URL(url);
+	} catch {
+		console.warn(`[flowork] 已拒绝打开无法解析的链接：${url}`);
+		return;
+	}
+	if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+		console.warn(`[flowork] 已拒绝打开非 http(s) 链接：${url}`);
+		return;
+	}
+	void shell.openExternal(parsed.toString());
+}
+
+/** 页面导航是否留在应用自身：生产只认那一个本地文件，开发认 Vite dev server 的同源地址 */
+function isAppUrl(url: string): boolean {
+	try {
+		const target = new URL(url);
+		const self = new URL(appUrl);
+		if (self.protocol === "file:") return target.protocol === "file:" && target.pathname === self.pathname;
+		return target.origin === self.origin;
+	} catch {
+		return false;
+	}
+}
 
 const backend = new Backend({
 	shell: "electron",
@@ -49,13 +82,19 @@ function createWindow(show = true): BrowserWindow {
 
 	if (show) win.once("ready-to-show", () => win.show());
 
-	// 外部链接（包括 OAuth 授权页）用系统浏览器打开
+	// 外部链接（包括 OAuth 授权页）用系统浏览器打开，其它协议一律拒绝
 	win.webContents.setWindowOpenHandler(({ url }) => {
-		void shell.openExternal(url);
+		openExternalIfAllowed(url);
 		return { action: "deny" };
 	});
 
-	const devUrl = process.env.ELECTRON_RENDERER_URL;
+	// 页面内跳转只允许留在应用自身；其余一律拦下，能开就交给系统浏览器（避免应用窗口被导航到外部页面）
+	win.webContents.on("will-navigate", (event, url) => {
+		if (isAppUrl(url)) return;
+		event.preventDefault();
+		openExternalIfAllowed(url);
+	});
+
 	if (devUrl) void win.loadURL(devUrl);
 	else void win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
 

@@ -17,6 +17,7 @@ import {
 import { isDirectory, listDirs } from "./fs";
 import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
 import { ProjectStore, samePath } from "./projects";
+import { TerminalManager } from "./terminal";
 import { listWorkspaceDir, readWorkspaceFile, searchWorkspaceFiles, writeWorkspaceFile } from "./workspace-fs";
 import { WorkerManager } from "./worker-manager";
 import type { WorkerSpawner } from "./worker-process";
@@ -36,12 +37,15 @@ type PushListener = (push: BackendPush) => void;
 export class Backend {
 	readonly workers: WorkerManager;
 	readonly projects = new ProjectStore();
+	/** 真终端按 cwd 归属，不随客户端断线关闭 */
+	readonly terminals: TerminalManager;
 	private readonly listeners = new Set<PushListener>();
 	/** clientId → 该客户端打开的会话，客户端断开时一并关闭 */
 	private readonly clientSessions = new Map<string, Set<string>>();
 
 	constructor(private readonly host: BackendHost) {
 		this.workers = new WorkerManager(host.spawnWorker, (event) => this.push({ type: "auth", event }));
+		this.terminals = new TerminalManager((push) => this.push(push));
 	}
 
 	onPush(listener: PushListener): () => void {
@@ -91,7 +95,12 @@ export class Backend {
 			}
 			case "projects.remove": {
 				const params = rawParams as BackendMethods["projects.remove"]["params"];
-				return this.projectsChanged(await this.projects.remove(params.id));
+				// 项目移除后其路径无从查起，先取出路径以便关闭该目录下的终端
+				const { projects } = await this.projects.get();
+				const removedPath = projects.find((p) => p.id === params.id)?.path;
+				const state = this.projectsChanged(await this.projects.remove(params.id));
+				if (removedPath) this.terminals.closeByCwd(removedPath);
+				return state;
 			}
 			case "projects.touch": {
 				const params = rawParams as BackendMethods["projects.touch"]["params"];
@@ -209,6 +218,22 @@ export class Backend {
 				(await this.workers.getService()).post({ kind: "auth_cancel", flowId: params.flowId });
 				return null;
 			}
+			case "terminal.open": {
+				const params = rawParams as BackendMethods["terminal.open"]["params"];
+				return this.terminals.open(params);
+			}
+			case "terminal.write": {
+				const params = rawParams as BackendMethods["terminal.write"]["params"];
+				return this.terminals.write(params);
+			}
+			case "terminal.resize": {
+				const params = rawParams as BackendMethods["terminal.resize"]["params"];
+				return this.terminals.resize(params);
+			}
+			case "terminal.close": {
+				const params = rawParams as BackendMethods["terminal.close"]["params"];
+				return this.terminals.close(params);
+			}
 		}
 	}
 
@@ -244,7 +269,7 @@ export class Backend {
 		return list.sort((a, b) => b.lastModified - a.lastModified);
 	}
 
-	/** 客户端断开（网页标签关闭）时，关闭它打开的会话 */
+	/** 客户端断开（网页标签关闭）时，关闭它打开的会话。终端不在此列：它按项目存在，刷新页面不该杀掉正在跑的命令 */
 	async releaseClient(clientId: string): Promise<void> {
 		const owned = this.clientSessions.get(clientId);
 		this.clientSessions.delete(clientId);
@@ -256,7 +281,8 @@ export class Backend {
 		}
 	}
 
-	shutdown(): Promise<void> {
-		return this.workers.shutdownAll();
+	async shutdown(): Promise<void> {
+		this.terminals.closeAll();
+		await this.workers.shutdownAll();
 	}
 }

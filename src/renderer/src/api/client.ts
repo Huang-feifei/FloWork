@@ -51,6 +51,14 @@ export const api = {
 		delete: (cwd: string, path: string) => call("sessions.delete", { cwd, path }),
 	},
 
+	/** 终端按 cwd 幂等：同一目录重复 open 会复用同一个 shell */
+	terminal: {
+		open: (cwd: string, cols: number, rows: number) => call("terminal.open", { cwd, cols, rows }),
+		write: (terminalId: string, data: string) => call("terminal.write", { terminalId, data }),
+		resize: (terminalId: string, cols: number, rows: number) => call("terminal.resize", { terminalId, cols, rows }),
+		close: (terminalId: string) => call("terminal.close", { terminalId }),
+	},
+
 	authAnswer: (flowId: string, promptId: string, value?: string, cancel?: boolean) =>
 		call("auth.answer", { flowId, promptId, value, cancel }),
 	authCancel: (flowId: string) => call("auth.cancel", { flowId }),

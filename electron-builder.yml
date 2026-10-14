@@ -1,0 +1,43 @@
+# 桌面版打包配置（electron-builder）。
+# npm run pack:win → release/win-unpacked/（免安装目录，用于验证）
+# npm run dist:win → release/ 下的 nsis 安装包
+appId: com.flowork.app
+productName: FloWork
+
+directories:
+  output: release
+
+# 只打包构建产物与生产依赖：源码、脚本、配置、网页版产物都不进安装包。
+# 生产依赖的 node_modules 由 electron-builder 按 package.json 的 dependencies 单独收集，无需在此列出。
+files:
+  - out/main/**
+  - out/preload/**
+  - out/renderer/**
+  - package.json
+
+asar: true
+
+# node-pty 是原生模块：.node 与 conpty/winpty 的二进制无法从 asar 内加载，必须解包。
+# esbuild 是生产依赖（pi 的 chord 在运行时用它打包扩展），其二进制同样需要落在磁盘上才能执行。
+asarUnpack:
+  - node_modules/node-pty/**
+  - node_modules/esbuild/**
+  - node_modules/@esbuild/**
+
+# node-pty 自带 N-API 预编译二进制（跨 Node / Electron ABI 可用），重新编译需要本地 C++ 工具链，
+# 关掉可以让打包在没有编译环境的机器上也能完成。
+npmRebuild: false
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-${arch}-setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: FloWork

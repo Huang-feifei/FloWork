@@ -1,66 +1,18 @@
 /**
  * 底部面板：终端 / 输出 / pi 日志三个页签。
  *
- * 终端页签目前只有界面：真正的交互式 shell 还没接（需要后端在项目目录里起一个 PTY），
- * 因此这里显示环境信息与后续接入的说明，而不是一个假的可输入终端。
+ * 终端页签是真正的交互式 shell（见 TerminalPanel.tsx），另外两个页签只读会话状态。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
-import { api } from "../../api/client";
-import { isMac } from "../../lib/desktop";
-import { basename } from "../../lib/format";
+import { useMemo, useRef } from "react";
 import { type BottomTab, useApp } from "../../store";
 import { Icon } from "../Icon";
+import { TerminalTab } from "./TerminalPanel";
 
 const TABS: Array<{ id: BottomTab; label: string }> = [
 	{ id: "terminal", label: "终端" },
 	{ id: "output", label: "输出" },
 	{ id: "logs", label: "pi 日志" },
 ];
-
-function Prompt() {
-	const cwd = useApp((s) => s.cwd);
-	const info = useApp((s) => s.info);
-	const shell = info?.shell === "web" ? "web" : "desktop";
-	return (
-		<>
-			<span className="text-ok">{shell === "web" ? "flowork" : "desktop"}</span>
-			<span className="text-accent"> {cwd ? basename(cwd) : "~"}</span>
-			<span className="text-muted"> $ </span>
-		</>
-	);
-}
-
-/** 真终端尚未接入：显示环境信息与说明，避免给出一个不能用却像能用的输入框 */
-function TerminalTab() {
-	const info = useApp((s) => s.info);
-	const cwd = useApp((s) => s.cwd);
-	const [shell, setShell] = useState<string | null>(null);
-
-	useEffect(() => {
-		void api
-			.service({ type: "get_shell_info" })
-			.then((s) => setShell(s.resolved))
-			.catch(() => setShell(null));
-	}, []);
-
-	return (
-		<div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
-			<div>
-				<Prompt />
-				<span className="inline-block h-[1.1em] w-[0.6em] translate-y-[3px] bg-fg/70" />
-			</div>
-			<div className="mt-2 text-muted">内置终端还没有接入：真正的交互式 shell 需要后端在项目目录下启动 PTY 进程。</div>
-			<div className="text-muted">
-				目前的替代方式：把命令交给 pi（它会执行并把输出贴回会话），或使用系统终端。按 {isMac ? "⌘`" : "Ctrl+`"} 收起本面板。
-			</div>
-			<div className="mt-3 text-faint">
-				<div>工作目录　{cwd ?? "（未打开项目）"}</div>
-				<div>bash　　　{shell ?? "（未解析）"}</div>
-				<div>版本　　　FloWork {info?.version ?? "…"} · {info?.shell === "web" ? "网页版" : "桌面版"}</div>
-			</div>
-		</div>
-	);
-}
 
 /** 输出：本会话里 pi 执行过的工具与它们的耗时 */
 function OutputTab() {

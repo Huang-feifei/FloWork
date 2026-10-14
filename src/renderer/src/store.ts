@@ -23,6 +23,7 @@ import {
 } from "@shared/protocol";
 import { api, errorText } from "./api/client";
 import type { ConnectionStatus } from "./api/transport";
+import { disposeTerminal } from "./components/terminal/TerminalPanel";
 import { getRecentCwds } from "./lib/recent";
 import { emptySlice, pickSlice, reduceEvent, type SessionSlice, waitingCount } from "./session-slice";
 
@@ -514,6 +515,9 @@ export const useApp = create<AppState>()((set, get) => {
 		async stopProject(pid) {
 			const slice = sliceOf(pid);
 			if (slice?.isRunning && !window.confirm("该项目有任务正在运行，停止后任务会中断。继续？")) return;
+			// 项目被关闭时连同它的终端一起释放；收起面板、切项目只是隐藏终端实例
+			const target = project(pid);
+			if (target) disposeTerminal(target.path);
 			const epoch = advanceProject(pid);
 			if (slice?.handleId) {
 				try {

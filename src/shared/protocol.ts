@@ -585,6 +585,11 @@ export interface BackendMethods {
 	"sessions.delete": { params: { cwd: string; path: string }; result: null };
 	"auth.answer": { params: { flowId: string; promptId: string; value?: string; cancel?: boolean }; result: null };
 	"auth.cancel": { params: { flowId: string }; result: null };
+	/** 打开真终端（PTY）；同一 cwd 已有存活终端时复用，reused 为 true */
+	"terminal.open": { params: { cwd: string; cols: number; rows: number }; result: { terminalId: string; shell: string; reused: boolean } };
+	"terminal.write": { params: { terminalId: string; data: string }; result: null };
+	"terminal.resize": { params: { terminalId: string; cols: number; rows: number }; result: null };
+	"terminal.close": { params: { terminalId: string }; result: null };
 }
 
 export type BackendMethod = keyof BackendMethods;
@@ -598,7 +603,10 @@ export type BackendPush =
 	| { type: "config_changed" }
 	| { type: "projects_changed"; state: ProjectsState }
 	/** 技能 / 扩展变化，设置页与斜杠命令列表应刷新 */
-	| { type: "resources_changed" };
+	| { type: "resources_changed" }
+	/** 终端输出；不做回放，重连后只收到之后的数据 */
+	| { type: "terminal_data"; terminalId: string; data: string }
+	| { type: "terminal_exit"; terminalId: string; code: number };
 
 /** 网页版 WebSocket 帧 */
 export type ClientFrame = { id: string; method: BackendMethod; params: unknown };
