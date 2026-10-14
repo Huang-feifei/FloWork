@@ -324,7 +324,9 @@ export class WorkerManager {
 		if (IDENTITY_COMMANDS.has(command.type) || command.type === "set_session_name") {
 			return this.coordinate(async () => {
 				const owner = this.owner(handleId);
-				if (IDENTITY_COMMANDS.has(command.type) && this.busy(owner)) throw new Error("请先中断或结束当前运行与交互");
+				// 只挡「运行中」：pi 允许替换会话并取消未应答的扩展对话框（界面也依赖这一点），
+				// 但运行中的任务不该被悄悄换掉
+				if (IDENTITY_COMMANDS.has(command.type) && owner.state.isStreaming) throw new Error("请先中断或结束当前运行");
 				if (command.type === "switch_session") {
 					const target = await (await this.getService()).send({ type: "validate_session", cwd: owner.state.cwd, path: command.sessionPath }) as SessionSummary;
 					this.assertNotOpened(target.path);
