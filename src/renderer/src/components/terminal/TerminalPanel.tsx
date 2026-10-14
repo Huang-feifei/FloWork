@@ -14,8 +14,8 @@ import { isMac } from "../../lib/desktop";
 import { normalizedPath, useApp } from "../../store";
 import { Icon } from "../Icon";
 
-/** 与应用深色主题协调：取自 styles.css 的 token（xterm 只认具体色值） */
-const THEME: ITheme = {
+/** xterm 只认具体色值，这里给出深 / 浅两套，与 styles.css 的 token 对应 */
+const DARK_THEME: ITheme = {
 	background: "#11141a",
 	foreground: "#dfe3ea",
 	cursor: "#f0883e",
@@ -42,6 +42,39 @@ const THEME: ITheme = {
 	brightCyan: "#9fe8f0",
 	brightWhite: "#f0f3f6",
 };
+
+const LIGHT_THEME: ITheme = {
+	background: "#ffffff",
+	foreground: "#1b2027",
+	cursor: "#d9701f",
+	cursorAccent: "#ffffff",
+	selectionBackground: "#d9701f40",
+	selectionInactiveBackground: "#d9701f26",
+	scrollbarSliderBackground: "#0f172a29",
+	scrollbarSliderHoverBackground: "#0f172a47",
+	scrollbarSliderActiveBackground: "#0f172a59",
+	black: "#24292f",
+	red: "#cf222e",
+	green: "#1a7f37",
+	yellow: "#9a6700",
+	blue: "#0969da",
+	magenta: "#8250df",
+	cyan: "#1b7c83",
+	white: "#6e7781",
+	brightBlack: "#57606a",
+	brightRed: "#a40e26",
+	brightGreen: "#116329",
+	brightYellow: "#7d4e00",
+	brightBlue: "#0550ae",
+	brightMagenta: "#6639ba",
+	brightCyan: "#3192aa",
+	brightWhite: "#24292f",
+};
+
+/** 新建终端实例时按当前主题取色（后续切换由 TerminalTab 的 effect 统一更新） */
+function terminalTheme(): ITheme {
+	return useApp.getState().resolvedTheme === "dark" ? DARK_THEME : LIGHT_THEME;
+}
 
 const FONT_FAMILY = '"Cascadia Mono", "JetBrains Mono", "Sarasa Mono SC", Consolas, "Microsoft YaHei UI", monospace';
 
@@ -114,7 +147,7 @@ function createEntry(cwd: string): Entry {
 	container.style.height = "100%";
 	container.style.overflow = "hidden";
 	const term = new Terminal({
-		theme: THEME,
+		theme: terminalTheme(),
 		fontFamily: FONT_FAMILY,
 		fontSize: 12.5,
 		lineHeight: 1.3,
@@ -303,6 +336,7 @@ function useTerminalView(entry: Entry | null): EntryView {
 
 export function TerminalTab() {
 	const cwd = useApp((s) => s.cwd);
+	const resolvedTheme = useApp((s) => s.resolvedTheme);
 	const [entry, setEntry] = useState<Entry | null>(null);
 	const hostRef = useRef<HTMLDivElement>(null);
 	const view = useTerminalView(entry);
@@ -311,6 +345,12 @@ export function TerminalTab() {
 	useEffect(() => {
 		setEntry(cwd ? getOrCreate(cwd) : null);
 	}, [cwd]);
+
+	// 主题切换：已创建的终端实例同步换色
+	useEffect(() => {
+		const theme = resolvedTheme === "dark" ? DARK_THEME : LIGHT_THEME;
+		for (const item of entries.values()) item.term.options.theme = theme;
+	}, [resolvedTheme]);
 
 	useEffect(() => {
 		const host = hostRef.current;

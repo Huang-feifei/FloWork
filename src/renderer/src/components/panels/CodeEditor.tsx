@@ -14,25 +14,26 @@ import {
 	lineNumbers,
 } from "@codemirror/view";
 import { useEffect, useRef } from "react";
-import { highlightStyle, languageKeyForPath, loadLanguage } from "../../lib/code-highlight";
+import { highlightStyle, languageKeyForPath, lightHighlightStyle, loadLanguage } from "../../lib/code-highlight";
+import { useApp } from "../../store";
 
 const theme = EditorView.theme({
 	"&": { height: "100%", fontSize: "12.5px", backgroundColor: "var(--color-term)" },
 	".cm-gutters": {
 		backgroundColor: "var(--color-term-bar)",
-		color: "#66707c",
+		color: "var(--color-faint)",
 		borderRight: "1px solid var(--color-border)",
 	},
 	".cm-activeLineGutter": { backgroundColor: "var(--color-panel-2)", color: "var(--color-fg)" },
-	".cm-activeLine": { backgroundColor: "rgb(255 255 255 / 0.04)" },
+	".cm-activeLine": { backgroundColor: "var(--color-panel-2)" },
 	"&.cm-focused": { outline: "none" },
 	".cm-cursor": { borderLeftColor: "var(--color-accent)" },
-	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "rgb(240 136 62 / 0.28) !important" },
-	".cm-searchMatch": { backgroundColor: "rgb(227 179 65 / 0.3)" },
-	".cm-searchMatch-selected": { backgroundColor: "rgb(227 179 65 / 0.5)" },
+	"&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection": { backgroundColor: "var(--color-selection) !important" },
+	".cm-searchMatch": { backgroundColor: "var(--color-warn-soft)" },
+	".cm-searchMatch-selected": { backgroundColor: "var(--color-warn-soft)" },
 	".cm-panels": { backgroundColor: "var(--color-term-bar)", borderColor: "var(--color-border)" },
 	".cm-panel input, .cm-panel button": { fontFamily: "var(--font-sans)", fontSize: "12px" },
-	".cm-foldGutter span": { color: "#66707c" },
+	".cm-foldGutter span": { color: "var(--color-faint)" },
 });
 
 interface Props {
@@ -50,8 +51,17 @@ export default function CodeEditor({ path, value, editable, onChange, onSave, re
 	const view = useRef<EditorView | null>(null);
 	const editableComp = useRef(new Compartment());
 	const languageComp = useRef(new Compartment());
+	const highlightComp = useRef(new Compartment());
+	const resolvedTheme = useApp((s) => s.resolvedTheme);
 	const handlers = useRef({ onChange, onSave });
 	handlers.current = { onChange, onSave };
+
+	// 主题切换：重配语法高亮配色（浅色底用深色高亮色）
+	useEffect(() => {
+		view.current?.dispatch({
+			effects: highlightComp.current.reconfigure(syntaxHighlighting(resolvedTheme === "dark" ? highlightStyle : lightHighlightStyle)),
+		});
+	}, [resolvedTheme]);
 
 	// 创建编辑器
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在挂载时创建，后续通过 compartment 与 revision 更新
@@ -71,7 +81,7 @@ export default function CodeEditor({ path, value, editable, onChange, onSave, re
 					bracketMatching(),
 					highlightSelectionMatches(),
 					search({ top: true }),
-					syntaxHighlighting(highlightStyle),
+					highlightComp.current.of(syntaxHighlighting(useApp.getState().resolvedTheme === "dark" ? highlightStyle : lightHighlightStyle)),
 					keymap.of([
 						{
 							key: "Mod-s",

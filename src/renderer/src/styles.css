@@ -52,6 +52,75 @@
 
 	--font-sans: "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
 	--font-mono: "Cascadia Mono", "JetBrains Mono", "Sarasa Mono SC", Consolas, "Microsoft YaHei UI", monospace;
+
+	/* 需要不透明或独立的表面、投影与行内代码（不随玻璃层级变化） */
+	--color-window: #0d1222;
+	--color-surface-solid: #1e232c;
+	--color-scrollbar: rgb(255 255 255 / 0.16);
+	--color-scrollbar-hover: rgb(255 255 255 / 0.28);
+	--color-shadow: rgb(0 0 0 / 0.6);
+	--color-selection: rgb(240 136 62 / 0.32);
+	--color-inline-code-fg: #ffb37a;
+	--color-inline-code-bg: rgb(240 136 62 / 0.14);
+	--color-pre-bg: rgb(0 0 0 / 0.28);
+}
+
+/* 浅色主题：覆盖 @theme 的颜色 token（html 的 data-theme 由主题状态机设置，见 src/theme.ts） */
+html[data-theme="light"] {
+	/* 玻璃表面：外层浅灰 → 编辑区接近纯白 */
+	--color-chrome: rgb(248 249 251 / 0.62);
+	--color-sidebar: rgb(250 251 253 / 0.68);
+	--color-bg: rgb(255 255 255 / 0.8);
+	--color-term: rgb(255 255 255 / 0.8);
+	--color-term-bar: rgb(242 244 247 / 0.82);
+	--color-term-prompt: rgb(15 23 42 / 0.045);
+	--color-panel: rgb(244 246 249 / 0.84);
+	--color-panel-2: rgb(15 23 42 / 0.05);
+	--color-glass: rgb(255 255 255 / 0.88);
+	--color-border: rgb(15 23 42 / 0.1);
+	--color-border-strong: rgb(15 23 42 / 0.18);
+	--color-highlight: rgb(255 255 255 / 0.9);
+
+	/* 文字 */
+	--color-fg: #1b2027;
+	--color-muted: #5b6675;
+	--color-faint: #8b95a3;
+
+	/* 强调：暖色底上把琥珀橙压深一档以保证对比度 */
+	--color-accent: #d9701f;
+	--color-accent-strong: #b85c12;
+	--color-accent-soft: rgb(217 112 31 / 0.14);
+	--color-accent-foreground: #ffffff;
+
+	/* 状态 */
+	--color-ok: #1a7f37;
+	--color-ok-soft: rgb(26 127 55 / 0.11);
+	--color-warn: #9a6700;
+	--color-warn-soft: rgb(154 103 0 / 0.11);
+	--color-err: #cf222e;
+	--color-err-soft: rgb(207 34 46 / 0.1);
+	--color-info: #0969da;
+
+	/* diff */
+	--color-diff-add: rgb(46 160 67 / 0.13);
+	--color-diff-add-fg: #116329;
+	--color-diff-del: rgb(207 34 46 / 0.11);
+	--color-diff-del-fg: #a40e26;
+
+	/* 遮罩、窗口关闭按钮 */
+	--color-scrim: rgb(15 23 42 / 0.28);
+	--color-win-close: #c42b1c;
+
+	/* 不透明表面、投影与行内代码 */
+	--color-window: #eef1f6;
+	--color-surface-solid: #ffffff;
+	--color-scrollbar: rgb(15 23 42 / 0.18);
+	--color-scrollbar-hover: rgb(15 23 42 / 0.32);
+	--color-shadow: rgb(15 23 42 / 0.16);
+	--color-selection: rgb(217 112 31 / 0.26);
+	--color-inline-code-fg: #b4530a;
+	--color-inline-code-bg: rgb(217 112 31 / 0.12);
+	--color-pre-bg: rgb(15 23 42 / 0.045);
 }
 
 html,
@@ -62,7 +131,7 @@ body,
 
 body {
 	margin: 0;
-	background: #0d1222;
+	background: var(--color-window);
 	color: var(--color-fg);
 	font-family: var(--font-sans);
 	font-size: 14px;
@@ -70,7 +139,7 @@ body {
 }
 
 ::selection {
-	background: rgb(240 136 62 / 0.32);
+	background: var(--color-selection);
 }
 
 ::-webkit-scrollbar {
@@ -78,13 +147,13 @@ body {
 	height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-	background: rgb(255 255 255 / 0.16);
+	background: var(--color-scrollbar);
 	border-radius: 6px;
 	border: 3px solid transparent;
 	background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-	background: rgb(255 255 255 / 0.28);
+	background: var(--color-scrollbar-hover);
 	background-clip: content-box;
 }
 ::-webkit-scrollbar-track {
@@ -95,9 +164,9 @@ select {
 	cursor: pointer;
 }
 
-/* 表单控件在深色底色下使用系统深色外观 */
+/* 表单控件使用与主题一致的背景 */
 select option {
-	background: #1e232c;
+	background: var(--color-surface-solid);
 	color: var(--color-fg);
 }
 
@@ -128,13 +197,23 @@ select option {
 		linear-gradient(160deg, #0d1222, #121018 55%, #160f0c);
 }
 
+/* 浅色壁纸：同一组光斑换成低饱和浅色 */
+html[data-theme="light"] .fw-wallpaper {
+	background:
+		radial-gradient(42% 55% at 12% 18%, rgb(150 175 235 / 0.5), transparent 70%),
+		radial-gradient(38% 50% at 88% 82%, rgb(242 176 128 / 0.45), transparent 72%),
+		radial-gradient(30% 40% at 62% 30%, rgb(150 205 212 / 0.4), transparent 70%),
+		radial-gradient(28% 36% at 30% 88%, rgb(198 170 222 / 0.35), transparent 70%),
+		linear-gradient(160deg, #e9eef6, #f3eff2 55%, #f8f0e8);
+}
+
 /* 浮层玻璃：命令面板、审批卡片、输入框等悬浮在内容上方的元素 */
 .fw-float {
 	background: var(--color-glass);
 	backdrop-filter: blur(24px) saturate(160%);
 	box-shadow:
 		inset 0 1px 0 var(--color-highlight),
-		0 18px 48px -18px rgb(0 0 0 / 0.6);
+		0 18px 48px -18px var(--color-shadow);
 }
 
 /* ---------- 终端式会话区 ---------- */
@@ -232,15 +311,15 @@ select option {
 	font-style: italic;
 }
 .term-md code {
-	color: #ffb37a;
-	background: rgb(240 136 62 / 0.14);
+	color: var(--color-inline-code-fg);
+	background: var(--color-inline-code-bg);
 	border-radius: 4px;
 	padding: 0.05em 0.35em;
 }
 .term-md pre {
 	margin: 0.4em 0 0.8em;
 	padding: 0.7em 0.9em;
-	background: rgb(0 0 0 / 0.28);
+	background: var(--color-pre-bg);
 	border: 1px solid var(--color-border);
 	border-radius: 6px;
 	overflow-x: auto;

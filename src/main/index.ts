@@ -1,6 +1,7 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, shell } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, shell } from "electron";
 import { Backend } from "../core/backend";
 import { BrowserManager } from "./browser";
 import { registerIpc } from "./ipc";
@@ -10,6 +11,12 @@ import { spawnUtilityWorker } from "./spawn";
 const isSmoke = process.argv.includes("--smoke");
 let mainWindow: BrowserWindow | undefined;
 const browsers = new WeakMap<BrowserWindow, BrowserManager>();
+
+/** 开发模式下的窗口图标；打包后 exe 图标由 electron-builder 从 build/icon.ico 设置，窗口自动沿用 */
+const windowIcon = (() => {
+	const candidate = join(import.meta.dirname, "../../build/icon.ico");
+	return existsSync(candidate) ? candidate : undefined;
+})();
 
 /** 应用自身地址：开发模式是 Vite dev server，生产是打包进 asar 的 index.html */
 const devUrl = process.env.ELECTRON_RENDERER_URL;
@@ -68,7 +75,9 @@ function createWindow(show = true): BrowserWindow {
 		minHeight: 640,
 		show: false,
 		title: "FloWork",
-		backgroundColor: "#0d1222",
+		...(windowIcon ? { icon: windowIcon } : {}),
+		// 页面渲染前可见的窗口底色，需与 styles.css 的 --color-window 一致
+		backgroundColor: nativeTheme.shouldUseDarkColors ? "#0d1222" : "#eef1f6",
 		autoHideMenuBar: true,
 		// 自绘标题栏：整条栏为拖拽区，最小化 / 最大化 / 关闭由界面自绘（与设计稿一致），
 		// 因此 Windows / Linux 不再使用系统 titleBarOverlay；macOS 保留红绿灯。

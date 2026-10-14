@@ -26,6 +26,16 @@ import type { ConnectionStatus } from "./api/transport";
 import { disposeTerminal } from "./components/terminal/TerminalPanel";
 import { getRecentCwds } from "./lib/recent";
 import { emptySlice, pickSlice, reduceEvent, type SessionSlice, waitingCount } from "./session-slice";
+import {
+	applyTheme,
+	resolveTheme,
+	storedTheme,
+	storeTheme,
+	syncDesktopTheme,
+	watchSystemTheme,
+	type ResolvedTheme,
+	type ThemeMode,
+} from "./theme";
 
 export type { ExtWidget, PendingApproval, ToolRun } from "./session-slice";
 export { waitingCount } from "./session-slice";
@@ -38,7 +48,7 @@ export interface Notice {
 
 export type View = "welcome" | "chat" | "review" | "settings";
 export type RightPanel = "files" | "session" | "tree" | "browser";
-export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "raw";
+export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
 /** 底部面板的页签 */
@@ -58,6 +68,10 @@ interface AppState extends SessionSlice {
 	connection: ConnectionStatus;
 	view: View;
 	settingsTab: SettingsTab;
+	/** 界面主题：深色 / 浅色 / 跟随系统 */
+	theme: ThemeMode;
+	/** 实际生效的深浅色（theme = system 时由系统决定） */
+	resolvedTheme: ResolvedTheme;
 	/** 配置变更计数，设置页据此刷新 */
 	configVersion: number;
 	/** 网页版文件夹选择器；mode = add 时导入为项目 */
@@ -100,6 +114,8 @@ interface AppState extends SessionSlice {
 
 	init(): Promise<void>;
 	setView(view: View, tab?: SettingsTab): void;
+	/** 切换界面主题（深色 / 浅色 / 跟随系统），立即生效并持久化 */
+	setTheme(mode: ThemeMode): void;
 
 	// 项目
 	importProjects(): Promise<void>;
@@ -352,6 +368,12 @@ export const useApp = create<AppState>()((set, get) => {
 		}
 	}
 
+	// 系统深浅色变化时，仅在「跟随系统」模式下重新应用
+	watchSystemTheme(() => {
+		if (get().theme !== "system") return;
+		set({ resolvedTheme: applyTheme("system") });
+	});
+
 	return {
 		...emptySlice(),
 		info: null,
@@ -359,6 +381,8 @@ export const useApp = create<AppState>()((set, get) => {
 		// 启动时先进入欢迎页（环境自检 + 发现项目）；已导入过项目时 init() 会直接进入会话
 		view: "welcome",
 		settingsTab: "providers",
+		theme: storedTheme(),
+		resolvedTheme: resolveTheme(storedTheme()),
 		configVersion: 0,
 		folderPicker: { open: false },
 		discoverOpen: false,
@@ -424,6 +448,12 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setView(view, tab) {
 			set(tab ? { view, settingsTab: tab } : { view });
+		},
+
+		setTheme(mode) {
+			storeTheme(mode);
+			set({ theme: mode, resolvedTheme: applyTheme(mode) });
+			syncDesktopTheme(mode);
 		},
 
 		// ----- 项目 -----

@@ -35,6 +35,11 @@ const browser: BrowserBridge = {
 	},
 };
 
+const theme = {
+	set: (mode: "dark" | "light" | "system") => ipcRenderer.invoke(ELECTRON_CHANNELS.theme, mode) as Promise<void>,
+};
+
 contextBridge.exposeInMainWorld("floworkBrowser", browser);
 contextBridge.exposeInMainWorld("floworkTransport", transport);
 contextBridge.exposeInMainWorld("floworkWindow", windowControls);
+contextBridge.exposeInMainWorld("floworkTheme", theme);

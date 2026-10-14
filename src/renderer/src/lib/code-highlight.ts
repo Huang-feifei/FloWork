@@ -26,6 +26,27 @@ export const highlightStyle = HighlightStyle.define([
 	{ tag: [t.invalid], color: "#f85149" },
 ]);
 
+/** 浅色主题配色：同一组语义分组，换成浅底可读的深色（参考 GitHub Light） */
+export const lightHighlightStyle = HighlightStyle.define([
+	{ tag: [t.keyword, t.controlKeyword, t.moduleKeyword, t.operatorKeyword, t.definitionKeyword], color: "#cf222e" },
+	{ tag: [t.string, t.special(t.string), t.regexp], color: "#0a3069" },
+	{ tag: [t.number, t.bool, t.null, t.atom], color: "#0550ae" },
+	{ tag: [t.comment, t.lineComment, t.blockComment, t.docComment], color: "#6e7781", fontStyle: "italic" },
+	{ tag: [t.function(t.variableName), t.function(t.propertyName)], color: "#8250df" },
+	{ tag: [t.typeName, t.className, t.namespace], color: "#953800" },
+	{ tag: [t.definition(t.variableName), t.definition(t.propertyName)], color: "#24292f" },
+	{ tag: [t.propertyName, t.attributeName], color: "#0550ae" },
+	{ tag: [t.tagName, t.angleBracket], color: "#116329" },
+	{ tag: [t.heading], color: "#d9701f", fontWeight: "700" },
+	{ tag: [t.emphasis], fontStyle: "italic" },
+	{ tag: [t.strong], fontWeight: "700" },
+	{ tag: [t.link, t.url], color: "#0969da", textDecoration: "underline" },
+	{ tag: [t.meta, t.processingInstruction], color: "#57606a" },
+	{ tag: [t.inserted], color: "#116329", backgroundColor: "rgb(46 160 67 / 0.13)" },
+	{ tag: [t.deleted], color: "#a40e26", backgroundColor: "rgb(207 34 46 / 0.11)" },
+	{ tag: [t.invalid], color: "#cf222e" },
+]);
+
 type Loader = () => Promise<LanguageSupport | StreamLanguage<unknown>>;
 
 const legacy = (load: () => Promise<StreamParser<unknown>>): Loader => async () => StreamLanguage.define(await load());

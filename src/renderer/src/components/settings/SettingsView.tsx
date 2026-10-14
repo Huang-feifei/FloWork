@@ -4,6 +4,7 @@
  */
 import { type SettingsTab, useApp } from "../../store";
 import { Icon, type IconName } from "../Icon";
+import { AppearanceTab } from "./AppearanceTab";
 import { CustomProvidersTab } from "./CustomProvidersTab";
 import { PreferencesTab } from "./PreferencesTab";
 import { ProvidersTab } from "./ProvidersTab";
@@ -15,6 +16,7 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: IconName; desc: string
 	{ id: "custom", label: "自定义端点", icon: "git-fork", desc: "OpenAI / Anthropic 兼容接口、本地模型、中转服务，写入 models.json。" },
 	{ id: "resources", label: "技能与扩展", icon: "files", desc: "当前项目可用的技能、扩展、提示模板与 pi 包；导入、启用 / 禁用、删除。" },
 	{ id: "preferences", label: "偏好设置", icon: "settings", desc: "默认模型、工具、Shell、代理等 pi 设置，写入 settings.json。" },
+	{ id: "appearance", label: "外观", icon: "palette", desc: "界面主题：深色 / 浅色 / 跟随系统。只影响外观，保存在本机。" },
 	{ id: "raw", label: "配置文件", icon: "file-json", desc: "直接编辑 settings.json 与 models.json。" },
 ];
 
@@ -89,6 +91,7 @@ export function SettingsView() {
 							{tab === "custom" && <CustomProvidersTab />}
 							{tab === "resources" && <ResourcesTab />}
 							{tab === "preferences" && <PreferencesTab />}
+							{tab === "appearance" && <AppearanceTab />}
 							{tab === "raw" && <RawConfigTab />}
 						</div>
 					</div>

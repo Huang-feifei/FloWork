@@ -640,4 +640,6 @@ export const ELECTRON_CHANNELS = {
 	push: "flowork:push",
 	/** 自绘标题栏的窗口按钮（最小化 / 最大化 / 关闭） */
 	windowControl: "flowork:window-control",
+	/** 界面主题（深色 / 浅色 / 跟随系统）：同步 nativeTheme 与窗口背景色 */
+	theme: "flowork:theme",
 } as const;

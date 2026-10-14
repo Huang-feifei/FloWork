@@ -1,8 +1,12 @@
-import { type BrowserWindow, ipcMain, type IpcMainInvokeEvent } from "electron";
+import { type BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeTheme } from "electron";
 import { BROWSER_CHANNELS } from "@shared/browser";
 import { type BackendMethod, ELECTRON_CHANNELS } from "@shared/protocol";
 import type { Backend } from "../core/backend";
 import type { BrowserManager } from "./browser";
+
+/** 窗口背景色：只在页面渲染前可见，需与 styles.css 的 --color-window 一致 */
+const DARK_WINDOW_BG = "#0d1222";
+const LIGHT_WINDOW_BG = "#eef1f6";
 
 /** 桌面版传输层：渲染进程的 request 走 ipcMain.handle，推送走 webContents.send */
 export function registerIpc(
@@ -38,6 +42,14 @@ export function registerIpc(
 		if (action === "minimize") win.minimize();
 		else if (action === "toggleMaximize") (win.isMaximized() ? win.unmaximize() : win.maximize());
 		else if (action === "close") win.close();
+	});
+
+	// 界面主题：同步 nativeTheme（影响原生控件与系统深浅色判断）并更新窗口背景色
+	ipcMain.handle(ELECTRON_CHANNELS.theme, (event, mode: unknown) => {
+		if (mode !== "dark" && mode !== "light" && mode !== "system") throw new Error("无效主题。");
+		const win = requireAppFrame(event);
+		nativeTheme.themeSource = mode;
+		win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? DARK_WINDOW_BG : LIGHT_WINDOW_BG);
 	});
 
 	backend.onPush((push) => {
