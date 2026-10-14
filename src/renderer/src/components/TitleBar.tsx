@@ -94,6 +94,7 @@ export function TitleBar() {
 				return [
 					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", onClick: () => s.toggleSidebar() },
 					{ label: rightPanel ? "收起右侧面板" : "显示右侧面板", onClick: () => s.setRightPanel(rightPanel ? null : "session") },
+					{ label: "打开内置浏览器", onClick: () => { s.setView("chat"); s.setRightPanel("browser"); } },
 					{ label: terminalPanel ? "收起终端" : "显示终端", hint: "Ctrl+`", onClick: () => s.setTerminalPanel(!terminalPanel) },
 				];
 			case "会话":
@@ -219,6 +220,12 @@ export function TitleBar() {
 					label="终端 Ctrl+`"
 					on={terminalPanel}
 					onClick={() => useApp.getState().setTerminalPanel(!terminalPanel)}
+				/>
+				<LayoutToggle
+					icon="globe"
+					label="打开内置浏览器"
+					on={rightPanel === "browser"}
+					onClick={() => { useApp.getState().setView("chat"); useApp.getState().setRightPanel("browser"); }}
 				/>
 				<LayoutToggle
 					icon="panel-right"

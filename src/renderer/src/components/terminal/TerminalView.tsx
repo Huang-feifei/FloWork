@@ -30,7 +30,7 @@ function SessionHeader() {
 		return first?.role === "user" ? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 80) : "";
 	});
 	return (
-		<div className="flex h-11 shrink-0 items-center gap-3 border-b border-border px-5">
+		<div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-5 py-1">
 			<h1 className="min-w-0 truncate text-[13.5px] font-semibold">{state?.sessionName || firstPrompt || "新会话"}</h1>
 			{waiting > 0 ? (
 				<span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-medium text-warn">
@@ -322,7 +322,7 @@ export function TerminalView() {
 		if (!isRunning) return;
 		const onKey = (e: KeyboardEvent) => {
 			const target = e.target instanceof Element ? e.target : null;
-			if (e.key === "Escape" && !(target instanceof HTMLTextAreaElement) && !target?.closest(".cm-editor, input")) void abort();
+			if (e.key === "Escape" && !e.defaultPrevented && !(target instanceof HTMLTextAreaElement) && !target?.closest(".cm-editor, input, [data-browser-panel]")) void abort();
 		};
 		window.addEventListener("keydown", onKey);
 		return () => window.removeEventListener("keydown", onKey);

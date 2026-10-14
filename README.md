@@ -40,6 +40,7 @@ pi worker ── src/worker（网页版用 child_process，桌面版用 utilityP
 - 内部协议的命令和事件命名沿用 pi RPC，并补充了 RPC 没有的能力（`navigate_tree`、`list_sessions`、交互式登录、配置读写等）。
 - **适配层**：pi 的类型只在 `src/worker/adapter.ts` 中解读，界面只依赖 `src/shared/protocol.ts`。升级 pi 时优先检查适配层。pi 版本锁定在 `1.1.0`。
 - **网页版安全边界**：服务只监听 127.0.0.1，WebSocket 校验 Origin（只接受本服务和开发模式的 Vite 地址），防止其他网站经浏览器连接。本机其他进程仍可连接，因此不要把端口转发到外网。
+- **内置浏览器（仅桌面版）**：网页由主进程的 Electron `WebContentsView` 承载，渲染进程只通过 IPC 下发标签命令与视口矩形，网页内容不进入应用渲染进程；网页运行在独立隔离 session 中，权限、下载、非 HTTP(S) 导航与应用自身地址一律拒绝（详见「发布版的安全边界」）。Web 版无法可靠嵌入任意网站，只提供「在外部浏览器打开」。
 - **运行时**：pi 要求 Node ≥ 22.19（项目 `.nvmrc` 为 24.21.0）。网页版后端按以下顺序选择 Node：当前 Node（满足要求时）→ 环境变量 `FLOWORK_NODE` → nvm 已安装的最高满足版本（读取 `NVM_SYMLINK` / `NVM_HOME` / `NVM_DIR`）→ Electron 自带的 Node 24（`ELECTRON_RUN_AS_NODE=1`）。启动时会打印实际使用的运行时。构建工具（Vite、esbuild、tsc）对 Node 版本没有这一要求。
 
 ## 目录
@@ -47,6 +48,7 @@ pi worker ── src/worker（网页版用 child_process，桌面版用 utilityP
 ```text
 src/
   shared/protocol.ts        内部协议：数据形状、worker 命令与事件、Transport 信封
+  shared/browser.ts         内置浏览器（桌面版）：标签状态、命令、IPC 通道与地址规范化
   core/                     后端核心（无 Electron 依赖）
     backend.ts              请求分发、推送、配置变更后通知各会话刷新
     worker-manager.ts       worker 启动、请求关联、退出处理（启动方式由外壳注入）
@@ -59,7 +61,7 @@ src/
     config-file.ts          settings.json / models.json 的串行写入与原子替换
     adapter.ts              pi → FloWork 数据适配
   server/                   网页版外壳（HTTP 静态页面 + WebSocket）
-  main/ + preload/          桌面版外壳（Electron）
+  main/ + preload/          桌面版外壳（Electron）；main/browser.ts 承载内置浏览器视图
   renderer/                 界面（两种外壳共用）
     src/api/                Transport 选择与类型化 API
     src/components/settings 设置页：模型供应商 / 自定义端点 / 偏好设置 / 配置文件
@@ -113,6 +115,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 
 - **CSP**：`renderer.config.ts` 中的插件只在生产构建往 `index.html` 注入 `Content-Security-Policy`（桌面版与网页版共用同一份策略）；开发模式不注入，否则 Vite HMR 的内联脚本与 websocket 会被挡掉。具体策略见该文件里的注释。
 - **外链白名单**：主进程只把 `http:` / `https:` 链接交给系统浏览器（`setWindowOpenHandler`），其它协议一律拒绝并打日志；页面内导航（`will-navigate`）只允许留在应用自身，其余同样交给白名单处理。
+- **内置浏览器**：网页运行在独立隔离 session（独立 partition、禁缓存），权限请求、设备权限、屏幕共享与下载一律拒绝；只允许 HTTP(S)，`will-frame-navigate` / `will-redirect` 拦截非白名单导航与重定向；禁止访问 FloWork 应用自身地址与控制端口，避免页面回连本地控制服务；弹窗需用户手势（1 秒内点击 / 回车）才开新标签，否则拒绝。
 - **凭据**：auth.json 目前仍是明文（见「pi 配置目录」），改用系统加密存储尚未实现。
 
 ## 已实现
@@ -126,6 +129,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - 会话管理：历史会话可重命名（留空恢复默认标题）与删除；当前打开和后台项目的会话同样支持。删除前确认，只删除会话记录，不删除项目文件、不级联删除分叉会话；运行中或等待交互的会话拒绝删除，空闲的打开会话先关闭 pi 进程再删除，避免记录被重新写回
 - 文件：项目文件树（按 .gitignore 置灰）、会话文件（本会话读取/修改的文件与增删行数）、全项目模糊搜索与 Ctrl+P 快速打开
 - 代码查看与编辑：CodeMirror 语法高亮、查找；编辑后 Ctrl+S 保存，文件已被 AI 或外部修改时拒绝保存以免覆盖；对话中的代码块同样高亮
+- 内置浏览器（仅桌面版）：右侧面板的「浏览器」标签内嵌网页，与聊天并排。多标签（最多 32 个）、前进 / 后退 / 刷新 / 停止、地址栏（Ctrl+L 聚焦），面板宽度可拖拽调整并记忆。网页由主进程的 `WebContentsView` 承载，跟随面板位置、窗口缩放与遮挡自动重排；标签属于窗口，不随聊天会话切换而关闭。网页内 Ctrl+L / Ctrl+K 会把焦点交回应用。Web 版无法可靠嵌入任意网站，只提供「在外部浏览器打开」
 - 技能与扩展：按项目列出技能、扩展、提示模板与 pi 包（含已禁用的）；导入本地文件夹（全局或仅当前项目）、启用 / 禁用、删除导入的副本、安装 npm / git pi 包；变更后各会话自动重新加载。输入框输入 / 时补全 /skill:名称、提示模板与扩展命令
 - 第三方扩展界面：扩展的 select / confirm / input / editor 对话框以终端提示的形式出现在会话末尾（键盘操作，带超时倒计时，后台项目等待时侧边栏与状态栏计入“待确认”）；setStatus 显示在状态栏，setWidget 显示在输入框上下方，notify 显示为通知，setEditorText 填入输入框。依赖终端界面的能力（自定义组件、页眉页脚、主题切换）不支持
 - 项目信任：项目含 .pi/ 配置或项目内 .agents/skills 时，未经确认不加载（pi SDK 默认会直接信任）；决定保存在 trust.json
@@ -153,4 +157,4 @@ node scripts/test-ext-ui.mjs      # 第三方扩展对话框与界面接口
 
 ## 路线图
 
-- **M3**：内置终端；转为桌面版发布。electron-builder 打包与收紧 CSP 已完成（见「桌面版发布」），凭据改用系统加密存储待做。
+- **M3**：内置终端与内置浏览器；转为桌面版发布。electron-builder 打包与收紧 CSP 已完成（见「桌面版发布」），凭据改用系统加密存储待做。

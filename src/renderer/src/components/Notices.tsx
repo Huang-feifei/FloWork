@@ -1,4 +1,5 @@
 import { useApp } from "../store";
+import { useBrowserOcclusion } from "../lib/browser";
 
 const LEVEL = {
 	info: { dot: "bg-info", text: "text-fg" },
@@ -8,6 +9,7 @@ const LEVEL = {
 
 export function Notices() {
 	const notices = useApp((s) => s.notices);
+	useBrowserOcclusion(notices.length > 0);
 	const dismiss = useApp((s) => s.dismissNotice);
 	if (notices.length === 0) return null;
 	return (

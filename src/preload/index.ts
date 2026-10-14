@@ -4,6 +4,7 @@
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { type BackendPush, ELECTRON_CHANNELS, type Transport } from "@shared/protocol";
+import { BROWSER_CHANNELS, type BrowserBridge, type BrowserState } from "@shared/browser";
 
 const transport: Transport = {
 	request: (method, params) => ipcRenderer.invoke(ELECTRON_CHANNELS.request, method, params),
@@ -20,5 +21,20 @@ const windowControls = {
 	close: () => ipcRenderer.invoke(ELECTRON_CHANNELS.windowControl, "close") as Promise<void>,
 };
 
+const browser: BrowserBridge = {
+	command: (command) => ipcRenderer.invoke(BROWSER_CHANNELS.command, command),
+	onState: (listener) => {
+		const handler = (_event: IpcRendererEvent, state: BrowserState) => listener(state);
+		ipcRenderer.on(BROWSER_CHANNELS.state, handler);
+		return () => ipcRenderer.off(BROWSER_CHANNELS.state, handler);
+	},
+	onFocusAddress: (listener) => {
+		const handler = () => listener();
+		ipcRenderer.on(BROWSER_CHANNELS.focusAddress, handler);
+		return () => ipcRenderer.off(BROWSER_CHANNELS.focusAddress, handler);
+	},
+};
+
+contextBridge.exposeInMainWorld("floworkBrowser", browser);
 contextBridge.exposeInMainWorld("floworkTransport", transport);
 contextBridge.exposeInMainWorld("floworkWindow", windowControls);

@@ -1,5 +1,6 @@
 /** 少量通用界面元素，保持各页面风格一致 */
 import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
+import { useBrowserOcclusion } from "../lib/browser";
 
 type Variant = "primary" | "default" | "danger" | "ghost";
 
@@ -87,6 +88,7 @@ export function Modal({
 	footer?: ReactNode;
 	width?: string;
 }) {
+	useBrowserOcclusion();
 	return (
 		<div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
 			<div className={`fw-float flex max-h-full ${width} max-w-full flex-col rounded-xl border border-border-strong`}>

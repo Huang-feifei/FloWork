@@ -1,11 +1,13 @@
 /** Ctrl+P 快速打开文件：全项目模糊搜索，↑↓ 选择，Enter 打开预览 */
 import { useEffect, useRef, useState } from "react";
 import { useFileSearch } from "../../lib/useFileSearch";
+import { useBrowserOcclusion } from "../../lib/browser";
 import { useApp } from "../../store";
 import { SearchResultLabel } from "./SearchResultRow";
 
 export function QuickOpen() {
 	const open = useApp((s) => s.quickOpen);
+	useBrowserOcclusion(open);
 	const setOpen = useApp((s) => s.setQuickOpen);
 	const openPreview = useApp((s) => s.openPreview);
 	const insertIntoPrompt = useApp((s) => s.insertIntoPrompt);

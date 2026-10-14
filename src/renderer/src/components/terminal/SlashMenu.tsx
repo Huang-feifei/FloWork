@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { SlashCommand } from "@shared/protocol";
 import { api } from "../../api/client";
 import { useApp } from "../../store";
+import { useBrowserOcclusion } from "../../lib/browser";
 
 const SOURCE_LABEL: Record<SlashCommand["source"], string> = { skill: "技能", prompt: "模板", extension: "扩展" };
 
@@ -67,6 +68,7 @@ export function useSlashMenu(text: string): SlashMenuState {
 }
 
 export function SlashMenu({ menu, onPick }: { menu: SlashMenuState; onPick: (c: SlashCommand) => void }) {
+	useBrowserOcclusion(menu.open);
 	if (!menu.open) return null;
 	return (
 		<div className="fw-float absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-lg border border-border-strong">

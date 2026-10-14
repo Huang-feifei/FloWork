@@ -1,5 +1,6 @@
 /** 轻量弹出菜单：点击外部或按 Esc 关闭 */
 import { type ReactNode, useEffect, useRef } from "react";
+import { useBrowserOcclusion } from "../../lib/browser";
 
 export interface MenuItem {
 	label: ReactNode;
@@ -22,6 +23,7 @@ export function Menu({
 	onClose: () => void;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
+	useBrowserOcclusion();
 
 	useEffect(() => {
 		const onDown = (e: MouseEvent) => {

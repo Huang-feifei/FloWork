@@ -37,7 +37,7 @@ export interface Notice {
 }
 
 export type View = "welcome" | "chat" | "review" | "settings";
-export type RightPanel = "files" | "session" | "tree";
+export type RightPanel = "files" | "session" | "tree" | "browser";
 export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "raw";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
@@ -82,7 +82,7 @@ interface AppState extends SessionSlice {
 	approvalMode: ApprovalMode;
 	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息）；seq 变化时输入框读取 */
 	draft: { text: string; seq: number; append?: boolean };
-	/** 右侧面板：项目文件 / 会话文件 / 会话树；null 表示收起 */
+	/** 右侧面板：项目文件 / 会话文件 / 会话树 / 浏览器；null 表示收起 */
 	rightPanel: RightPanel | null;
 	/** 左侧项目栏是否展开（Ctrl+B） */
 	sidebarOpen: boolean;
@@ -157,7 +157,7 @@ const EXPANDED_KEY = "flowork.expandedProjects";
 
 function storedPanel(): RightPanel | null {
 	const v = localStorage.getItem(PANEL_KEY);
-	return v === "files" || v === "session" || v === "tree" ? v : null;
+	return v === "files" || v === "session" || v === "tree" || v === "browser" ? v : null;
 }
 
 function storedApprovalMode(): ApprovalMode {

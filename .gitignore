@@ -11,3 +11,6 @@ Thumbs.db
 
 # 设计工具的工程文件，不进版本库
 flowork-desktop.vetd/
+
+# Playwright CLI 的临时输出（页面快照、控制台日志）
+.playwright-cli/

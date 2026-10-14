@@ -16,6 +16,7 @@ import { BottomPanel } from "./components/terminal/BottomPanel";
 import { TerminalView } from "./components/terminal/TerminalView";
 import { TitleBar } from "./components/TitleBar";
 import { WelcomeView } from "./components/welcome/WelcomeView";
+import { RightPanel } from "./components/panels/RightPanel";
 
 function EmptyState() {
 	const { importProjects, setView, setDiscoverOpen } = useApp.getState();
@@ -49,6 +50,7 @@ export function App() {
 	const view = useApp((s) => s.view);
 	const activeProjectId = useApp((s) => s.activeProjectId);
 	const sidebarOpen = useApp((s) => s.sidebarOpen);
+	const rightPanel = useApp((s) => s.rightPanel);
 
 	useEffect(() => {
 		void useApp.getState().init();
@@ -82,7 +84,10 @@ export function App() {
 									) : activeProjectId ? (
 										<TerminalView />
 									) : (
-										<EmptyState />
+										<div className="flex min-h-0 flex-1">
+											<div className="flex min-w-0 flex-1"><EmptyState /></div>
+											{rightPanel === "browser" && <RightPanel />}
+										</div>
 									)}
 									<Notices />
 								</main>

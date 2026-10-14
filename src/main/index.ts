@@ -2,12 +2,14 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, shell } from "electron";
 import { Backend } from "../core/backend";
+import { BrowserManager } from "./browser";
 import { registerIpc } from "./ipc";
 import { runSmokeTest } from "./smoke";
 import { spawnUtilityWorker } from "./spawn";
 
 const isSmoke = process.argv.includes("--smoke");
 let mainWindow: BrowserWindow | undefined;
+const browsers = new WeakMap<BrowserWindow, BrowserManager>();
 
 /** 应用自身地址：开发模式是 Vite dev server，生产是打包进 asar 的 index.html */
 const devUrl = process.env.ELECTRON_RENDERER_URL;
@@ -95,17 +97,19 @@ function createWindow(show = true): BrowserWindow {
 		openExternalIfAllowed(url);
 	});
 
+	browsers.set(win, new BrowserManager(win, appUrl));
 	if (devUrl) void win.loadURL(devUrl);
 	else void win.loadFile(join(import.meta.dirname, "../renderer/index.html"));
 
 	win.on("closed", () => {
+		browsers.delete(win);
 		if (mainWindow === win) mainWindow = undefined;
 	});
 	return win;
 }
 
 app.whenReady().then(async () => {
-	registerIpc(backend, () => mainWindow);
+	registerIpc(backend, () => mainWindow, (win) => browsers.get(win), isAppUrl);
 	mainWindow = createWindow(!isSmoke);
 
 	if (isSmoke) {

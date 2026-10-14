@@ -6,6 +6,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useFileSearch } from "../../lib/useFileSearch";
+import { useBrowserOcclusion } from "../../lib/browser";
 import { relativeTime } from "../../lib/format";
 import { projectName, useApp } from "../../store";
 import { Icon, type IconName } from "../Icon";
@@ -27,6 +28,7 @@ interface Group {
 
 export function CommandPalette() {
 	const open = useApp((s) => s.palette.open);
+	useBrowserOcclusion(open);
 	const mode = useApp((s) => s.palette.mode);
 	const cwd = useApp((s) => s.cwd);
 	const projects = useApp((s) => s.projects.projects);
@@ -73,6 +75,7 @@ export function CommandPalette() {
 				{ icon: "square-terminal", label: "切换终端面板", key: "Ctrl+`", when: true, run: () => s.setTerminalPanel(!s.terminalPanel) },
 				{ icon: "settings", label: "打开设置", when: true, run: () => s.setView("settings") },
 				{ icon: "messages", label: "回到会话", when: true, run: () => s.setView("chat") },
+				{ icon: "globe", label: "打开内置浏览器", when: true, run: () => { s.setView("chat"); s.setRightPanel("browser"); } },
 				{ icon: "files", label: "显示项目文件", when: true, run: () => s.setRightPanel("files") },
 				{ icon: "list-tree", label: "显示会话树", when: true, run: () => s.setRightPanel("tree") },
 			] as Array<Omit<Item, "run"> & { when: boolean; run: () => void }>
