@@ -1,156 +1,13 @@
 import assert from "node:assert/strict";
 import childProcess from "node:child_process";
-import { syncBuiltinESMExports } from "node:module";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { setTimeout as sleep } from "node:timers/promises";
-import WebSocket from "ws";
+import { fileURLToPath } from "node:url";
 import { backendRuntime } from "./web-build-options.mjs";
+import { connect, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 
 const script = fileURLToPath(import.meta.url);
 const root = resolve(dirname(script), "..");
-const timeoutMs = 45_000;
-
-function installSignalRelay(role) {
-	delete process.env.FLOWORK_SESSIONS_TEST_RELAY;
-	if (role === "server") {
-		const preload = process.execArgv.indexOf("--import");
-		if (preload !== -1 && process.execArgv[preload + 1] === pathToFileURL(script).href) process.execArgv.splice(preload, 2);
-		process.on("message", (message) => {
-			if (message?.floworkSessionsShutdown) process.emit("SIGTERM");
-		});
-		return;
-	}
-	const originalSpawn = childProcess.spawn;
-	let server;
-	childProcess.spawn = (command, args, options) => {
-		server = originalSpawn(command, ["--import", pathToFileURL(script).href, ...args], {
-			...options,
-			stdio: ["inherit", "inherit", "inherit", "ipc"],
-			env: { ...options.env, FLOWORK_SESSIONS_TEST_RELAY: "server" },
-		});
-		return server;
-	};
-	syncBuiltinESMExports();
-	process.on("message", (message) => {
-		if (message?.floworkSessionsShutdown && server?.connected) server.send(message);
-	});
-}
-
-function deadline(promise, label, ms = timeoutMs) {
-	let timer;
-	return Promise.race([
-		promise,
-		new Promise((_, reject) => {
-			timer = setTimeout(() => reject(new Error(`${label} 超时（${ms}ms）`)), ms);
-		}),
-	]).finally(() => clearTimeout(timer));
-}
-
-async function freePort() {
-	const server = createServer();
-	await new Promise((resolve, reject) => {
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", resolve);
-	});
-	const port = server.address().port;
-	await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-	return port;
-}
-
-class Client {
-	constructor(socket) {
-		this.socket = socket;
-		this.sequence = 0;
-		this.pending = new Map();
-		this.pushes = [];
-		this.listeners = new Set();
-		socket.on("message", (data) => {
-			try {
-				const frame = JSON.parse(String(data));
-				if (frame.push) {
-					this.pushes.push(frame.push);
-					for (const listener of [...this.listeners]) listener();
-				} else {
-					const pending = this.pending.get(frame.id);
-					if (!pending) return;
-					this.pending.delete(frame.id);
-					frame.ok ? pending.resolve(frame.result) : pending.reject(new Error(frame.error));
-				}
-			} catch (error) {
-				this.fail(error);
-			}
-		});
-		socket.on("error", (error) => this.fail(error));
-		socket.on("close", () => this.fail(new Error("WebSocket 已关闭")));
-	}
-
-	fail(error) {
-		for (const pending of this.pending.values()) pending.reject(error);
-		this.pending.clear();
-	}
-
-	call(method, params) {
-		const id = String(++this.sequence);
-		const result = new Promise((resolve, reject) => {
-			if (this.socket.readyState !== WebSocket.OPEN) return reject(new Error("WebSocket 未连接"));
-			this.pending.set(id, { resolve, reject });
-			this.socket.send(JSON.stringify({ id, method, params }), (error) => {
-				if (error) {
-					this.pending.delete(id);
-					reject(error);
-				}
-			});
-		});
-		return deadline(result, method).finally(() => this.pending.delete(id));
-	}
-
-	send(handleId, command) {
-		return this.call("session.send", { handleId, command });
-	}
-
-	waitPush(predicate, from = 0, label = "推送") {
-		let listener;
-		const result = new Promise((resolve) => {
-			listener = () => {
-				const found = this.pushes.slice(from).find(predicate);
-				if (found) resolve(found);
-			};
-			this.listeners.add(listener);
-			listener();
-		});
-		return deadline(result, label).finally(() => this.listeners.delete(listener));
-	}
-
-	async close() {
-		if (this.socket.readyState === WebSocket.CLOSED) return;
-		const closed = new Promise((resolve) => this.socket.once("close", resolve));
-		this.socket.close();
-		try {
-			await deadline(closed, "WebSocket 关闭", 3000);
-		} catch {
-			this.socket.terminate();
-			await deadline(closed, "WebSocket terminate", 3000);
-		}
-	}
-}
-
-async function connect(url) {
-	const socket = new WebSocket(url.replace(/^http/, "ws") + "ws", { origin: url.slice(0, -1) });
-	const client = new Client(socket);
-	try {
-		await deadline(new Promise((resolve, reject) => {
-			socket.once("open", resolve);
-			socket.once("error", reject);
-		}), "WebSocket 连接", 2000);
-		return client;
-	} catch (error) {
-		socket.terminate();
-		throw error;
-	}
-}
 
 function createFixtures(SessionManager, base, agentDir) {
 	const project = join(base, "project");
@@ -408,100 +265,52 @@ async function main() {
 		});
 		return;
 	}
-	assert.ok(existsSync(join(root, "out/web/server/index.js")), "缺少构建产物；请先 npm run build:web");
-	mkdirSync(join(root, "out"), { recursive: true });
-	const base = mkdtempSync(join(root, "out", "test-sessions-"));
-	const agentDir = join(base, "agent");
-	const dataDir = join(base, "data");
-	Object.assign(process.env, {
-		FLOWORK_DATA_DIR: dataDir,
-		FLOWORK_PI_AGENT_DIR: agentDir,
-		PI_CODING_AGENT_DIR: agentDir,
-		PI_SKIP_VERSION_CHECK: "1",
-	});
-	let child;
-	let exited;
+	let backend;
 	let client;
 	let observer;
 	let shutdownRequested = false;
 	let signalResolve;
 	const interrupted = new Promise((resolve) => { signalResolve = resolve; });
+	const controller = new AbortController();
 	const stop = () => {
 		shutdownRequested = true;
+		controller.abort();
 		signalResolve();
 	};
 	for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, stop);
 	try {
+		backend = await startIsolatedBackend({ label: "sessions" });
 		const { SessionManager } = await import("@earendil-works/pi-coding-agent");
-		const data = createFixtures(SessionManager, base, agentDir);
-		const port = await freePort();
-		const url = `http://127.0.0.1:${port}/`;
-		child = childProcess.spawn(process.execPath, ["--import", pathToFileURL(script).href, join(root, "scripts/start-web.mjs")], {
-			cwd: root,
-			stdio: ["ignore", "pipe", "pipe", "ipc"],
-			env: { ...process.env, FLOWORK_PORT: String(port), FLOWORK_SESSIONS_TEST_RELAY: "wrapper" },
-		});
-		let output = "";
-		for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => {
-			output = (output + chunk.toString()).slice(-16000);
-			process.stdout.write(chunk);
-		});
-		let exitResult;
-		exited = new Promise((resolve, reject) => {
-			child.once("error", reject);
-			child.once("exit", (code, signal) => {
-				exitResult = { code, signal };
-				resolve(exitResult);
-			});
-		});
-		exited.catch(() => undefined);
-		const start = Date.now();
-		while (!client) {
-			if (exitResult) throw new Error(`隔离 server 提前退出：${JSON.stringify(exitResult)}\n${output}`);
+		const data = createFixtures(SessionManager, backend.root, backend.agentDir);
+		let url;
+		try {
+			url = await backend.waitReady({ signal: controller.signal });
+		} catch (error) {
 			if (shutdownRequested) return;
-			try { client = await connect(url); } catch (error) {
-				if (Date.now() - start > timeoutMs) throw new Error(`隔离 server 启动失败：${error.message}\n${output}`);
-				await sleep(150);
-			}
+			throw error;
 		}
+		client = await connect(url);
 		observer = await connect(url);
 		if (args.includes("--serve")) {
 			await client.call("projects.add", { paths: [data.project, data.otherProject] });
-			console.log(`\nSESSION UI URL: ${url}\nSESSION FIXTURE ROOT: ${base}\nPROJECT: ${data.project}\nSIGINT/SIGTERM 后关闭隔离 server，再清理 fixtures。`);
+			console.log(`\nSESSION UI URL: ${url}\nSESSION FIXTURE ROOT: ${backend.root}\nPROJECT: ${data.project}\nSIGINT/SIGTERM 后关闭隔离 server，再清理 fixtures。`);
 			await Promise.race([
 				interrupted,
-				exited.then((result) => { throw new Error(`server 意外退出：${JSON.stringify(result)}`); }),
+				backend.exited.then((result) => { throw new Error(`server 意外退出：${JSON.stringify(result)}`); }),
 			]);
 		} else {
 			await runChecks(client, observer, SessionManager, data);
 			console.log("SESSION REGRESSION OK（隔离真实 WebSocket；未调用模型）");
 		}
 	} finally {
+		for (const signal of ["SIGINT", "SIGTERM"]) process.off(signal, stop);
 		await observer?.close();
 		await client?.close();
-		let confirmed = !child;
-		try {
-			if (child && child.exitCode === null && child.signalCode === null && child.connected) {
-				child.send({ floworkSessionsShutdown: true });
-			}
-			if (exited) {
-				const result = await deadline(exited, "server 与 start-web 子进程退出", 20_000);
-				confirmed = true;
-				assert.equal(result.code, 0, `隔离 server 退出异常：${JSON.stringify(result)}`);
-			}
-		} finally {
-			for (const signal of ["SIGINT", "SIGTERM"]) process.off(signal, stop);
-			if (confirmed) {
-				rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-				console.log(`CLEANED ${base}`);
-			} else console.error(`未确认子进程退出，保留隔离目录避免清理活动文件：${base}`);
-		}
+		await backend?.stop();
 	}
 }
 
-const relay = process.env.FLOWORK_SESSIONS_TEST_RELAY;
-if (relay) installSignalRelay(relay);
-else await main().catch((error) => {
+if (!installRelayFromEnv()) await main().catch((error) => {
 	console.error(`SESSION REGRESSION FAILED\n${error.stack ?? error}`);
 	process.exitCode = 1;
 });

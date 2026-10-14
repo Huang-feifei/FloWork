@@ -56,13 +56,14 @@ src/
     session-host.ts         承载 pi 会话
     service-host.ts         供应商、登录、测试连接、配置文件
     session-files.ts        历史会话的校验、重命名与删除
+    config-file.ts          settings.json / models.json 的串行写入与原子替换
     adapter.ts              pi → FloWork 数据适配
   server/                   网页版外壳（HTTP 静态页面 + WebSocket）
   main/ + preload/          桌面版外壳（Electron）
   renderer/                 界面（两种外壳共用）
     src/api/                Transport 选择与类型化 API
     src/components/settings 设置页：模型供应商 / 自定义端点 / 偏好设置 / 配置文件
-scripts/                    网页版构建、开发、启动脚本
+scripts/                    网页版构建、开发、启动脚本，以及自起隔离后端的回归脚本
 ```
 
 ## pi 配置目录
@@ -110,6 +111,9 @@ Electron 二进制在首次运行时下载；网络受限时可以设置镜像�
 - 第三方扩展界面：扩展的 select / confirm / input / editor 对话框以终端提示的形式出现在会话末尾（键盘操作，带超时倒计时，后台项目等待时侧边栏与状态栏计入“待确认”）；setStatus 显示在状态栏，setWidget 显示在输入框上下方，notify 显示为通知，setEditorText 填入输入框。依赖终端界面的能力（自定义组件、页眉页脚、主题切换）不支持
 - 项目信任：项目含 .pi/ 配置或项目内 .agents/skills 时，未经确认不加载（pi SDK 默认会直接信任）；决定保存在 trust.json
 - 设置：模型供应商（API Key / 订阅登录 / 测试连接）、自定义端点、偏好设置、配置文件编辑
+  - 模型供应商默认只显示「常用」的主流厂商，支持订阅登录的不在其中，其余可在「全部」查看；已配置的始终显示
+  - 自定义端点按模型逐个配置：显示名、上下文窗口、最大输出、思考、图片输入、价格，以及思考等级映射（`thinkingLevelMap`）等其余字段；留空的字段不写入 models.json
+  - 配置保存前校验磁盘文件是否被外部修改（mtime），不一致时提示重新加载或明确覆盖，避免静默覆盖别人的改动
 
 FloWork 对 pi 的扩展集中在 `src/worker/flowork-extension.ts`（以内联扩展方式注入，不修改 pi 本身）。
 
@@ -119,7 +123,13 @@ FloWork 对 pi 的扩展集中在 `src/worker/flowork-extension.ts`（以内联�
 node scripts/ws-call.mjs service.send '{"type":"get_shell_info"}'   # 向运行中的后端发一个请求
 node scripts/e2e-session.mjs <目录> <provider/model> allow|deny|deny-bash "<提示词>"   # 端到端会话测试（会真实调用模型）
 node scripts/shoot-ui.mjs <输出目录>                                  # 对 dev:web 页面截图（注入示例会话）
-node scripts/test-sessions.mjs                                       # 会话重命名与删除回归（先 npm run build:web；隔离数据目录，不调用模型）
+
+# 回归脚本：各自启动隔离后端（独立 FLOWORK_DATA_DIR / FLOWORK_PI_AGENT_DIR），
+# 不写真实配置目录、不调用模型，断言失败时返回非零退出码。需要先 npm run build:web。
+node scripts/test-sessions.mjs    # 会话重命名与删除
+node scripts/test-projects.mjs    # 项目注册表
+node scripts/test-resources.mjs   # 技能 / 扩展 / 提示模板与包管理
+node scripts/test-ext-ui.mjs      # 第三方扩展对话框与界面接口
 ```
 
 ## 路线图
