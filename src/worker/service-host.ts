@@ -4,8 +4,8 @@
  */
 import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
 import { getAgentDir, getShellConfig, ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
 	AuthFlowEvent,
@@ -23,6 +23,7 @@ import type {
 } from "@shared/protocol";
 import { displayUserText } from "@shared/skill-text";
 import { toModelInfo } from "./adapter";
+import { writeConfigFile } from "./config-file";
 import { importResource, installPackage, listResources, removePackage, removeResource, setResourceEnabled } from "./resources";
 import { deleteSession, renameSession, validateSession } from "./session-files";
 
@@ -87,7 +88,7 @@ export class ServiceHost {
 			case "get_config_file":
 				return this.readConfig(command.name);
 			case "save_config_file":
-				return this.saveConfig(command.name, command.text);
+				return this.saveConfig(command.name, command.text, command.expectedMtime);
 			case "fetch_remote_models":
 				return this.fetchRemoteModels(command.baseUrl, command.apiKey);
 			case "get_shell_info":
@@ -285,11 +286,12 @@ export class ServiceHost {
 
 	private async readConfig(name: ConfigFileName): Promise<ConfigFile> {
 		const path = this.configPath(name);
-		if (!existsSync(path)) return { name, path, exists: false, text: "" };
-		return { name, path, exists: true, text: await readFile(path, "utf8") };
+		if (!existsSync(path)) return { name, path, exists: false, mtime: 0, text: "" };
+		const [text, info] = await Promise.all([readFile(path, "utf8"), stat(path)]);
+		return { name, path, exists: true, mtime: info.mtimeMs, text };
 	}
 
-	private async saveConfig(name: ConfigFileName, text: string): Promise<ConfigFile> {
+	private async saveConfig(name: ConfigFileName, text: string, expectedMtime?: number): Promise<ConfigFile> {
 		let parsed: unknown;
 		try {
 			parsed = JSON.parse(text);
@@ -300,8 +302,8 @@ export class ServiceHost {
 			throw new Error(`${CONFIG_FILES[name]} 顶层必须是对象`);
 		}
 		const path = this.configPath(name);
-		await mkdir(dirname(path), { recursive: true });
-		await writeFile(path, text.endsWith("\n") ? text : `${text}\n`, "utf8");
+		// 与资源页的读改写共用同一条队列，mtime 校验也在临界区内，避免校验通过后又被别人改写
+		await writeConfigFile(path, text.endsWith("\n") ? text : `${text}\n`, { expectedMtime, label: CONFIG_FILES[name] });
 		// models.json 变化需要重建供应商；settings.json 由各会话在 refresh_config 时重新加载
 		const runtime = await this.getModelRuntime();
 		await runtime.refresh();

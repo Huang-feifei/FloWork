@@ -3,7 +3,7 @@ import { type ModelEntry, type ShellInfo, THINKING_LEVELS } from "@shared/protoc
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Button, Field, Input, Select, TextArea } from "../ui";
-import { parseObject, useConfigFile } from "./useConfigFile";
+import { isMtimeConflict, parseObject, useConfigFile } from "./useConfigFile";
 
 const BUILTIN_TOOLS = [
 	{ id: "read", desc: "读取文件" },
@@ -66,7 +66,7 @@ function ShellStatus({ shell, onUse }: { shell: ShellInfo; onUse: (path: string)
 }
 
 export function PreferencesTab() {
-	const { file, error, save } = useConfigFile("settings");
+	const { file, error, conflict, reload, save } = useConfigFile("settings");
 	const pushNotice = useApp((s) => s.pushNotice);
 	const configVersion = useApp((s) => s.configVersion);
 	const [draft, setDraft] = useState<Settings | null>(null);
@@ -127,13 +127,14 @@ export function PreferencesTab() {
 	const skills = Array.isArray(draft.skills) ? (draft.skills as string[]) : [];
 	const dirty = JSON.stringify(draft) !== JSON.stringify(base);
 
-	const onSave = async () => {
+	const onSave = async (force = false) => {
 		setSaving(true);
 		try {
-			await save(`${JSON.stringify(draft, null, 2)}\n`);
+			await save(`${JSON.stringify(draft, null, 2)}\n`, { force });
 			pushNotice("info", "设置已保存，已通知打开的会话重新加载");
 		} catch (e) {
-			pushNotice("error", errorText(e));
+			// 冲突交给下面的内联提示处理（draft 保留，让用户选保留哪一份）；其余错误沿用通知
+			if (!isMtimeConflict(e)) pushNotice("error", errorText(e));
 		} finally {
 			setSaving(false);
 		}
@@ -300,6 +301,19 @@ export function PreferencesTab() {
 				</Field>
 			</section>
 
+			{conflict && (
+				<div className="rounded border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">
+					<div>settings.json 在你打开之后被其他程序改过；直接保存会被拒绝，以免覆盖对方的改动。你改的内容还在这里。</div>
+					<div className="mt-1.5 flex flex-wrap gap-2">
+						<Button size="sm" disabled={saving} onClick={() => void reload()}>
+							重新加载磁盘版本（放弃我的修改）
+						</Button>
+						<Button size="sm" variant="primary" disabled={saving} onClick={() => void onSave(true)}>
+							用我的内容覆盖磁盘版本（丢弃对方的改动）
+						</Button>
+					</div>
+				</div>
+			)}
 			<div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-bg/95 py-3">
 				{dirty && <span className="text-xs text-warn">有未保存的修改</span>}
 				<Button disabled={!dirty} onClick={() => base && setDraft(structuredClone(base))}>

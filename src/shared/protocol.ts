@@ -217,7 +217,12 @@ export interface ConfigFile {
 	path: string;
 	exists: boolean;
 	text: string;
+	/** 文件最后修改时间（ms）；文件不存在时为 0。保存时回传，用于发现外部改动 */
+	mtime: number;
 }
+
+/** 保存配置文件时磁盘内容已被外部改动（mtime 不一致）的提示片段，worker 与界面共用同一文案 */
+export const CONFIG_MTIME_CONFLICT = "已被外部修改（磁盘 mtime 与打开时不一致）";
 
 export interface ShellInfo {
 	/** pi 的 bash 工具实际会使用的 shell；无法解析时为 null */
@@ -283,7 +288,7 @@ export type ServiceCommand =
 	| { type: "logout"; provider: string }
 	| { type: "test_model"; provider: string; modelId: string }
 	| { type: "get_config_file"; name: ConfigFileName }
-	| { type: "save_config_file"; name: ConfigFileName; text: string }
+	| { type: "save_config_file"; name: ConfigFileName; text: string; expectedMtime?: number }
 	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string }
 	| { type: "get_shell_info" }
 	| { type: "list_resources"; cwd: string }

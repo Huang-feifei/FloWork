@@ -8,10 +8,11 @@
  * - pi 包：通过 npm / git 安装，记录在 settings.json 的 packages 中。
  */
 import { existsSync, statSync } from "node:fs";
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm } from "node:fs/promises";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import { DefaultPackageManager, getAgentDir, SettingsManager } from "@earendil-works/pi-coding-agent";
 import type { ResourceInfo, ResourceKind, ResourcesResult } from "@shared/protocol";
+import { updateConfigFile } from "./config-file";
 import { getProjectTrust, isProjectTrusted } from "./trust";
 
 const DIR_NAME: Record<ResourceKind, string> = { skill: "skills", extension: "extensions", prompt: "prompts" };
@@ -107,31 +108,23 @@ export async function listResources(cwd: string): Promise<ResourcesResult> {
 
 // ----- 启用 / 禁用 -----
 
-async function readSettings(): Promise<{ file: string; data: Record<string, unknown> }> {
-	const file = join(getAgentDir(), "settings.json");
-	if (!existsSync(file)) return { file, data: {} };
-	const data = JSON.parse(await readFile(file, "utf8")) as unknown;
-	if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("settings.json 顶层必须是对象");
-	return { file, data: data as Record<string, unknown> };
-}
-
-async function writeSettings(file: string, data: Record<string, unknown>): Promise<void> {
-	await mkdir(dirname(file), { recursive: true });
-	await writeFile(file, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+function settingsFile(): string {
+	return join(getAgentDir(), "settings.json");
 }
 
 export async function setResourceEnabled(kind: ResourceKind, path: string, enabled: boolean): Promise<void> {
-	const { file, data } = await readSettings();
 	const key = SETTINGS_KEY[kind];
-	const current = data[key];
-	if (current !== undefined && !Array.isArray(current)) {
-		throw new Error(`settings.json 中的 ${key} 不是数组（可能是旧格式），请先在“配置文件”页手动调整`);
-	}
-	const list = ((current as string[] | undefined) ?? []).filter((p) => p !== `-${path}` && p !== `+${path}`);
-	if (!enabled) list.push(`-${path}`);
-	if (list.length > 0) data[key] = list;
-	else delete data[key];
-	await writeSettings(file, data);
+	// 读改写整段放进临界区：与界面保存、其他资源变更并发时以最新内容为准
+	await updateConfigFile(settingsFile(), (data) => {
+		const current = data[key];
+		if (current !== undefined && !Array.isArray(current)) {
+			throw new Error(`settings.json 中的 ${key} 不是数组（可能是旧格式），请先在“配置文件”页手动调整`);
+		}
+		const list = ((current as string[] | undefined) ?? []).filter((p) => p !== `-${path}` && p !== `+${path}`);
+		if (!enabled) list.push(`-${path}`);
+		if (list.length > 0) data[key] = list;
+		else delete data[key];
+	});
 }
 
 // ----- 导入 / 删除 -----

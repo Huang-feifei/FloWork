@@ -4,7 +4,7 @@ import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { thinkingLabel } from "../../lib/format";
 import { Badge, Button, Field, Input, Select } from "../ui";
-import { parseObject, useConfigFile } from "./useConfigFile";
+import { isMtimeConflict, parseObject, useConfigFile } from "./useConfigFile";
 
 const API_TYPES = [
 	{ id: "openai-completions", label: "OpenAI Chat Completions（最常见）" },
@@ -323,13 +323,20 @@ function ModelRow({
 function Editor({
 	draft,
 	builtinIds,
+	conflict,
 	onCancel,
 	onSave,
+	onForceSave,
+	onReload,
 }: {
 	draft: Draft;
 	builtinIds: Set<string>;
+	/** models.json 已被外部改动：这份 draft 基于旧内容，保存会被拒绝 */
+	conflict: boolean;
 	onCancel: () => void;
 	onSave: (draft: Draft) => Promise<void>;
+	onForceSave: (draft: Draft) => Promise<void>;
+	onReload: () => Promise<void>;
 }) {
 	const [d, setD] = useState(draft);
 	const [fetched, setFetched] = useState<string[] | null>(null);
@@ -360,13 +367,14 @@ function Editor({
 		}
 	};
 
-	const save = async () => {
+	const save = async (force: boolean) => {
 		setBusy(true);
 		setError(null);
 		try {
-			await onSave(d);
+			await (force ? onForceSave(d) : onSave(d));
 		} catch (e) {
-			setError(errorText(e));
+			// 冲突交给下面的内联提示处理（让用户选保留哪一份）；draft 保持原样，不因失败被清掉
+			if (!isMtimeConflict(e)) setError(errorText(e));
 		} finally {
 			setBusy(false);
 		}
@@ -482,6 +490,19 @@ function Editor({
 				)}
 			</div>
 
+			{conflict && (
+				<div className="rounded border border-warn/40 bg-warn-soft px-2 py-1.5 text-xs text-warn">
+					<div>models.json 在你打开之后被其他程序改过；直接保存会被拒绝，以免覆盖对方的改动。你填的内容还在这里。</div>
+					<div className="mt-1.5 flex flex-wrap gap-2">
+						<Button size="sm" disabled={busy} onClick={() => void onReload()}>
+							重新加载磁盘版本（保留我的填写）
+						</Button>
+						<Button size="sm" variant="primary" disabled={busy} onClick={() => void save(true)}>
+							用我的内容覆盖磁盘版本（丢弃对方的改动）
+						</Button>
+					</div>
+				</div>
+			)}
 			{(error || invalid) && (
 				<div className="rounded border border-err/40 bg-err/10 px-2 py-1 text-xs text-err">{error ?? invalid}</div>
 			)}
@@ -490,7 +511,7 @@ function Editor({
 				<Button
 					variant="primary"
 					disabled={busy || !keyValid || !d.baseUrl || d.models.length === 0 || !!invalid}
-					onClick={() => void save()}
+					onClick={() => void save(false)}
 				>
 					{busy ? "保存中…" : "保存到 models.json"}
 				</Button>
@@ -500,7 +521,7 @@ function Editor({
 }
 
 export function CustomProvidersTab() {
-	const { file, error, save } = useConfigFile("models");
+	const { file, error, conflict, reload, save } = useConfigFile("models");
 	const pushNotice = useApp((s) => s.pushNotice);
 	const configVersion = useApp((s) => s.configVersion);
 	const [draft, setDraft] = useState<Draft | null>(null);
@@ -523,12 +544,13 @@ export function CustomProvidersTab() {
 
 	const providers = (parsed?.providers ?? {}) as Record<string, ProviderConfig>;
 
-	const persist = async (next: Record<string, unknown>, message: string) => {
-		await save(`${JSON.stringify(next, null, 2)}\n`);
+	// force：用户已确认用本地内容覆盖磁盘版本，跳过 mtime 校验
+	const persist = async (next: Record<string, unknown>, message: string, force = false) => {
+		await save(`${JSON.stringify(next, null, 2)}\n`, { force });
 		pushNotice("info", message);
 	};
 
-	const saveDraft = async (d: Draft) => {
+	const saveDraft = async (d: Draft, force = false) => {
 		if (!parsed) throw new Error("models.json 无法解析，请先在“配置文件”页修复");
 		const invalid = validateModels(d.models);
 		if (invalid) throw new Error(invalid);
@@ -544,7 +566,8 @@ export function CustomProvidersTab() {
 		if (d.apiKey) config.apiKey = d.apiKey;
 		else delete config.apiKey;
 		nextProviders[d.key] = config;
-		await persist({ ...parsed, providers: nextProviders }, `已保存自定义供应商 ${d.key}`);
+		await persist({ ...parsed, providers: nextProviders }, `已保存自定义供应商 ${d.key}`, force);
+		// 只有保存成功才关掉表单：失败（含 mtime 冲突）时保留用户填的内容
 		setDraft(null);
 	};
 
@@ -577,6 +600,14 @@ export function CustomProvidersTab() {
 
 	return (
 		<div className="space-y-4">
+			{conflict && !draft && (
+				<div className="flex items-center gap-2 rounded border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">
+					<span className="flex-1">models.json 已被其他程序改过，下面显示的列表是打开页面时的旧内容；直接保存会被拒绝，以免覆盖对方的改动。</span>
+					<Button size="sm" onClick={() => void reload()}>
+						重新加载磁盘版本
+					</Button>
+				</div>
+			)}
 			<div>
 				<div className="mb-2 text-xs text-muted">新建：</div>
 				<div className="flex flex-wrap gap-1.5">
@@ -595,7 +626,18 @@ export function CustomProvidersTab() {
 				</div>
 			</div>
 
-			{draft && <Editor key={draft.originalKey ?? draft.key} draft={draft} builtinIds={builtinIds} onCancel={() => setDraft(null)} onSave={saveDraft} />}
+			{draft && (
+				<Editor
+					key={draft.originalKey ?? draft.key}
+					draft={draft}
+					builtinIds={builtinIds}
+					conflict={conflict}
+					onCancel={() => setDraft(null)}
+					onSave={saveDraft}
+					onForceSave={(d) => saveDraft(d, true)}
+					onReload={reload}
+				/>
+			)}
 
 			<div className="overflow-hidden rounded-md border border-border bg-panel">
 				{Object.keys(providers).length === 0 && (
