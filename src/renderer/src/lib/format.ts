@@ -18,3 +18,18 @@ export function formatTokens(n: number): string {
 	if (n >= 1_000) return `${Math.round(n / 1_000)}k`;
 	return String(n);
 }
+
+/** 思考等级的中文名；pi 的等级标识仍是 off / minimal / low / medium / high / xhigh / max */
+const THINKING_LABELS: Record<string, string> = {
+	off: "关闭",
+	minimal: "最小",
+	low: "低",
+	medium: "中",
+	high: "高",
+	xhigh: "极高",
+	max: "最大",
+};
+
+export function thinkingLabel(level: string): string {
+	return THINKING_LABELS[level] ?? level;
+}

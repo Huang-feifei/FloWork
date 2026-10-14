@@ -15,6 +15,7 @@ import { TrustBanner } from "./TrustBanner";
 import { FilePreview } from "../panels/FilePreview";
 import { QuickOpen } from "../panels/QuickOpen";
 import { PANEL_TABS, RightPanel, useChangedCount } from "../panels/RightPanel";
+import { thinkingLabel } from "../../lib/format";
 import { displayUserText } from "@shared/skill-text";
 
 function SessionHeader() {
@@ -221,23 +222,33 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 				<option value="ask_all">审批：全部工具</option>
 				<option value="auto">审批：关闭（自动执行）</option>
 			</select>
-			{state && state.availableThinkingLevels.length > 1 && (
-				<select
-					value={state.thinkingLevel}
-					onChange={(e) => void setThinkingLevel(e.target.value as ThinkingLevel)}
-					className={`${selectCls} text-muted hover:text-fg`}
-					title="思考等级"
-				>
-					{state.availableThinkingLevels.map((level) => (
-						<option
-							key={level}
-							value={level}
-						>
-							思考 {level}
-						</option>
-					))}
-				</select>
-			)}
+			{state &&
+				(state.availableThinkingLevels.length > 1 ? (
+					<select
+						value={state.thinkingLevel}
+						onChange={(e) => void setThinkingLevel(e.target.value as ThinkingLevel)}
+						className={`${selectCls} text-muted hover:text-fg`}
+						title="思考强度"
+					>
+						{state.availableThinkingLevels.map((level) => (
+							<option
+								key={level}
+								value={level}
+							>
+								思考 {thinkingLabel(level)}
+							</option>
+						))}
+					</select>
+				) : (
+					<select
+						disabled
+						value="off"
+						className={`${selectCls} text-faint`}
+						title="该模型没有声明支持思考，所以只有「关闭」。在 设置 → 自定义端点 里为该模型打开「思考」后即可选择强度"
+					>
+						<option value="off">思考 关闭（模型不支持）</option>
+					</select>
+				))}
 			<div className="flex-1" />
 			{models.length > 0 && (
 				<select
@@ -256,6 +267,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 							value={`${m.provider}/${m.id}`}
 						>
 							{m.provider}/{m.id}
+							{m.reasoning ? " · 可思考" : ""}
 						</option>
 					))}
 				</select>

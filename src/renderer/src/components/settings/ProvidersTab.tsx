@@ -25,7 +25,30 @@ const DOMESTIC = new Set([
 	"ant-ling",
 ]);
 
-type Filter = "all" | "configured" | "domestic" | "subscription";
+/** 默认展示的主流供应商；其余在「全部」里查看。已配置的供应商始终显示 */
+const COMMON = new Set([
+	"openai",
+	"anthropic",
+	"google",
+	"xai",
+	"openrouter",
+	"github-copilot",
+	"deepseek",
+	"moonshotai",
+	"moonshotai-cn",
+	"kimi-coding",
+	"zai",
+	"zai-coding-cn",
+	"qwen-token-plan",
+	"minimax",
+]);
+
+/** 支持订阅登录的供应商不放「常用」，需要时到「订阅登录」筛选里找 */
+function supportsSubscription(provider: ProviderInfo): boolean {
+	return provider.authMethods.includes("oauth_subscription");
+}
+
+type Filter = "common" | "all" | "configured" | "domestic" | "subscription";
 
 const SOURCE_LABEL: Record<string, string> = {
 	stored: "auth.json",
@@ -151,7 +174,7 @@ export function ProvidersTab() {
 	const configVersion = useApp((s) => s.configVersion);
 	const [providers, setProviders] = useState<ProviderInfo[]>([]);
 	const [models, setModels] = useState<ModelEntry[]>([]);
-	const [filter, setFilter] = useState<Filter>("all");
+	const [filter, setFilter] = useState<Filter>("common");
 	const [query, setQuery] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -173,13 +196,17 @@ export function ProvidersTab() {
 		};
 	}, [configVersion]);
 
+	/** 常用视图：主流供应商 + 已配置的（含自定义端点）；支持订阅登录的排除在外 */
+	const isCommon = (p: ProviderInfo) => (COMMON.has(p.id) && !supportsSubscription(p)) || p.configured;
+
 	const visible = useMemo(() => {
 		const q = query.trim().toLowerCase();
 		return providers
 			.filter((p) => {
+				if (filter === "common") return isCommon(p);
 				if (filter === "configured") return p.configured;
 				if (filter === "domestic") return DOMESTIC.has(p.id);
-				if (filter === "subscription") return p.authMethods.includes("oauth_subscription");
+				if (filter === "subscription") return supportsSubscription(p);
 				return true;
 			})
 			.filter((p) => !q || p.id.includes(q) || p.name.toLowerCase().includes(q))
@@ -187,10 +214,11 @@ export function ProvidersTab() {
 	}, [providers, filter, query]);
 
 	const counts = {
+		common: providers.filter(isCommon).length,
 		all: providers.length,
 		configured: providers.filter((p) => p.configured).length,
 		domestic: providers.filter((p) => DOMESTIC.has(p.id)).length,
-		subscription: providers.filter((p) => p.authMethods.includes("oauth_subscription")).length,
+		subscription: providers.filter(supportsSubscription).length,
 	};
 
 	return (
@@ -198,6 +226,7 @@ export function ProvidersTab() {
 			<div className="mb-3 flex items-center gap-2">
 				{(
 					[
+						["common", "常用"],
 						["all", "全部"],
 						["configured", "已配置"],
 						["domestic", "国内"],
@@ -211,6 +240,10 @@ export function ProvidersTab() {
 				<div className="flex-1" />
 				<Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索供应商" className="max-w-56" />
 			</div>
+
+			{filter === "common" && counts.all > counts.common && (
+				<div className="mb-3 text-[11px] text-muted">已隐藏 {counts.all - counts.common} 个不常用供应商，点「全部」查看。</div>
+			)}
 
 			<div className="mb-3 rounded-md border border-border bg-panel px-3 py-2 text-[11px] leading-5 text-muted">
 				凭据优先级：auth.json（这里登录保存的）&gt; models.json 中的 apiKey &gt; 环境变量。API Key 以明文保存在
