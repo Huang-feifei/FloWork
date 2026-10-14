@@ -156,6 +156,10 @@ export function toSessionState(session: AgentSession): SessionState {
 		availableThinkingLevels: session.getAvailableThinkingLevels() as ThinkingLevel[],
 		isStreaming: session.isStreaming,
 		messageCount: session.messages.length,
+		queue: {
+			steering: [...session.getSteeringMessages()],
+			followUp: [...session.getFollowUpMessages()],
+		},
 	};
 }
 

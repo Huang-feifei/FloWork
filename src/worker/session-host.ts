@@ -201,6 +201,12 @@ ${err.extensionPath}` });
 		switch (command.type) {
 			case "prompt":
 				return this.prompt(command.message, command.streamingBehavior);
+			case "clear_queue": {
+				const queue = session.clearQueue();
+				return { steering: [...queue.steering], followUp: [...queue.followUp] };
+			}
+			case "reorder_queue":
+				return this.reorderQueue(command.steering, command.followUp);
 			case "abort":
 				this.denyAllPending("用户中断了运行");
 				this.extUI.cancelAll();
@@ -343,6 +349,36 @@ ${err.extensionPath}` });
 					else this.emit({ type: "notice", level: "error", text: errorText(error) });
 				});
 		});
+	}
+
+	/**
+	 * pi 的队列是 FIFO，没有重排 API，这里用「清空后按新顺序重新入队」实现排序。
+	 * 用内部入队方法（不再展开模板、不重复触发扩展 input handler），并尽量在一次同步执行内完成，
+	 * 避免 agent 在重排中途取走消息造成顺序错乱。
+	 */
+	private async reorderQueue(steering: string[], followUp: string[]): Promise<{ steering: string[]; followUp: string[] }> {
+		const session = this.session;
+		const internals = session as unknown as {
+			_queueSteer?: (text: string) => Promise<void>;
+			_queueFollowUp?: (text: string) => Promise<void>;
+		};
+		if (typeof internals._queueSteer !== "function" || typeof internals._queueFollowUp !== "function") {
+			throw new Error("当前 pi 版本不支持队列重排");
+		}
+		const before = session.clearQueue();
+		const next = { steering: [...steering], followUp: [...followUp] };
+		// 多重集校验：界面操作期间队列可能变化（新消息入队或被送达）
+		const counts = new Map<string, number>();
+		for (const text of [...before.steering, ...before.followUp]) counts.set(text, (counts.get(text) ?? 0) + 1);
+		for (const text of [...next.steering, ...next.followUp]) counts.set(text, (counts.get(text) ?? 0) - 1);
+		if ([...counts.values()].some((n) => n !== 0)) {
+			for (const text of before.steering) await internals._queueSteer(text);
+			for (const text of before.followUp) await internals._queueFollowUp(text);
+			throw new Error("队列已变化，请重试");
+		}
+		for (const text of next.steering) await internals._queueSteer(text);
+		for (const text of next.followUp) await internals._queueFollowUp(text);
+		return { steering: [...session.getSteeringMessages()], followUp: [...session.getFollowUpMessages()] };
 	}
 
 	private requireRuntime(): AgentSessionRuntime {

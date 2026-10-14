@@ -202,10 +202,11 @@ export function reduceEvent(s: SessionSlice, event: SessionEvent): Partial<Sessi
 			const { [event.key]: _, ...rest } = s.extWidgets;
 			return { extWidgets: event.lines ? { ...rest, [event.key]: { lines: event.lines, placement: event.placement } } : rest };
 		}
+		case "queue_update":
+			return s.state ? { state: { ...s.state, queue: { steering: [...event.steering], followUp: [...event.followUp] } } } : null;
 		case "session_changed":
 		case "ext_editor_text":
 		case "notice":
-		case "queue_update":
 			return null;
 	}
 }

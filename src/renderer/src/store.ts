@@ -120,7 +120,11 @@ interface AppState extends SessionSlice {
 	loadModels(): Promise<void>;
 	newSession(): Promise<void>;
 	switchSession(path: string): Promise<void>;
-	sendPrompt(text: string): Promise<void>;
+	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
+	/** 清空排队消息并填回输入框 */
+	dequeue(): Promise<void>;
+	/** 调整排队消息顺序（steering / followUp 各自内部重排） */
+	reorderQueue(steering: string[], followUp: string[]): Promise<void>;
 	abort(): Promise<void>;
 	setModel(model: ModelInfo): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
@@ -689,10 +693,22 @@ export const useApp = create<AppState>()((set, get) => {
 			if (get().activeProjectId === pid) set({ view: "chat" });
 		},
 
-		async sendPrompt(text) {
+		async sendPrompt(text, streamingBehavior) {
 			const message = text.trim();
 			if (!message) return;
-			await active((h) => api.session(h, { type: "prompt", message }));
+			await active((h) => api.session(h, { type: "prompt", message, streamingBehavior }));
+		},
+
+		async dequeue() {
+			const queue = await active((h) => api.session(h, { type: "clear_queue" }));
+			if (!queue) return;
+			const pending = [...queue.steering, ...queue.followUp];
+			if (pending.length === 0) return;
+			set((s) => ({ draft: { text: pending.join("\n"), seq: s.draft.seq + 1, append: true } }));
+		},
+
+		async reorderQueue(steering, followUp) {
+			await active((h) => api.session(h, { type: "reorder_queue", steering, followUp }));
 		},
 
 		async abort() {

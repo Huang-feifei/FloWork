@@ -118,6 +118,12 @@ export interface SlashCommand {
 	source: "extension" | "prompt" | "skill";
 }
 
+/** 运行中排队等待送达的消息：steering 插话，followUp 当前轮结束后执行 */
+export interface SessionQueue {
+	steering: string[];
+	followUp: string[];
+}
+
 export interface SessionState {
 	sessionId: string;
 	sessionFile?: string;
@@ -129,6 +135,8 @@ export interface SessionState {
 	isStreaming: boolean;
 	messageCount: number;
 	trust?: ProjectTrust;
+	/** 当前排队的消息；pi 在消息被送达时更新 */
+	queue: SessionQueue;
 }
 
 /**
@@ -249,6 +257,10 @@ export interface TestResult {
 
 export type SessionCommand =
 	| { type: "prompt"; message: string; streamingBehavior?: "steer" | "followUp" }
+	/** 清空并取回排队消息（界面把返回的文本填回输入框） */
+	| { type: "clear_queue" }
+	/** 按给定顺序重建排队消息（pi 队列是 FIFO，重排通过清空后重新入队实现） */
+	| { type: "reorder_queue"; steering: string[]; followUp: string[] }
 	| { type: "abort" }
 	| { type: "get_state" }
 	| { type: "get_messages" }
@@ -300,6 +312,8 @@ export type ServiceCommand =
 
 export interface CommandResultMap {
 	prompt: { disposition: "started" | "queued" | "handled" };
+	clear_queue: SessionQueue;
+	reorder_queue: SessionQueue;
 	abort: null;
 	get_state: SessionState;
 	get_messages: ChatMessage[];

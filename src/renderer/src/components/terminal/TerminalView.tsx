@@ -108,6 +108,134 @@ function RunningLine() {
 	);
 }
 
+const QUEUE_DRAG_TYPE = "application/x-flowork-queue";
+
+/** 运行中排队等待送达的消息（插话 / 排队）：可拖拽或 ↑↓ 调整顺序，也可一键取回输入框 */
+function QueueList() {
+	const queue = useApp((s) => s.state?.queue);
+	const dequeue = useApp((s) => s.dequeue);
+	const reorderQueue = useApp((s) => s.reorderQueue);
+	const steering = queue?.steering ?? [];
+	const followUp = queue?.followUp ?? [];
+	const total = steering.length + followUp.length;
+	const [dropAt, setDropAt] = useState<{ kind: "steering" | "followUp"; index: number; pos: "before" | "after" } | null>(null);
+	if (total === 0) return null;
+
+	const apply = (kind: "steering" | "followUp", next: string[]) =>
+		void reorderQueue(kind === "steering" ? next : [...steering], kind === "followUp" ? next : [...followUp]);
+
+	// pi 队列是 FIFO：调整顺序通过「清空后按新顺序重新入队」实现，因此只支持队列内部重排
+	const move = (kind: "steering" | "followUp", index: number, delta: number) => {
+		const list = kind === "steering" ? [...steering] : [...followUp];
+		const target = index + delta;
+		const a = list[index];
+		const b = list[target];
+		if (a === undefined || b === undefined) return;
+		list[index] = b;
+		list[target] = a;
+		apply(kind, list);
+	};
+
+	/** 拖拽落点：只允许同一队列内部重排，跨队列（插话 ↔ 排队）会被忽略 */
+	const drop = (kind: "steering" | "followUp", from: number, index: number, pos: "before" | "after") => {
+		const list = kind === "steering" ? [...steering] : [...followUp];
+		const [moved] = list.splice(from, 1);
+		if (moved === undefined) return;
+		const at = pos === "before" ? index : index + 1;
+		list.splice(from < at ? at - 1 : at, 0, moved);
+		apply(kind, list);
+	};
+
+	const row = (kind: "steering" | "followUp", text: string, index: number, length: number) => {
+		const hint = dropAt?.kind === kind && dropAt.index === index ? dropAt.pos : null;
+		return (
+			<li
+				key={`${kind}-${index}`}
+				draggable
+				onDragStart={(e) => {
+					e.dataTransfer.setData(QUEUE_DRAG_TYPE, JSON.stringify({ kind, index }));
+					e.dataTransfer.effectAllowed = "move";
+				}}
+				onDragOver={(e) => {
+					if (!e.dataTransfer.types.includes(QUEUE_DRAG_TYPE)) return;
+					e.preventDefault();
+					e.dataTransfer.dropEffect = "move";
+					const rect = e.currentTarget.getBoundingClientRect();
+					setDropAt({ kind, index, pos: e.clientY < rect.top + rect.height / 2 ? "before" : "after" });
+				}}
+				onDragLeave={() => setDropAt((d) => (d?.kind === kind && d.index === index ? null : d))}
+				onDrop={(e) => {
+					const raw = e.dataTransfer.getData(QUEUE_DRAG_TYPE);
+					const pos = dropAt?.kind === kind && dropAt.index === index ? dropAt.pos : null;
+					setDropAt(null);
+					if (!raw || !pos) return;
+					e.preventDefault();
+					try {
+						const src = JSON.parse(raw) as { kind: string; index: number };
+						if (src.kind !== kind || typeof src.index !== "number") return;
+						drop(kind, src.index, index, pos);
+					} catch {
+						/* 忽略无法解析的拖拽数据 */
+					}
+				}}
+				onDragEnd={() => setDropAt(null)}
+				className={`group flex min-w-0 cursor-grab items-center gap-1.5 active:cursor-grabbing ${
+					hint === "before"
+						? "shadow-[inset_0_2px_0_var(--color-accent)]"
+						: hint === "after"
+							? "shadow-[inset_0_-2px_0_var(--color-accent)]"
+							: ""
+				}`}
+			>
+				<span className={`shrink-0 ${kind === "steering" ? "text-accent" : "text-muted"}`}>{kind === "steering" ? "插话" : "排队"}</span>
+				<span className="min-w-0 flex-1 truncate text-fg/90">{text}</span>
+				<span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+					<button
+						type="button"
+						disabled={index === 0}
+						onClick={() => move(kind, index, -1)}
+						title="上移"
+						className="rounded px-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
+					>
+						↑
+					</button>
+					<button
+						type="button"
+						disabled={index === length - 1}
+						onClick={() => move(kind, index, 1)}
+						title="下移"
+						className="rounded px-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
+					>
+						↓
+					</button>
+				</span>
+			</li>
+		);
+	};
+
+	return (
+		<div className="mb-1 rounded-lg border border-border bg-panel/70 px-3 py-2 text-[12px]">
+			<div className="flex items-center gap-2 text-muted">
+				<span>待发送 {total} 条</span>
+				{total > 1 && <span className="text-faint">· 拖动或 ↑↓ 调整顺序</span>}
+				<div className="flex-1" />
+				<button
+					type="button"
+					onClick={() => void dequeue()}
+					title="清空队列并填回输入框"
+					className="rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+				>
+					取回
+				</button>
+			</div>
+			<ul className="mt-1 space-y-0.5">
+				{steering.map((text, i) => row("steering", text, i, steering.length))}
+				{followUp.map((text, i) => row("followUp", text, i, followUp.length))}
+			</ul>
+		</div>
+	);
+}
+
 function PromptInput() {
 	const [text, setText] = useState("");
 	const isRunning = useApp((s) => s.isRunning);
@@ -142,9 +270,9 @@ function PromptInput() {
 		ref.current?.focus();
 	};
 
-	const submit = () => {
+	const submit = (behavior?: "steer" | "followUp") => {
 		if (!text.trim() || !ready) return;
-		void sendPrompt(text);
+		void sendPrompt(text, behavior);
 		setText("");
 	};
 
@@ -182,13 +310,14 @@ function PromptInput() {
 						}
 						if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
 							e.preventDefault();
-							submit();
+							// 运行中：Enter 排队（followUp），Ctrl/Cmd+Enter 插话（steer）
+							submit(isRunning && (e.ctrlKey || e.metaKey) ? "steer" : undefined);
 						} else if (e.key === "Escape" && isRunning) {
 							e.preventDefault();
 							void abort();
 						}
 					}}
-					placeholder={ready ? (isRunning ? "运行中，输入的消息会排在当前任务之后" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
+					placeholder={ready ? (isRunning ? "运行中：Enter 排队，Ctrl+Enter 插话" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
 					className="term min-h-[1.65em] w-full resize-none bg-transparent outline-none placeholder:text-muted/70"
 				/>
 			</div>
@@ -291,7 +420,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					type="button"
 					disabled={!canSend}
 					onClick={onSend}
-					title={isRunning ? "加入队列（Enter）" : "发送（Enter）"}
+					title={isRunning ? "加入队列（Enter）· Ctrl+Enter 插话" : "发送（Enter）"}
 					className="ml-1 flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground hover:bg-accent-strong disabled:bg-panel-2 disabled:text-faint"
 				>
 					<Icon name="arrow-up" />
@@ -359,6 +488,7 @@ export function TerminalView() {
 				<div className="shrink-0 px-6 pt-1 pb-4">
 					<div className="mx-auto max-w-4xl">
 						<ExtWidgets placement="aboveEditor" />
+						<QueueList />
 						<PromptInput />
 						<ExtWidgets placement="belowEditor" />
 					</div>
