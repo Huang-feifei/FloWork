@@ -1,5 +1,6 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, nativeTheme, shell } from "electron";
 import { Backend } from "../core/backend";
@@ -63,6 +64,22 @@ const backend = new Backend({
 		const options = { properties: ["openDirectory" as const, "multiSelections" as const] };
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
 		return result.canceled ? [] : result.filePaths;
+	},
+	// 删除走系统回收站，可恢复
+	trashItem: (abs) => shell.trashItem(abs),
+	// 在资源管理器中定位
+	revealItem: (abs) => shell.showItemInFolder(abs),
+	// 在系统终端中打开所在目录（文件则用其父目录）
+	openTerminal: (abs) => {
+		let dir = abs;
+		try {
+			if (!statSync(abs).isDirectory()) dir = dirname(abs);
+		} catch {
+			dir = dirname(abs);
+		}
+		const command = process.platform === "win32" ? "cmd.exe" : (process.env.TERMINAL ?? "x-terminal-emulator");
+		const args = process.platform === "win32" ? ["/c", "start", "cmd.exe"] : [];
+		spawn(command, args, { cwd: dir, detached: true, stdio: "ignore" }).unref();
 	},
 });
 

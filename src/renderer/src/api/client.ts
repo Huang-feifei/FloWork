@@ -38,6 +38,12 @@ export const api = {
 		call("workspace.write", { root, path, content, expectedMtime }),
 	searchWorkspace: (root: string, query: string, options: { limit?: number; fresh?: boolean } = {}) =>
 		call("workspace.search", { root, query, ...options }),
+	renameWorkspaceEntry: (root: string, path: string, name: string) => call("workspace.rename", { root, path, name }),
+	createWorkspaceEntry: (root: string, path: string, type: "file" | "dir") => call("workspace.create", { root, path, type }),
+	deleteWorkspaceEntry: (root: string, path: string) => call("workspace.delete", { root, path }),
+	moveWorkspaceEntry: (root: string, path: string, targetDir: string) => call("workspace.move", { root, path, targetDir }),
+	revealWorkspaceEntry: (root: string, path: string) => call("workspace.reveal", { root, path }),
+	openTerminalAt: (root: string, path: string) => call("workspace.openTerminal", { root, path }),
 
 	service: <C extends ServiceCommand>(command: C) => call("service.send", command) as Promise<CommandResult<C>>,
 

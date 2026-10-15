@@ -2,7 +2,7 @@
  * 工作区文件浏览：按目录懒加载列出条目、读取文件用于预览。
  * 所有路径都必须位于工作区根目录之内。
  */
-import { mkdir, open, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import ignore, { type Ignore } from "ignore";
 import {
@@ -125,6 +125,100 @@ export async function writeWorkspaceFile(
 	await writeFile(abs, content, "utf8");
 	invalidateSearchIndex(root);
 	return readWorkspaceFile(root, path);
+}
+
+// ----- 文件操作（重命名 / 新建 / 删除 / 移动） -----
+
+/** 校验单个条目名：非空、不含路径分隔符、不是 . / .. */
+function assertEntryName(name: string): string {
+	const trimmed = name.trim();
+	if (!trimmed) throw new Error("名称不能为空");
+	if (trimmed === "." || trimmed === "..") throw new Error("名称无效");
+	if (/[\\/]/.test(trimmed)) throw new Error("名称不能包含路径分隔符");
+	if (/[\u0000-\u001f]/.test(trimmed)) throw new Error("名称包含非法字符");
+	return trimmed;
+}
+
+async function pathExists(abs: string): Promise<boolean> {
+	try {
+		await stat(abs);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/** 重命名（同目录改名）；目标已存在时拒绝 */
+export async function renameWorkspaceEntry(root: string, path: string, name: string): Promise<{ path: string }> {
+	const { abs, rel } = resolveInside(root, path);
+	if (!rel) throw new Error("不能重命名工作区根目录");
+	const target = assertEntryName(name);
+	const parent = dirname(rel);
+	const nextRel = parent === "." ? target : `${parent.split(sep).join("/")}/${target}`;
+	const next = resolveInside(root, nextRel).abs;
+	if (next === abs) return { path: rel };
+	if (await pathExists(next)) throw new Error(`「${target}」已存在`);
+	await rename(abs, next);
+	invalidateSearchIndex(root);
+	return { path: nextRel };
+}
+
+/** 新建文件或文件夹；path 为工作区内的相对路径 */
+export async function createWorkspaceEntry(root: string, path: string, type: "file" | "dir"): Promise<{ path: string }> {
+	const { abs, rel } = resolveInside(root, path);
+	if (!rel) throw new Error("名称不能为空");
+	assertEntryName(rel.split("/").pop() ?? "");
+	if (await pathExists(abs)) throw new Error(`「${rel.split("/").pop()}」已存在`);
+	if (type === "dir") {
+		await mkdir(abs, { recursive: false });
+	} else {
+		await mkdir(dirname(abs), { recursive: true });
+		// wx：已存在则失败，避免覆盖已有文件
+		await writeFile(abs, "", { flag: "wx" });
+	}
+	invalidateSearchIndex(root);
+	return { path: rel };
+}
+
+/** 删除：优先移入系统回收站（trash 由桌面版外壳注入），否则永久删除 */
+export async function deleteWorkspaceEntry(
+	root: string,
+	path: string,
+	trash?: (abs: string) => Promise<void>,
+): Promise<{ trashed: boolean }> {
+	const { abs, rel } = resolveInside(root, path);
+	if (!rel) throw new Error("不能删除工作区根目录");
+	if (trash) {
+		await trash(abs);
+		invalidateSearchIndex(root);
+		return { trashed: true };
+	}
+	await rm(abs, { recursive: true, force: false });
+	invalidateSearchIndex(root);
+	return { trashed: false };
+}
+
+/** 移动到工作区内的另一个目录（targetDir 为相对路径，"" 表示根） */
+export async function moveWorkspaceEntry(root: string, path: string, targetDir: string): Promise<{ path: string }> {
+	const { abs, rel } = resolveInside(root, path);
+	if (!rel) throw new Error("不能移动工作区根目录");
+	const target = resolveInside(root, targetDir);
+	if (target.rel === rel || target.rel.startsWith(`${rel}/`)) throw new Error("不能移动到自身或其子目录");
+	let info: Awaited<ReturnType<typeof stat>>;
+	try {
+		info = await stat(target.abs);
+	} catch {
+		throw new Error(`目标目录不存在：${targetDir || "（工作区根目录）"}`);
+	}
+	if (!info.isDirectory()) throw new Error(`不是目录：${targetDir}`);
+	const name = rel.split("/").pop() as string;
+	const nextRel = target.rel ? `${target.rel}/${name}` : name;
+	if (nextRel === rel) return { path: rel };
+	const next = resolveInside(root, nextRel).abs;
+	if (await pathExists(next)) throw new Error(`目标目录已有「${name}」`);
+	await rename(abs, next);
+	invalidateSearchIndex(root);
+	return { path: nextRel };
 }
 
 // ----- 全项目文件搜索 -----

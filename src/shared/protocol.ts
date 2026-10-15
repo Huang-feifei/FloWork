@@ -591,6 +591,18 @@ export interface BackendMethods {
 		result: FilePreview;
 	};
 	"workspace.search": { params: { root: string; query: string; limit?: number; /** 忽略缓存重新扫描 */ fresh?: boolean }; result: FileSearchResult };
+	/** 重命名（同目录改名）；name 不能包含路径分隔符 */
+	"workspace.rename": { params: { root: string; path: string; name: string }; result: { path: string } };
+	/** 在 path 下新建文件或文件夹；文件夹会自动创建父目录 */
+	"workspace.create": { params: { root: string; path: string; type: "file" | "dir" }; result: { path: string } };
+	/** 删除文件/文件夹；桌面版移入系统回收站，网页版永久删除 */
+	"workspace.delete": { params: { root: string; path: string }; result: { trashed: boolean } };
+	/** 移动到工作区内的另一个目录（targetDir 为相对路径，"" 表示根） */
+	"workspace.move": { params: { root: string; path: string; targetDir: string }; result: { path: string } };
+	/** 在系统文件管理器中定位（仅桌面版） */
+	"workspace.reveal": { params: { root: string; path: string }; result: null };
+	/** 在系统终端中打开所在目录（仅桌面版） */
+	"workspace.openTerminal": { params: { root: string; path: string }; result: null };
 	"service.send": { params: ServiceCommand; result: unknown };
 	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };

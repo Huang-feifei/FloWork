@@ -18,7 +18,17 @@ import { isDirectory, listDirs } from "./fs";
 import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
 import { ProjectStore, samePath } from "./projects";
 import { TerminalManager } from "./terminal";
-import { listWorkspaceDir, readWorkspaceFile, searchWorkspaceFiles, writeWorkspaceFile } from "./workspace-fs";
+import {
+	createWorkspaceEntry,
+	deleteWorkspaceEntry,
+	listWorkspaceDir,
+	moveWorkspaceEntry,
+	readWorkspaceFile,
+	renameWorkspaceEntry,
+	resolveInside,
+	searchWorkspaceFiles,
+	writeWorkspaceFile,
+} from "./workspace-fs";
 import { WorkerManager } from "./worker-manager";
 import type { WorkerSpawner } from "./worker-process";
 
@@ -30,6 +40,12 @@ export interface BackendHost {
 	pickFolder?: () => Promise<string | null>;
 	/** 系统原生文件夹对话框（多选）；网页版不提供 */
 	pickFolders?: () => Promise<string[]>;
+	/** 把文件 / 文件夹移入系统回收站；网页版不提供（退回永久删除） */
+	trashItem?: (absPath: string) => Promise<void>;
+	/** 在系统文件管理器中定位；网页版不提供 */
+	revealItem?: (absPath: string) => void;
+	/** 在系统终端中打开目录；网页版不提供 */
+	openTerminal?: (absDir: string) => void;
 }
 
 type PushListener = (push: BackendPush) => void;
@@ -145,6 +161,34 @@ export class Backend {
 			case "workspace.search": {
 				const params = rawParams as BackendMethods["workspace.search"]["params"];
 				return searchWorkspaceFiles(params.root, params.query, params.limit, params.fresh);
+			}
+			case "workspace.rename": {
+				const params = rawParams as BackendMethods["workspace.rename"]["params"];
+				return renameWorkspaceEntry(params.root, params.path, params.name);
+			}
+			case "workspace.create": {
+				const params = rawParams as BackendMethods["workspace.create"]["params"];
+				return createWorkspaceEntry(params.root, params.path, params.type);
+			}
+			case "workspace.delete": {
+				const params = rawParams as BackendMethods["workspace.delete"]["params"];
+				return deleteWorkspaceEntry(params.root, params.path, this.host.trashItem?.bind(this.host));
+			}
+			case "workspace.move": {
+				const params = rawParams as BackendMethods["workspace.move"]["params"];
+				return moveWorkspaceEntry(params.root, params.path, params.targetDir);
+			}
+			case "workspace.reveal": {
+				const params = rawParams as BackendMethods["workspace.reveal"]["params"];
+				if (!this.host.revealItem) throw new Error("当前外壳不支持在文件管理器中显示");
+				this.host.revealItem(resolveInside(params.root, params.path).abs);
+				return null;
+			}
+			case "workspace.openTerminal": {
+				const params = rawParams as BackendMethods["workspace.openTerminal"]["params"];
+				if (!this.host.openTerminal) throw new Error("当前外壳不支持在终端中打开");
+				this.host.openTerminal(resolveInside(params.root, params.path).abs);
+				return null;
 			}
 			case "service.send": {
 				const command = rawParams as ServiceCommand;

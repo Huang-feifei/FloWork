@@ -6,6 +6,9 @@ import { collectSessionFiles } from "../../lib/session-files";
 import { useFileSearch } from "../../lib/useFileSearch";
 import { SearchResultLabel } from "./SearchResultRow";
 import { useApp } from "../../store";
+import { askConfirm } from "../ConfirmDialog";
+import { askText } from "../PromptDialog";
+import { Menu, type MenuItem } from "../sidebar/Menu";
 
 function formatSize(n: number | undefined): string {
 	if (n === undefined) return "";
@@ -26,6 +29,96 @@ export function ProjectFiles() {
 	const [showIgnored, setShowIgnored] = useState(false);
 	const [filter, setFilter] = useState("");
 	const search = useFileSearch(filter);
+	const [menu, setMenu] = useState<{ x: number; y: number; entry: WorkspaceEntry | null } | null>(null);
+	const isDesktop = useApp((s) => s.info?.shell === "electron");
+	const { pushNotice } = useApp.getState();
+
+	// ----- 文件操作（右键菜单） -----
+
+	const createEntry = async (dir: string, type: "file" | "dir") => {
+		if (!cwd) return;
+		const name = (
+			await askText({
+				title: type === "file" ? "新建文件" : "新建文件夹",
+				placeholder: type === "file" ? "文件名，例如 index.ts" : "文件夹名",
+			})
+		)?.trim();
+		if (!name) return;
+		const path = dir ? `${dir}/${name}` : name;
+		try {
+			await api.createWorkspaceEntry(cwd, path, type);
+			if (dir) setExpanded((prev) => new Set(prev).add(dir));
+			refreshFiles();
+		} catch (e) {
+			pushNotice("error", errorText(e));
+		}
+	};
+
+	const renameEntry = async (entry: WorkspaceEntry) => {
+		if (!cwd) return;
+		const name = (await askText({ title: "重命名", defaultValue: entry.name }))?.trim();
+		if (!name || name === entry.name) return;
+		try {
+			await api.renameWorkspaceEntry(cwd, entry.path, name);
+			refreshFiles();
+		} catch (e) {
+			pushNotice("error", errorText(e));
+		}
+	};
+
+	const moveEntry = async (entry: WorkspaceEntry) => {
+		if (!cwd) return;
+		const target = await askText({
+			title: `移动「${entry.name}」到目录`,
+			placeholder: "工作区内的相对路径，留空表示根目录",
+			allowEmpty: true,
+		});
+		if (target === null) return;
+		try {
+			const result = await api.moveWorkspaceEntry(cwd, entry.path, target.trim());
+			pushNotice("info", `已移动到 ${result.path}`);
+			refreshFiles();
+		} catch (e) {
+			pushNotice("error", errorText(e));
+		}
+	};
+
+	const removeEntry = async (entry: WorkspaceEntry) => {
+		if (!cwd) return;
+		const ok = await askConfirm({
+			title: "删除",
+			message: `删除${entry.type === "dir" ? "文件夹" : "文件"}「${entry.name}」？\n${
+				isDesktop ? "会移入系统回收站，可从回收站恢复。" : "此操作不可恢复。"
+			}`,
+			confirmLabel: "删除",
+			danger: true,
+		});
+		if (!ok) return;
+		try {
+			const result = await api.deleteWorkspaceEntry(cwd, entry.path);
+			pushNotice("info", result.trashed ? `已移入回收站：${entry.path}` : `已删除：${entry.path}`);
+			refreshFiles();
+		} catch (e) {
+			pushNotice("error", errorText(e));
+		}
+	};
+
+	const copyPath = (path: string, absolute: boolean) => {
+		const text = absolute && cwd ? `${cwd}/${path}` : path;
+		void navigator.clipboard.writeText(text).then(
+			() => pushNotice("info", `已复制：${text}`),
+			() => pushNotice("error", "复制失败"),
+		);
+	};
+
+	const runShell = async (action: (root: string, path: string) => Promise<unknown>, path: string, label: string) => {
+		if (!cwd) return;
+		try {
+			await action(cwd, path);
+		} catch (e) {
+			pushNotice("error", `${label}失败：${errorText(e)}`);
+		}
+	};
 
 	/** 本会话修改过的文件，在树中标注 */
 	const changed = useMemo(() => {
@@ -83,6 +176,10 @@ export function ProjectFiles() {
 			return (
 				<div key={entry.path}>
 					<div
+						onContextMenu={(e) => {
+							e.preventDefault();
+							setMenu({ x: e.clientX, y: e.clientY, entry });
+						}}
 						className={`group flex items-center gap-1 py-[3px] pr-2 ${active ? "bg-accent-soft" : "hover:bg-panel-2"} ${
 							entry.ignored ? "text-muted/70" : ""
 						}`}
@@ -133,6 +230,32 @@ export function ProjectFiles() {
 		});
 	};
 
+	const menuItems: MenuItem[] = (() => {
+		const entry = menu?.entry ?? null;
+		const dir = entry ? (entry.type === "dir" ? entry.path : null) : "";
+		const items: MenuItem[] = [];
+		if (entry) {
+			items.push({ label: "引用到 Agent", onClick: () => insertIntoPrompt(entry.path) });
+			items.push({ label: "复制相对路径", onClick: () => copyPath(entry.path, false) });
+			items.push({ label: "复制绝对路径", onClick: () => copyPath(entry.path, true) });
+			if (isDesktop) items.push({ label: "在文件夹中显示", onClick: () => void runShell(api.revealWorkspaceEntry, entry.path, "定位") });
+			items.push({ separator: true, label: "" });
+		}
+		if (dir !== null) {
+			if (isDesktop) items.push({ label: "在终端中打开此文件夹", onClick: () => void runShell(api.openTerminalAt, dir, "打开终端") });
+			items.push({ label: "新建文件", onClick: () => void createEntry(dir, "file") });
+			items.push({ label: "新建文件夹", onClick: () => void createEntry(dir, "dir") });
+		}
+		if (entry) {
+			items.push({ separator: true, label: "" });
+			items.push({ label: "移动到…", onClick: () => void moveEntry(entry) });
+			items.push({ label: "重命名", onClick: () => void renameEntry(entry) });
+			items.push({ separator: true, label: "" });
+			items.push({ label: "删除", danger: true, onClick: () => void removeEntry(entry) });
+		}
+		return items;
+	})();
+
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			<div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
@@ -158,7 +281,16 @@ export function ProjectFiles() {
 					↻
 				</button>
 			</div>
-			<div className="term min-h-0 flex-1 overflow-y-auto py-1 text-[12px] leading-5">
+			<div
+				onContextMenu={(e) => {
+					// 空白处右键：针对工作区根目录
+					if (e.target === e.currentTarget) {
+						e.preventDefault();
+						setMenu({ x: e.clientX, y: e.clientY, entry: null });
+					}
+				}}
+				className="term min-h-0 flex-1 overflow-y-auto py-1 text-[12px] leading-5"
+			>
 				{error && <div className="px-3 py-1 text-err">{error}</div>}
 				{filter.trim() ? (
 					<>
@@ -208,6 +340,7 @@ export function ProjectFiles() {
 					renderDir("", 0)
 				)}
 			</div>
+			{menu && <Menu items={menuItems} position={{ x: menu.x, y: menu.y }} onClose={() => setMenu(null)} />}
 		</div>
 	);
 }
