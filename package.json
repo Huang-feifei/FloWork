@@ -1,6 +1,6 @@
 {
   "name": "flowork",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "FloWork — 以 pi coding agent 为内核、以对话为中心的桌面应用",
   "type": "module",
