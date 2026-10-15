@@ -43,12 +43,15 @@ const COMMON = new Set([
 	"minimax",
 ]);
 
-/** 支持订阅登录的供应商不放「常用」，需要时到「订阅登录」筛选里找 */
-function supportsSubscription(provider: ProviderInfo): boolean {
-	return provider.authMethods.includes("oauth_subscription");
+/**
+ * 本应用只提供 API Key 与普通 OAuth 登录，不提供订阅登录；
+ * 这里把订阅登录从可用方式里排除，供「是否值得展示」和计数使用。
+ */
+function usableAuthMethods(provider: ProviderInfo): ProviderInfo["authMethods"] {
+	return provider.authMethods.filter((m) => m !== "oauth_subscription");
 }
 
-type Filter = "common" | "all" | "configured" | "domestic" | "subscription";
+type Filter = "common" | "all" | "configured" | "domestic";
 
 const SOURCE_LABEL: Record<string, string> = {
 	stored: "auth.json",
@@ -93,7 +96,8 @@ function ProviderRow({ provider, models }: { provider: ProviderInfo; models: Mod
 	};
 
 	const hasApiKey = provider.authMethods.includes("api_key");
-	const oauth = provider.authMethods.find((m) => m === "oauth" || m === "oauth_subscription");
+	/** 只认普通 OAuth；订阅登录入口已移除 */
+	const oauth = provider.authMethods.find((m) => m === "oauth");
 
 	return (
 		<div className="border-b border-border last:border-b-0">
@@ -114,7 +118,6 @@ function ProviderRow({ provider, models }: { provider: ProviderInfo; models: Mod
 						) : (
 							<Badge>未配置</Badge>
 						)}
-						{provider.authMethods.includes("oauth_subscription") && <Badge tone="warn">支持订阅登录</Badge>}
 						{provider.authMethods.includes("ambient") && <Badge>使用环境凭据</Badge>}
 						<span>{provider.modelCount} 个模型</span>
 					</div>
@@ -127,7 +130,7 @@ function ProviderRow({ provider, models }: { provider: ProviderInfo; models: Mod
 					)}
 					{oauth && (
 						<Button size="sm" onClick={() => void startLogin(provider.id, provider.name, "oauth")}>
-							{oauth === "oauth_subscription" ? "订阅登录" : "OAuth 登录"}
+							OAuth 登录
 						</Button>
 					)}
 					{provider.configured && provider.authSource === "stored" && (
@@ -196,29 +199,33 @@ export function ProvidersTab() {
 		};
 	}, [configVersion]);
 
-	/** 常用视图：主流供应商 + 已配置的（含自定义端点）；支持订阅登录的排除在外 */
-	const isCommon = (p: ProviderInfo) => (COMMON.has(p.id) && !supportsSubscription(p)) || p.configured;
+	/** 常用视图：主流供应商 + 已配置的（含自定义端点） */
+	const isCommon = (p: ProviderInfo) => COMMON.has(p.id) || p.configured;
+
+	/** 没有可用登录方式且未配置的供应商不展示（例如只剩订阅登录的 OpenAI Codex legacy） */
+	const isUsable = (p: ProviderInfo) => usableAuthMethods(p).length > 0 || p.configured;
 
 	const visible = useMemo(() => {
 		const q = query.trim().toLowerCase();
 		return providers
+			.filter(isUsable)
 			.filter((p) => {
 				if (filter === "common") return isCommon(p);
 				if (filter === "configured") return p.configured;
 				if (filter === "domestic") return DOMESTIC.has(p.id);
-				if (filter === "subscription") return supportsSubscription(p);
 				return true;
 			})
 			.filter((p) => !q || p.id.includes(q) || p.name.toLowerCase().includes(q))
 			.sort((a, b) => Number(b.configured) - Number(a.configured) || a.name.localeCompare(b.name));
 	}, [providers, filter, query]);
 
+	// 计数基于可展示的供应商，否则「全部」的数字会比列表多
+	const usable = providers.filter(isUsable);
 	const counts = {
-		common: providers.filter(isCommon).length,
-		all: providers.length,
-		configured: providers.filter((p) => p.configured).length,
-		domestic: providers.filter((p) => DOMESTIC.has(p.id)).length,
-		subscription: providers.filter(supportsSubscription).length,
+		common: usable.filter(isCommon).length,
+		all: usable.length,
+		configured: usable.filter((p) => p.configured).length,
+		domestic: usable.filter((p) => DOMESTIC.has(p.id)).length,
 	};
 
 	return (
@@ -230,7 +237,6 @@ export function ProvidersTab() {
 						["all", "全部"],
 						["configured", "已配置"],
 						["domestic", "国内"],
-						["subscription", "订阅登录"],
 					] as const
 				).map(([id, label]) => (
 					<Button key={id} size="sm" variant={filter === id ? "primary" : "default"} onClick={() => setFilter(id)}>
@@ -247,7 +253,7 @@ export function ProvidersTab() {
 
 			<div className="mb-3 rounded-md border border-border bg-panel px-3 py-2 text-[11px] leading-5 text-muted">
 				凭据优先级：auth.json（这里登录保存的）&gt; models.json 中的 apiKey &gt; 环境变量。API Key 以明文保存在
-				配置目录的 auth.json 中（桌面版计划改为系统加密存储）。订阅登录是否允许在第三方客户端使用，以各家服务条款为准。
+				配置目录的 auth.json 中（桌面版计划改为系统加密存储）。
 			</div>
 
 			{error && <div className="mb-3 rounded border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">{error}</div>}

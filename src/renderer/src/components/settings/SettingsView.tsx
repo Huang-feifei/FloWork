@@ -12,7 +12,7 @@ import { RawConfigTab } from "./RawConfigTab";
 import { ResourcesTab } from "./ResourcesTab";
 
 const TABS: Array<{ id: SettingsTab; label: string; icon: IconName; desc: string }> = [
-	{ id: "providers", label: "模型供应商", icon: "cpu", desc: "pi 内置的供应商：填写 API Key 或订阅登录，并测试连接。写入 auth.json。" },
+	{ id: "providers", label: "模型供应商", icon: "cpu", desc: "pi 内置的供应商：填写 API Key 并测试连接。写入 auth.json。" },
 	{ id: "custom", label: "自定义端点", icon: "git-fork", desc: "OpenAI / Anthropic 兼容接口、本地模型、中转服务，写入 models.json。" },
 	{ id: "resources", label: "技能与扩展", icon: "files", desc: "当前项目可用的技能、扩展、提示模板与 pi 包；导入、启用 / 禁用、删除。" },
 	{ id: "preferences", label: "偏好设置", icon: "settings", desc: "默认模型、工具、Shell、代理等 pi 设置，写入 settings.json。" },
