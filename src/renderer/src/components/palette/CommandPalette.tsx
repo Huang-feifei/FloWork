@@ -77,7 +77,7 @@ export function CommandPalette() {
 				{ icon: "messages", label: "回到会话", when: true, run: () => s.setView("chat") },
 				{ icon: "globe", label: "打开内置浏览器", when: true, run: () => { s.setView("chat"); s.setRightPanel("browser"); } },
 				{ icon: "files", label: "显示项目文件", when: true, run: () => s.setRightPanel("files") },
-				{ icon: "list-tree", label: "显示会话树", when: true, run: () => s.setRightPanel("tree") },
+				{ icon: "list-tree", label: "切换会话树轨道", when: true, run: () => s.toggleRail() },
 			] as Array<Omit<Item, "run"> & { when: boolean; run: () => void }>
 		)
 			.filter((c) => c.when && hit(c.label))

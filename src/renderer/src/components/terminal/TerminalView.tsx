@@ -10,6 +10,7 @@ import { ApprovalPanel } from "./ApprovalPanel";
 import { ExtDialogPanel, ExtWidgets } from "./ExtDialogPanel";
 import { ImageThumb } from "./ImageThumb";
 import { Spinner, useElapsed } from "./Spinner";
+import { SessionRail } from "./SessionRail";
 import { SlashMenu, useSlashMenu } from "./SlashMenu";
 import { Transcript } from "./Transcript";
 import { TrustBanner } from "./TrustBanner";
@@ -572,6 +573,7 @@ export function TerminalView() {
 					</div>
 				</div>
 			</div>
+			<SessionRail />
 			<RightPanel />
 			<QuickOpen />
 		</div>

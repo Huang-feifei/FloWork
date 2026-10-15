@@ -4,12 +4,10 @@ import { type RightPanel as Panel, useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
 import { ProjectFiles } from "./ProjectFiles";
 import { SessionFiles } from "./SessionFiles";
-import { SessionTree } from "./SessionTree";
 
 export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string }> = [
 	{ id: "files", label: "项目文件", hint: "浏览工作区目录" },
 	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
-	{ id: "tree", label: "会话树", hint: "回到任意节点、分叉" },
 	{ id: "browser", label: "浏览器", hint: "在聊天旁浏览网页（桌面版）" },
 ];
 
@@ -97,7 +95,6 @@ export function RightPanel() {
 			</div>
 			{panel === "files" && <ProjectFiles />}
 			{panel === "session" && <SessionFiles />}
-			{panel === "tree" && <SessionTree />}
 			{isBrowser && <BrowserPanel />}
 		</aside>
 	);

@@ -94,5 +94,58 @@
 		streaming: null,
 		isRunning: false,
 		pendingApprovals: [],
+
+		// 会话树示例：主干 12 条 + 一个被放弃的分支（4 条）+ 当前分支（3 条，leaf 在末尾），
+		// 用于检查会话树窄轨的形态（亮条 = 当前分支，暗条 = 其他分支）
+		tree: demoTree(),
+		leafId: "c4",
 	});
+
+	function demoTree() {
+		let seq = 0;
+		const treeNode = (id, parentId, role, preview, children = []) => ({
+			id,
+			parentId,
+			entryType: "message",
+			role,
+			preview,
+			timestamp: new Date(t - (40 - seq++) * 60_000).toISOString(),
+			children,
+		});
+		const labels = [
+			["user", "看一下 src/renderer/src/lib/format.ts，relativeTime 对未来时间的处理有问题"],
+			["assistant", "我先读一下文件，确认 diff 的计算方式。"],
+			["user", "未来时间会显示成“刚刚”，不对。"],
+			["assistant", "确认了：diff 为负数时会落到“刚刚”分支。"],
+			["user", "那就加一个未来时间分支。"],
+			["assistant", "加 `if (diff < 0)` 返回完整日期。"],
+			["user", "调用方会不会依赖这个字符串格式？"],
+			["assistant", "只有侧边栏列表在用，不依赖格式。"],
+			["user", "好，那就这么改。"],
+			["assistant", "已改，跑一下类型检查。"],
+			["user", "顺便看下还有哪里用到 relativeTime。"],
+			["assistant", "只有两处，都是展示用途。"],
+		];
+		let root = null;
+		let prev = null;
+		for (let i = 0; i < labels.length; i++) {
+			const [role, preview] = labels[i];
+			const node = treeNode(`n${i + 1}`, i === 0 ? null : `n${i}`, role, preview);
+			if (prev) prev.children.push(node);
+			else root = node;
+			prev = node;
+		}
+		const abandoned = treeNode("b1", "n12", "user", "换个思路：不改成完整日期，直接返回“N 天后”", [
+			treeNode("b2", "b1", "assistant", "那要额外处理跨月与跨年，我先看调用方…", [
+				treeNode("b3", "b2", "user", "算了，先别动调用方", [treeNode("b4", "b3", "assistant", "好，那我先只改 relativeTime 自身。")]),
+			]),
+		]);
+		const current = treeNode("c1", "n12", "user", "还是只加未来时间分支吧", [
+			treeNode("c2", "c1", "assistant", "明白，只加 `diff < 0` 分支，不动其他逻辑。", [
+				treeNode("c3", "c2", "user", "顺便跑一下类型检查", [treeNode("c4", "c3", "assistant", "类型检查通过，改动收敛到一个分支。")]),
+			]),
+		]);
+		prev.children.push(abandoned, current);
+		return [root];
+	}
 })();

@@ -71,6 +71,7 @@ function Location() {
 export function TitleBar() {
 	const sidebarOpen = useApp((s) => s.sidebarOpen);
 	const rightPanel = useApp((s) => s.rightPanel);
+	const railVisible = useApp((s) => s.railVisible);
 	const terminalPanel = useApp((s) => s.terminalPanel);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const [open, setOpen] = useState<{ name: MenuName; x: number; y: number } | null>(null);
@@ -102,7 +103,7 @@ export function TitleBar() {
 					{ label: "新建会话", hint: isMac ? "⌘N" : "Ctrl+N", disabled: !hasProject, onClick: () => void s.newSession() },
 					{ separator: true, label: "" },
 					{ label: "审查本会话的修改", disabled: !hasProject, onClick: () => s.setView("review") },
-					{ label: "会话树", disabled: !hasProject, onClick: () => s.setRightPanel("tree") },
+					{ label: railVisible ? "隐藏会话树轨道" : "显示会话树轨道", disabled: !hasProject, onClick: () => s.toggleRail() },
 				];
 			case "终端":
 				return [

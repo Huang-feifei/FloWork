@@ -218,6 +218,15 @@ html[data-theme="light"] .fw-wallpaper {
 
 /* ---------- 终端式会话区 ---------- */
 
+/* 会话树窄轨：默认滚动条（10px）会挤掉横条宽度，直接隐藏 */
+.fw-rail {
+	scrollbar-width: none;
+}
+.fw-rail::-webkit-scrollbar {
+	width: 0;
+	height: 0;
+}
+
 .term {
 	font-family: var(--font-mono);
 	font-size: 13px;

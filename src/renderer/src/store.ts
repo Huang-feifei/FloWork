@@ -49,7 +49,7 @@ export interface Notice {
 }
 
 export type View = "welcome" | "chat" | "review" | "settings";
-export type RightPanel = "files" | "session" | "tree" | "browser";
+export type RightPanel = "files" | "session" | "browser";
 export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
@@ -98,8 +98,10 @@ interface AppState extends SessionSlice {
 	approvalMode: ApprovalMode;
 	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息）；seq 变化时输入框读取 */
 	draft: { text: string; seq: number; append?: boolean };
-	/** 右侧面板：项目文件 / 会话文件 / 会话树 / 浏览器；null 表示收起 */
+	/** 右侧面板：项目文件 / 会话文件 / 浏览器；null 表示收起 */
 	rightPanel: RightPanel | null;
+	/** 会话树窄轨是否显示（贴会话区右缘） */
+	railVisible: boolean;
 	/** 左侧项目栏是否展开（Ctrl+B） */
 	sidebarOpen: boolean;
 	/** Ctrl+P 快速打开文件弹窗 */
@@ -151,6 +153,8 @@ interface AppState extends SessionSlice {
 	/** 应答扩展对话框；response 为空表示取消 */
 	respondExtUI(id: string, response: { value?: string; confirmed?: boolean } | null): Promise<void>;
 	setRightPanel(panel: RightPanel | null): void;
+	/** 显示 / 隐藏会话树窄轨 */
+	toggleRail(): void;
 	toggleSidebar(): void;
 	setQuickOpen(open: boolean): void;
 	setPalette(open: boolean, mode?: PaletteMode): void;
@@ -174,12 +178,18 @@ const LAST_PROJECT_KEY = "flowork.lastProject";
 const LEGACY_LAST_CWD_KEY = "flowork.lastCwd";
 const APPROVAL_KEY = "flowork.approvalMode";
 const PANEL_KEY = "flowork.rightPanel";
+const RAIL_KEY = "flowork.sessionRail";
 const SIDEBAR_KEY = "flowork.sidebarOpen";
 const EXPANDED_KEY = "flowork.expandedProjects";
 
 function storedPanel(): RightPanel | null {
 	const v = localStorage.getItem(PANEL_KEY);
-	return v === "files" || v === "session" || v === "tree" || v === "browser" ? v : null;
+	return v === "files" || v === "session" || v === "browser" ? v : null;
+}
+
+/** 会话树窄轨默认显示；只有显式关过才隐藏 */
+function storedRail(): boolean {
+	return localStorage.getItem(RAIL_KEY) !== "0";
 }
 
 function storedApprovalMode(): ApprovalMode {
@@ -319,7 +329,7 @@ export const useApp = create<AppState>()((set, get) => {
 			toolRuns: {},
 			pendingApprovals: [],
 		} : null);
-		if (sliceOf(pid)?.handleId === owner.handleId && pid === get().activeProjectId && get().rightPanel === "tree") void get().loadTree();
+		if (sliceOf(pid)?.handleId === owner.handleId && pid === get().activeProjectId && get().railVisible) void get().loadTree();
 	}
 
 	async function loadModelsFor(pid: string): Promise<void> {
@@ -337,7 +347,7 @@ export const useApp = create<AppState>()((set, get) => {
 			case "agent_settled":
 				void get().refreshProjectSessions(pid);
 				if (isActive) {
-					if (get().rightPanel === "tree") void get().loadTree();
+					if (get().railVisible) void get().loadTree();
 					get().refreshFiles();
 				} else {
 					set((st) => ({ unread: { ...st.unread, [pid]: true } }));
@@ -399,6 +409,7 @@ export const useApp = create<AppState>()((set, get) => {
 		approvalMode: storedApprovalMode(),
 		draft: { text: "", seq: 0 },
 		rightPanel: storedPanel(),
+		railVisible: storedRail(),
 		sidebarOpen: localStorage.getItem(SIDEBAR_KEY) !== "0",
 		quickOpen: false,
 		palette: { open: false, query: "", mode: "all" },
@@ -779,7 +790,13 @@ export const useApp = create<AppState>()((set, get) => {
 		setRightPanel(panel) {
 			localStorage.setItem(PANEL_KEY, panel ?? "");
 			set({ rightPanel: panel });
-			if (panel === "tree") void get().loadTree();
+		},
+
+		toggleRail() {
+			const next = !get().railVisible;
+			localStorage.setItem(RAIL_KEY, next ? "1" : "0");
+			set({ railVisible: next });
+			if (next) void get().loadTree();
 		},
 
 		toggleSidebar() {
@@ -828,6 +845,8 @@ export const useApp = create<AppState>()((set, get) => {
 			}
 			const result = await active((h) => api.session(h, { type: "navigate_tree", entryId }));
 			if (result?.editorText) set((s) => ({ draft: { text: result.editorText ?? "", seq: s.draft.seq + 1 } }));
+			// 回溯会移动 leaf，轨道上的当前位置要跟着走
+			void get().loadTree();
 		},
 
 		async forkFrom(entryId, position) {
