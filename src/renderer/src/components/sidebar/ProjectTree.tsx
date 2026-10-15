@@ -10,6 +10,7 @@ import { relativeTime } from "../../lib/format";
 import { projectName, useApp } from "../../store";
 import { Spinner } from "../terminal/Spinner";
 import { askText } from "../PromptDialog";
+import { askConfirm } from "../ConfirmDialog";
 import { Menu, type MenuItem } from "./Menu";
 
 /** 一个排序区域：置顶 / 某个分组 / 未分组 */
@@ -348,8 +349,8 @@ function SectionHeader({ section, onDropOn }: { section: Section; onDropOn: (e: 
 				{
 					label: "删除分组",
 					danger: true,
-					onClick: () => {
-						if (window.confirm(`删除分组「${group.name}」？组内项目会移到“未分组”。`))
+					onClick: async () => {
+						if (await askConfirm({ title: "删除分组", message: `删除分组「${group.name}」？组内项目会移到“未分组”。`, confirmLabel: "删除", danger: true }))
 							void api.projects.groupRemove(group.id).catch((e: unknown) => pushNotice("error", errorText(e)));
 					},
 				},

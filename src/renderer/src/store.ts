@@ -23,6 +23,7 @@ import {
 } from "@shared/protocol";
 import { api, errorText } from "./api/client";
 import type { ConnectionStatus } from "./api/transport";
+import { askConfirm } from "./components/ConfirmDialog";
 import { disposeTerminal } from "./components/terminal/TerminalPanel";
 import { getRecentCwds } from "./lib/recent";
 import { emptySlice, pickSlice, reduceEvent, type SessionSlice, waitingCount } from "./session-slice";
@@ -548,7 +549,7 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async stopProject(pid) {
 			const slice = sliceOf(pid);
-			if (slice?.isRunning && !window.confirm("该项目有任务正在运行，停止后任务会中断。继续？")) return;
+			if (slice?.isRunning && !(await askConfirm({ title: "停止项目", message: "该项目有任务正在运行，停止后任务会中断。继续？", confirmLabel: "停止", danger: true }))) return;
 			// 项目被关闭时连同它的终端一起释放；收起面板、切项目只是隐藏终端实例
 			const target = project(pid);
 			if (target) disposeTerminal(target.path);
@@ -570,7 +571,7 @@ export const useApp = create<AppState>()((set, get) => {
 		async removeProject(pid) {
 			const p = project(pid);
 			if (!p) return;
-			if (!window.confirm(`从列表中移除「${projectName(p)}」？\n不会删除文件夹和会话记录，之后可以重新导入。`)) return;
+			if (!(await askConfirm({ title: "移除项目", message: `从列表中移除「${projectName(p)}」？\n不会删除文件夹和会话记录，之后可以重新导入。`, confirmLabel: "移除", danger: true }))) return;
 			await get().stopProject(pid);
 			try {
 				set({ projects: await api.projects.remove(pid) });
@@ -634,7 +635,7 @@ export const useApp = create<AppState>()((set, get) => {
 				return;
 			}
 			const summary = get().projectSessions[pid]?.find((s) => normalizedPath(s.path) === normalizedPath(path));
-			if (!window.confirm(`永久删除会话「${summary?.name || summary?.firstMessage || "（空会话）"}」？\n只删除该会话记录，不删除项目文件，也不删除分叉会话。此操作无法撤销。`)) return;
+			if (!(await askConfirm({ title: "删除会话", message: `永久删除会话「${summary?.name || summary?.firstMessage || "（空会话）"}」？\n只删除该会话记录，不删除项目文件，也不删除分叉会话。此操作无法撤销。`, confirmLabel: "删除", danger: true }))) return;
 			const key = operationKey(p.path, path);
 			const targetOwners = owners(p.path, path);
 			const current = targetOwners.find(([ownerPid]) => ownerPid === get().activeProjectId);

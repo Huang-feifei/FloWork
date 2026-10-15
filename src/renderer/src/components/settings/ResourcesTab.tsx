@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { ResourceInfo, ResourceKind, ResourcesResult } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { projectName, useApp } from "../../store";
+import { askConfirm } from "../ConfirmDialog";
 import { Badge, Button, Input, Select } from "../ui";
 
 const KIND_LABEL: Record<ResourceKind, string> = { skill: "技能", extension: "扩展", prompt: "提示模板" };
@@ -77,8 +78,8 @@ function ResourceRow({ r, cwd, onChanged }: { r: ResourceInfo; cwd: string; onCh
 						size="sm"
 						variant="danger"
 						disabled={busy}
-						onClick={() => {
-							if (!window.confirm(`删除${KIND_LABEL[r.kind]}「${r.name}」？\n会删除磁盘上的文件：${r.path}`)) return;
+						onClick={async () => {
+							if (!(await askConfirm({ title: "删除资源", message: `删除${KIND_LABEL[r.kind]}「${r.name}」？\n会删除磁盘上的文件：${r.path}`, confirmLabel: "删除", danger: true }))) return;
 							void run(() => api.service({ type: "remove_resource", cwd, kind: r.kind, path: r.path }), `已删除 ${r.name}`);
 						}}
 					>
@@ -260,8 +261,8 @@ export function ResourcesTab() {
 								<Button
 									size="sm"
 									variant="danger"
-									onClick={() => {
-										if (!window.confirm(`卸载 ${p.source}？`)) return;
+									onClick={async () => {
+										if (!(await askConfirm({ title: "卸载 pi 包", message: `卸载 ${p.source}？`, confirmLabel: "卸载", danger: true }))) return;
 										void api
 											.service({ type: "remove_package", cwd, source: p.source, scope: p.scope })
 											.then(() => load(), (e: unknown) => pushNotice("error", errorText(e)));

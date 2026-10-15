@@ -9,6 +9,7 @@ import { type FilePreview as Preview, WRITE_CONFLICT_PREFIX } from "@shared/prot
 import { api, errorText } from "../../api/client";
 import { collectSessionFiles } from "../../lib/session-files";
 import { useApp } from "../../store";
+import { askConfirm } from "../ConfirmDialog";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 
@@ -92,8 +93,8 @@ export function FilePreview() {
 		);
 	}, [filesVersion]);
 
-	const close = useCallback(() => {
-		if (dirty && !window.confirm("有未保存的修改，确定关闭？")) return;
+	const close = useCallback(async () => {
+		if (dirty && !(await askConfirm({ title: "关闭文件", message: "有未保存的修改，确定关闭？", confirmLabel: "关闭", danger: true }))) return;
 		openPreview(null);
 	}, [dirty, openPreview]);
 
@@ -123,7 +124,7 @@ export function FilePreview() {
 		const onKey = (e: KeyboardEvent) => {
 			if (e.key === "Escape") {
 				e.stopImmediatePropagation();
-				close();
+				void close();
 			}
 		};
 		window.addEventListener("keydown", onKey, true);
@@ -169,8 +170,8 @@ export function FilePreview() {
 					<>
 						<button
 							type="button"
-							onClick={() => {
-								if (dirty && !window.confirm("放弃未保存的修改？")) return;
+							onClick={async () => {
+								if (dirty && !(await askConfirm({ title: "放弃修改", message: "放弃未保存的修改？", confirmLabel: "放弃", danger: true }))) return;
 								setEditing(false);
 								setDraft(normalizeEol(file?.text ?? ""));
 								setRevision((r) => r + 1);
@@ -202,7 +203,7 @@ export function FilePreview() {
 				>
 					复制路径
 				</button>
-				<button type="button" onClick={close} title="关闭（Esc）" className="px-1 text-muted hover:text-fg">
+				<button type="button" onClick={() => void close()} title="关闭（Esc）" className="px-1 text-muted hover:text-fg">
 					✕
 				</button>
 			</div>
@@ -212,8 +213,8 @@ export function FilePreview() {
 					<span className="flex-1">文件在你打开之后已被修改（可能是 AI 或其他程序）。保存会被拒绝，以免覆盖对方的改动。</span>
 					<button
 						type="button"
-						onClick={() => {
-							if (dirty && !window.confirm("重新加载会丢弃你未保存的修改，继续？")) return;
+						onClick={async () => {
+							if (dirty && !(await askConfirm({ title: "重新加载", message: "重新加载会丢弃你未保存的修改，继续？", confirmLabel: "重新加载", danger: true }))) return;
 							setEditing(false);
 							void load();
 						}}

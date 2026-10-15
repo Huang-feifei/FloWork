@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { THINKING_LEVELS } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
+import { askConfirm } from "../ConfirmDialog";
 import { thinkingLabel } from "../../lib/format";
 import { Badge, Button, Field, Input, Select } from "../ui";
 import { isMtimeConflict, parseObject, useConfigFile } from "./useConfigFile";
@@ -572,7 +573,7 @@ export function CustomProvidersTab() {
 	};
 
 	const remove = async (key: string) => {
-		if (!parsed || !window.confirm(`从 models.json 删除供应商 ${key}？`)) return;
+		if (!parsed || !(await askConfirm({ title: "删除供应商", message: `从 models.json 删除供应商 ${key}？`, confirmLabel: "删除", danger: true }))) return;
 		const nextProviders = { ...providers };
 		delete nextProviders[key];
 		try {

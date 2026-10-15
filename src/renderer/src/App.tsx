@@ -7,6 +7,7 @@ import { Button } from "./components/ui";
 import { ActivityBar } from "./components/ActivityBar";
 import { CommandPalette } from "./components/palette/CommandPalette";
 import { PromptDialog } from "./components/PromptDialog";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ReviewView } from "./components/review/ReviewView";
 import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
@@ -102,6 +103,7 @@ export function App() {
 				<DiscoverDialog />
 				<AuthDialog />
 				<PromptDialog />
+				<ConfirmDialog />
 				<CommandPalette />
 			</div>
 		</div>
