@@ -178,6 +178,12 @@ const PATHS = {
 			<path d="M19 12H5" />
 		</>
 	),
+	"arrow-down": (
+		<>
+			<path d="m5 12 7 7 7-7" />
+			<path d="M12 5v14" />
+		</>
+	),
 	"arrow-right": (
 		<>
 			<path d="m12 5 7 7-7 7" />

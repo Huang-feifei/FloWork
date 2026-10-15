@@ -5,7 +5,7 @@
  *   ✻ 思考过程（可展开）
  *   ● tool(参数)  ⎿ 结果
  */
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import type { ChatMessage, ContentBlock, ImageAttachment } from "@shared/protocol";
 import { parseSkillInvocation } from "@shared/skill-text";
 import { useApp } from "../../store";
@@ -91,7 +91,11 @@ function ThinkingLine({ text, live }: { text: string; live: boolean }) {
 	);
 }
 
-function AssistantBlocks({
+/**
+ * 历史消息用 memo 包住：流式输出时 messages 数组不变，只有正在生成的那条（streaming）重渲染，
+ * 不会把整段会话记录重新算一遍。
+ */
+const AssistantBlocks = memo(function AssistantBlocks({
 	message,
 	toolResults,
 	live,
@@ -100,9 +104,6 @@ function AssistantBlocks({
 	toolResults: ToolResultMap;
 	live: boolean;
 }) {
-	const toolRuns = useApp((s) => s.toolRuns);
-	const toolArgsText = useApp((s) => s.toolArgsText);
-	const cwd = useApp((s) => s.cwd);
 	const last = message.content.length - 1;
 
 	return (
@@ -125,9 +126,6 @@ function AssistantBlocks({
 							<ToolBlock
 								key={key}
 								call={block}
-								cwd={cwd}
-								argsText={toolArgsText[block.id]}
-								run={toolRuns[block.id]}
 								result={toolResults.get(block.id)}
 							/>
 						);
@@ -147,9 +145,9 @@ function AssistantBlocks({
 			)}
 		</>
 	);
-}
+});
 
-function MessageView({ message, toolResults }: { message: ChatMessage; toolResults: ToolResultMap }) {
+const MessageView = memo(function MessageView({ message, toolResults }: { message: ChatMessage; toolResults: ToolResultMap }) {
 	switch (message.role) {
 		case "user":
 			return <UserLine message={message} />;
@@ -168,7 +166,7 @@ function MessageView({ message, toolResults }: { message: ChatMessage; toolResul
 				</Gutter>
 			);
 	}
-}
+});
 
 export function Transcript() {
 	const messages = useApp((s) => s.messages);

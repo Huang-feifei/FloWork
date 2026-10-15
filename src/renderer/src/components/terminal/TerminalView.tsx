@@ -2,7 +2,7 @@
  * 会话区：会话头 + 会话记录（终端风格）+ 输入区（含工具栏）+ 右侧面板。
  * 窗口级的标题栏与状态栏在 App 中。
  */
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ApprovalMode, ImageAttachment, ThinkingLevel } from "@shared/protocol";
 import { useApp, waitingCount } from "../../store";
 import { Icon } from "../Icon";
@@ -517,13 +517,57 @@ export function TerminalView() {
 	const pendingCount = useApp((s) => waitingCount(s));
 	const abort = useApp((s) => s.abort);
 	const scrollRef = useRef<HTMLDivElement>(null);
+	const contentRef = useRef<HTMLDivElement>(null);
+	/** 是否跟随最新输出（用户上滚查看历史时置 false） */
 	const stickToBottom = useRef(true);
+	const [atBottom, setAtBottom] = useState(true);
+	const followFrame = useRef(0);
 
-	// 用户上滚查看历史时不强制滚到底部
+	/** 跟随滚动：每帧最多一次，直接写 scrollTop。不做动画，否则会一直追不上流式输出。 */
+	const follow = useCallback(() => {
+		if (followFrame.current) return;
+		followFrame.current = requestAnimationFrame(() => {
+			followFrame.current = 0;
+			const el = scrollRef.current;
+			if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
+		});
+	}, []);
+
+	// 内容长高就跟随：覆盖流式文本、工具输出、图片加载、Markdown 重排等所有情况
 	useEffect(() => {
+		const content = contentRef.current;
+		if (!content) return;
+		const observer = new ResizeObserver(follow);
+		observer.observe(content);
+		return () => observer.disconnect();
+	}, [follow]);
+
+	// 内容高度没变但状态变了（例如刚开始运行）也跟随一次
+	useEffect(() => {
+		follow();
+	}, [messages, streaming, isRunning, pendingCount, follow]);
+
+	useEffect(
+		() => () => {
+			if (followFrame.current) cancelAnimationFrame(followFrame.current);
+		},
+		[],
+	);
+
+	const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+		const el = e.currentTarget;
+		const bottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+		stickToBottom.current = bottom;
+		setAtBottom(bottom);
+	};
+
+	const scrollToBottom = () => {
 		const el = scrollRef.current;
-		if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
-	}, [messages, streaming, isRunning, pendingCount]);
+		if (!el) return;
+		stickToBottom.current = true;
+		setAtBottom(true);
+		el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+	};
 
 	// 运行中按 Esc 中断（焦点不在输入框时也生效）
 	useEffect(() => {
@@ -541,28 +585,44 @@ export function TerminalView() {
 			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-term">
 				<SessionHeader />
 				<FilePreview />
-				<div
-					ref={scrollRef}
-					onScroll={(e) => {
-						const el = e.currentTarget;
-						stickToBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-					}}
-					className="term min-h-0 flex-1 overflow-y-auto px-6 py-4"
-				>
-					<div className="mx-auto flex max-w-4xl flex-col gap-3">
-						<Welcome />
-						<TrustBanner />
-						{connecting ? (
-							<div className="text-muted">
-								<Spinner /> 正在启动 pi…
-							</div>
-						) : (
-							<Transcript />
-						)}
-						<ApprovalPanel />
-						<ExtDialogPanel />
-						<RunningLine />
+				<div className="relative min-h-0 flex-1">
+					<div
+						ref={scrollRef}
+						onScroll={onScroll}
+						className="term h-full overflow-y-auto px-6 py-4"
+					>
+						<div
+							ref={contentRef}
+							className="mx-auto flex max-w-4xl flex-col gap-3"
+						>
+							<Welcome />
+							<TrustBanner />
+							{connecting ? (
+								<div className="text-muted">
+									<Spinner /> 正在启动 pi…
+								</div>
+							) : (
+								<Transcript />
+							)}
+							<ApprovalPanel />
+							<ExtDialogPanel />
+							<RunningLine />
+						</div>
 					</div>
+					{!atBottom && (
+						<button
+							type="button"
+							onClick={scrollToBottom}
+							title="回到最新输出"
+							className="fw-float absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-strong px-3 py-1.5 text-[12px] text-muted hover:text-fg"
+						>
+							<Icon
+								name="arrow-down"
+								className="size-3.5"
+							/>
+							回到最新
+						</button>
+					)}
 				</div>
 				<div className="shrink-0 px-6 pt-1 pb-4">
 					<div className="mx-auto max-w-4xl">

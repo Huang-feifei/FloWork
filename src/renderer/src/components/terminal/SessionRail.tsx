@@ -1,5 +1,6 @@
 /**
- * 会话树窄轨：贴在会话区右缘的一条竖轨，每个可见树节点一个短横条。
+ * 会话树窄轨：贴在会话区右缘的一条竖轨，每个可见的**用户消息**一个短横条。
+ * 只保留用户输入，助手回复与工具调用不占横条，轨道因此短得多、定位更快。
  * 横条分三档：屏幕上看得到的节点最亮，当前分支上但已滚出屏幕的淡亮，其他分支最暗；
  * 当前位置始终加粗。悬停弹出卡片，可回溯 / 分叉 / 打标签。
  * 它是右侧面板「会话树」标签的替代形态，不再占用面板宽度。
@@ -52,7 +53,7 @@ export function SessionRail({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
 	const streaming = useApp((s) => s.streaming !== null);
 	const { navigateTo, forkFrom, setLabel } = useApp.getState();
 
-	const rows = useMemo(() => flattenTree(tree), [tree]);
+	const rows = useMemo(() => flattenTree(tree).filter((r) => r.node.entryType === "message" && r.node.role === "user"), [tree]);
 	const onPath = useMemo(() => activePath(tree, leafId), [tree, leafId]);
 	// 当前位置：leaf 本身可能是隐藏条目，取当前分支上最后一个可见行
 	const currentId = useMemo(() => [...rows].reverse().find((r) => onPath.has(r.node.id))?.node.id ?? null, [rows, onPath]);

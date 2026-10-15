@@ -4,7 +4,7 @@
  *     ⎿  输出前几行
  *        … 还有 N 行（点击展开）
  */
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { ContentBlock, ImageAttachment } from "@shared/protocol";
 import { type ToolRun, useApp } from "../../store";
 import { ImageThumb } from "./ImageThumb";
@@ -12,9 +12,6 @@ import { Spinner } from "./Spinner";
 
 interface Props {
 	call: Extract<ContentBlock, { type: "toolCall" }>;
-	cwd: string | null;
-	argsText?: string;
-	run?: ToolRun;
 	result?: { content: ContentBlock[]; details?: unknown; isError: boolean };
 }
 
@@ -91,8 +88,16 @@ function DiffView({ diff }: { diff: string }) {
 	);
 }
 
-export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
+/**
+ * 单个工具调用。
+ * 自己订阅 store 里按 id 切出的运行状态（而不是让整个会话记录订阅 toolRuns），
+ * 这样流式输出时只有真正变化的那一个工具块重渲染，配合 memo 让历史消息完全不动。
+ */
+export const ToolBlock = memo(function ToolBlock({ call, result }: Props) {
 	const [expanded, setExpanded] = useState(false);
+	const cwd = useApp((s) => s.cwd);
+	const argsText = useApp((s) => s.toolArgsText[call.id]);
+	const run: ToolRun | undefined = useApp((s) => s.toolRuns[call.id]);
 	const awaiting = useApp((s) => s.pendingApprovals.some((p) => p.toolCallId === call.id));
 	const isRunning = useApp((s) => s.isRunning);
 	const status = run?.status ?? (result ? (result.isError ? "error" : "done") : isRunning ? "pending" : "skipped");
@@ -198,4 +203,4 @@ export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 			</div>
 		</div>
 	);
-}
+});
