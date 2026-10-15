@@ -110,7 +110,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 
 打包内容只有 `out/main`、`out/preload`、`out/renderer` 与 package.json 里的生产依赖；网页版产物（`out/web`）与源码不进安装包。`node-pty` 与 `esbuild` 带原生模块 / 可执行文件，通过 `asarUnpack` 解包到 `app.asar.unpacked/`（asar 内的 `.node` 加载不到、`esbuild.exe` 也执行不了）。`npmRebuild` 关闭：node-pty 自带 N-API 预编译二进制，跨 Electron ABI 可用，不需要本地 C++ 工具链。
 
-安装包暂时使用 Electron 默认图标；发布前把 `icon.ico` 放到 `build/`（electron-builder 的默认资源目录）即可。
+应用图标在 `build/icon.ico`（electron-builder 的默认资源目录，打包时自动使用；`build/icon.png` 为界面用的大图）。
 
 发布版的安全边界：
 
