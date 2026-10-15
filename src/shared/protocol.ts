@@ -55,8 +55,12 @@ export type ImageAttachment = Extract<ContentBlock, { type: "image" }>;
 
 export type StopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted" | "deferred";
 
+/**
+ * 会话消息。历史消息带 `entryId`（会话树条目的 id），界面据此把消息与树节点对应；
+ * 流式消息还没落盘，没有 entryId。
+ */
 export type ChatMessage =
-	| { role: "user"; content: ContentBlock[]; timestamp: number }
+	| { role: "user"; content: ContentBlock[]; timestamp: number; entryId?: string }
 	| {
 			role: "assistant";
 			content: ContentBlock[];
@@ -66,6 +70,7 @@ export type ChatMessage =
 			errorMessage?: string;
 			usage?: Usage;
 			timestamp: number;
+			entryId?: string;
 	  }
 	| {
 			role: "toolResult";
@@ -75,6 +80,7 @@ export type ChatMessage =
 			details?: unknown;
 			isError: boolean;
 			timestamp: number;
+			entryId?: string;
 	  }
 	| {
 			/** bashExecution / custom / branchSummary / compactionSummary 等其他角色，统一以文本呈现 */
@@ -82,6 +88,7 @@ export type ChatMessage =
 			kind: string;
 			text: string;
 			timestamp: number;
+			entryId?: string;
 	  };
 
 export interface ProjectTrust {

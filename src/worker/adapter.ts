@@ -71,15 +71,16 @@ function toUsage(value: unknown): Usage | undefined {
 	};
 }
 
-/** 把 pi 的 AgentMessage 转成界面使用的 ChatMessage；system 消息返回 undefined */
-export function toChatMessage(raw: unknown): ChatMessage | undefined {
+/** 把 pi 的 AgentMessage 转成界面使用的 ChatMessage；system 消息返回 undefined。
+ *  entryId 是这条消息所属会话树条目的 id（历史消息才有）。 */
+export function toChatMessage(raw: unknown, entryId?: string): ChatMessage | undefined {
 	const m = asRecord(raw);
 	const timestamp = typeof m.timestamp === "number" ? m.timestamp : Date.now();
 	switch (m.role) {
 		case "system":
 			return undefined;
 		case "user":
-			return { role: "user", content: toContentBlocks(m.content), timestamp };
+			return { role: "user", content: toContentBlocks(m.content), timestamp, entryId };
 		case "assistant":
 			return {
 				role: "assistant",
@@ -90,6 +91,7 @@ export function toChatMessage(raw: unknown): ChatMessage | undefined {
 				errorMessage: typeof m.errorMessage === "string" ? m.errorMessage : undefined,
 				usage: toUsage(m.usage),
 				timestamp,
+				entryId,
 			};
 		case "toolResult":
 			return {
@@ -100,22 +102,23 @@ export function toChatMessage(raw: unknown): ChatMessage | undefined {
 				details: m.details,
 				isError: m.isError === true,
 				timestamp,
+				entryId,
 			};
 		case "bashExecution":
-			return { role: "note", kind: "bash", text: `$ ${str(m.command)}\n${str(m.output)}`, timestamp };
+			return { role: "note", kind: "bash", text: `$ ${str(m.command)}\n${str(m.output)}`, timestamp, entryId };
 		case "branchSummary":
-			return { role: "note", kind: "branchSummary", text: str(m.summary), timestamp };
+			return { role: "note", kind: "branchSummary", text: str(m.summary), timestamp, entryId };
 		case "compactionSummary":
-			return { role: "note", kind: "compactionSummary", text: str(m.summary), timestamp };
+			return { role: "note", kind: "compactionSummary", text: str(m.summary), timestamp, entryId };
 		case "custom": {
 			if (m.display === false) return undefined;
 			const text = toContentBlocks(m.content)
 				.map((b) => (b.type === "text" ? b.text : ""))
 				.join("");
-			return { role: "note", kind: `custom:${str(m.customType)}`, text, timestamp };
+			return { role: "note", kind: `custom:${str(m.customType)}`, text, timestamp, entryId };
 		}
 		default:
-			return { role: "note", kind: str(m.role, "unknown"), text: "", timestamp };
+			return { role: "note", kind: str(m.role, "unknown"), text: "", timestamp, entryId };
 	}
 }
 

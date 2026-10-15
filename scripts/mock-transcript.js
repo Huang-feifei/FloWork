@@ -4,7 +4,7 @@
 	const store = window.__floworkStore;
 	const t = Date.now();
 	const usage = (i, o) => ({ input: i, output: o, cacheRead: 0, cacheWrite: 0, totalTokens: i + o, cost: { total: (i * 0.27 + o * 1.1) / 1e6 } });
-	const a = (content, u, stop = "toolUse") => ({ role: "assistant", content, provider: "deepseek", model: "deepseek-v4-pro", stopReason: stop, usage: u, timestamp: t });
+	const a = (content, u, stop = "toolUse", entryId) => ({ role: "assistant", content, provider: "deepseek", model: "deepseek-v4-pro", stopReason: stop, usage: u, timestamp: t, entryId });
 	const tr = (id, name, text, details) => ({ role: "toolResult", toolCallId: id, toolName: name, content: [{ type: "text", text }], details, isError: false, timestamp: t });
 
 	const cwd = store.getState().cwd || "E:\\code\\ai-work\\FloWork";
@@ -51,7 +51,7 @@
 			messageCount: 6,
 		},
 		messages: [
-			{ role: "user", content: [{ type: "text", text: "看一下 src/renderer/src/lib/format.ts，relativeTime 对未来时间的处理有问题，帮我修一下并跑一下类型检查" }], timestamp: t },
+			{ role: "user", content: [{ type: "text", text: "看一下 src/renderer/src/lib/format.ts，relativeTime 对未来时间的处理有问题，帮我修一下并跑一下类型检查" }], timestamp: t, entryId: "n1" },
 			a(
 				[
 					{ type: "thinking", thinking: "先读文件，确认 relativeTime 的实现。\n未来时间 diff 为负数，会落到“刚刚”分支。" },
@@ -59,6 +59,8 @@
 					{ type: "toolCall", id: "c1", name: "read", arguments: { path: `${cwd}\\src\\renderer\\src\\lib\\format.ts` } },
 				],
 				usage(5200, 120),
+				"toolUse",
+				"n2",
 			),
 			tr(
 				"c1",
@@ -71,9 +73,11 @@
 					{ type: "toolCall", id: "c2", name: "edit", arguments: { path: `${cwd}\\src\\renderer\\src\\lib\\format.ts` } },
 				],
 				usage(6100, 260),
+				"toolUse",
+				"n3",
 			),
 			tr("c2", "edit", "Successfully replaced 1 block", { diff }),
-			a([{ type: "toolCall", id: "c3", name: "bash", arguments: { command: "npm run typecheck" } }], usage(6500, 40)),
+			a([{ type: "toolCall", id: "c3", name: "bash", arguments: { command: "npm run typecheck" } }], usage(6500, 40), "toolUse", "n4"),
 			tr("c3", "bash", "> flowork@0.1.0 typecheck\n> tsc --noEmit -p tsconfig.node.json\n> tsc --noEmit -p tsconfig.web.json\n"),
 			a(
 				[
@@ -84,6 +88,7 @@
 				],
 				usage(6900, 180),
 				"stop",
+				"c4",
 			),
 		],
 		toolRuns: {
@@ -95,8 +100,9 @@
 		isRunning: false,
 		pendingApprovals: [],
 
-		// 会话树示例：主干 12 条 + 一个被放弃的分支（4 条）+ 当前分支（3 条，leaf 在末尾），
-		// 用于检查会话树窄轨的形态（亮条 = 当前分支，暗条 = 其他分支）
+		// 会话树示例：主干 12 条 + 一个被放弃的分支（4 条）+ 当前分支（4 条，leaf 在末尾），
+		// 用于检查会话树窄轨的形态（最亮 = 屏幕上可见、淡亮 = 当前分支、最暗 = 其他分支）。
+		// 消息的 entryId 指向其中几条节点，其余节点不会随滚动变亮，仅用于截图检查。
 		tree: demoTree(),
 		leafId: "c4",
 	});

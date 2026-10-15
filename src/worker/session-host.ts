@@ -36,6 +36,23 @@ interface PendingApproval {
 	resolve: (decision: ApprovalDecision, reason?: string) => void;
 }
 
+/**
+ * 按顺序列出「每条消息属于哪个会话树条目」。
+ * pi 的 session.messages 是会话投影里消息的扁平列表，而每个投影条目带 sourceEntry.id，
+ * 所以可以按顺序一一对上；对不上（长度不一致）时返回空数组，界面会退化成只标当前位置。
+ */
+function messageEntryIds(session: AgentSession): string[] {
+	try {
+		const ids: string[] = [];
+		for (const entry of session.sessionManager.buildSessionProjection().entries) {
+			for (let i = 0; i < entry.messages.length; i++) ids.push(entry.sourceEntry.id);
+		}
+		return ids;
+	} catch {
+		return [];
+	}
+}
+
 export class SessionHost {
 	private runtime: AgentSessionRuntime | undefined;
 	private unsubscribe: (() => void) | undefined;
@@ -215,8 +232,14 @@ ${err.extensionPath}` });
 				return null;
 			case "get_state":
 				return this.stateOf();
-			case "get_messages":
-				return session.messages.flatMap((m) => toChatMessage(m) ?? []);
+			case "get_messages": {
+				const entryIds = messageEntryIds(session);
+				const aligned = entryIds.length === session.messages.length;
+				return session.messages.flatMap((m, i) => {
+					const message = toChatMessage(m, aligned ? entryIds[i] : undefined);
+					return message ? [message] : [];
+				});
+			}
 			case "get_tree":
 				return {
 					tree: toTree(session.sessionManager.getTree()),

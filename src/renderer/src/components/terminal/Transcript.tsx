@@ -184,10 +184,16 @@ export function Transcript() {
 
 	return (
 		<div className="flex flex-col gap-3">
-			{messages.map((m, i) => (
-				// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
-				<MessageView key={i} message={m} toolResults={toolResults} />
-			))}
+			{messages.map((m, i) =>
+				// 工具结果不单独成行，不需要 data-entry-id
+				m.role === "toolResult" ? null : (
+					// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
+					// data-entry-id 让会话树窄轨知道哪条消息在屏幕上
+					<div key={i} data-entry-id={m.entryId}>
+						<MessageView message={m} toolResults={toolResults} />
+					</div>
+				),
+			)}
 			{streaming && <AssistantBlocks message={streaming} toolResults={toolResults} live />}
 		</div>
 	);

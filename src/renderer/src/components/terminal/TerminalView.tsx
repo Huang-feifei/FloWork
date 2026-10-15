@@ -573,7 +573,7 @@ export function TerminalView() {
 					</div>
 				</div>
 			</div>
-			<SessionRail />
+			<SessionRail scrollRef={scrollRef} />
 			<RightPanel />
 			<QuickOpen />
 		</div>

@@ -1,9 +1,10 @@
 /**
  * 会话树窄轨：贴在会话区右缘的一条竖轨，每个可见树节点一个短横条。
- * 当前分支高亮、当前节点加粗；悬停弹出卡片，可回溯 / 分叉 / 打标签。
+ * 横条分三档：屏幕上看得到的节点最亮，当前分支上但已滚出屏幕的淡亮，其他分支最暗；
+ * 当前位置始终加粗。悬停弹出卡片，可回溯 / 分叉 / 打标签。
  * 它是右侧面板「会话树」标签的替代形态，不再占用面板宽度。
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SessionTreeNode } from "@shared/protocol";
 import { activePath, flattenTree, type TreeRow } from "../../lib/session-tree";
 import { relativeTime } from "../../lib/format";
@@ -36,11 +37,19 @@ function timeOf(node: SessionTreeNode): string {
 	return Number.isFinite(ms) ? relativeTime(ms) : "";
 }
 
-export function SessionRail() {
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+	if (a.size !== b.size) return false;
+	for (const id of b) if (!a.has(id)) return false;
+	return true;
+}
+
+export function SessionRail({ scrollRef }: { scrollRef: RefObject<HTMLDivElement | null> }) {
 	const tree = useApp((s) => s.tree);
 	const leafId = useApp((s) => s.leafId);
 	const isRunning = useApp((s) => s.isRunning);
-	const visible = useApp((s) => s.railVisible);
+	const railVisible = useApp((s) => s.railVisible);
+	const messageCount = useApp((s) => s.messages.length);
+	const streaming = useApp((s) => s.streaming !== null);
 	const { navigateTo, forkFrom, setLabel } = useApp.getState();
 
 	const rows = useMemo(() => flattenTree(tree), [tree]);
@@ -49,14 +58,60 @@ export function SessionRail() {
 	const currentId = useMemo(() => [...rows].reverse().find((r) => onPath.has(r.node.id))?.node.id ?? null, [rows, onPath]);
 
 	const wrapRef = useRef<HTMLDivElement>(null);
-	const scrollRef = useRef<HTMLDivElement>(null);
+	const scrollBoxRef = useRef<HTMLDivElement>(null);
 	const barRefs = useRef(new Map<string, HTMLButtonElement>());
 	const closeTimer = useRef<number | null>(null);
 	const [hover, setHover] = useState<{ id: string; top: number } | null>(null);
+	/** 当前屏幕上可见的消息所对应的条目 id */
+	const [inView, setInView] = useState<ReadonlySet<string>>(() => new Set());
+
+	/** 量一遍会话记录里哪些消息落在可视区内（消息元素带 data-entry-id） */
+	const measure = useCallback(() => {
+		const box = scrollRef.current;
+		if (!box) return;
+		const rect = box.getBoundingClientRect();
+		const next = new Set<string>();
+		for (const el of box.querySelectorAll<HTMLElement>("[data-entry-id]")) {
+			const r = el.getBoundingClientRect();
+			if (r.bottom > rect.top && r.top < rect.bottom) {
+				const id = el.dataset.entryId;
+				if (id) next.add(id);
+			}
+		}
+		setInView((prev) => (sameSet(prev, next) ? prev : next));
+	}, [scrollRef]);
+
+	// 滚动 / 尺寸变化时重算可视范围（每帧最多一次）
+	useEffect(() => {
+		const box = scrollRef.current;
+		if (!box || !railVisible || rows.length === 0) return;
+		let frame = 0;
+		const schedule = () => {
+			if (frame) return;
+			frame = requestAnimationFrame(() => {
+				frame = 0;
+				measure();
+			});
+		};
+		measure();
+		box.addEventListener("scroll", schedule, { passive: true });
+		const observer = new ResizeObserver(schedule);
+		observer.observe(box);
+		return () => {
+			box.removeEventListener("scroll", schedule);
+			observer.disconnect();
+			if (frame) cancelAnimationFrame(frame);
+		};
+	}, [scrollRef, measure, railVisible, rows.length]);
+
+	// 消息增减或流式内容变化后重新量一次
+	useEffect(() => {
+		if (railVisible && rows.length > 0) measure();
+	}, [measure, messageCount, streaming, railVisible, rows.length]);
 
 	// 当前位置始终留在可视区内（节点多时轨道内部滚动）
 	useEffect(() => {
-		const box = scrollRef.current;
+		const box = scrollBoxRef.current;
 		const bar = currentId ? barRefs.current.get(currentId) : null;
 		if (!box || !bar) return;
 		const top = bar.offsetTop;
@@ -80,12 +135,12 @@ export function SessionRail() {
 
 	const openCard = (id: string, bar: HTMLElement) => {
 		cancelClose();
-		const y = bar.offsetTop - (scrollRef.current?.scrollTop ?? 0);
+		const y = bar.offsetTop - (scrollBoxRef.current?.scrollTop ?? 0);
 		const height = wrapRef.current?.clientHeight ?? 0;
 		setHover({ id, top: Math.max(4, Math.min(y - 44, Math.max(4, height - 208))) });
 	};
 
-	if (!visible || rows.length === 0) return null;
+	if (!railVisible || rows.length === 0) return null;
 
 	const hovered = hover ? (rows.find((r) => r.node.id === hover.id) ?? null) : null;
 	const hoveredCurrent = hovered ? hovered.node.id === currentId : false;
@@ -98,13 +153,14 @@ export function SessionRail() {
 			style={{ width: RAIL_W }}
 		>
 			<div
-				ref={scrollRef}
+				ref={scrollBoxRef}
 				className="fw-rail relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-2"
 				onScroll={scheduleClose}
 			>
 				{rows.map((row) => {
-					const active = onPath.has(row.node.id);
 					const current = row.node.id === currentId;
+					const active = onPath.has(row.node.id);
+					const inViewport = inView.has(row.node.id);
 					const depth = Math.min(row.depth, MAX_INDENT);
 					return (
 						<button
@@ -128,7 +184,9 @@ export function SessionRail() {
 						>
 							{row.branchStart && <span className="absolute left-px h-1.5 w-px bg-border-strong" />}
 							<span
-								className={`rounded-full ${current ? "bg-accent-strong" : active ? "bg-accent" : "bg-border-strong"}`}
+								className={`rounded-full ${
+									current ? "bg-accent-strong" : inViewport ? "bg-accent" : active ? "bg-accent/40" : "bg-border-strong"
+								}`}
 								style={{
 									marginLeft: BAR_LEFT + depth * INDENT,
 									width: Math.max(6, BAR_W - depth * INDENT),
