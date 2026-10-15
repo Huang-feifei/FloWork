@@ -5,8 +5,9 @@
  *        … 还有 N 行（点击展开）
  */
 import { useState } from "react";
-import type { ContentBlock } from "@shared/protocol";
+import type { ContentBlock, ImageAttachment } from "@shared/protocol";
 import { type ToolRun, useApp } from "../../store";
+import { ImageThumb } from "./ImageThumb";
 import { Spinner } from "./Spinner";
 
 interface Props {
@@ -53,9 +54,14 @@ function describe(name: string, args: Record<string, unknown>, cwd: string | nul
 
 function textOf(content: ContentBlock[] | undefined): string {
 	return (content ?? [])
-		.map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[图片]" : ""))
+		.map((b) => (b.type === "text" ? b.text : ""))
 		.join("\n")
 		.replace(/\s+$/, "");
+}
+
+/** 工具结果里的图片（例如 read 读了一张图），单独渲染为缩略图 */
+function imagesOf(content: ContentBlock[] | undefined): ImageAttachment[] {
+	return (content ?? []).filter((b): b is ImageAttachment => b.type === "image");
 }
 
 function getDiff(details: unknown): string | undefined {
@@ -93,6 +99,7 @@ export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 	const final = run?.result ?? result;
 	const diff = getDiff(final?.details);
 	const output = textOf(final?.content);
+	const images = imagesOf(final?.content);
 	const lines = output ? output.split("\n") : [];
 	const summary = describe(call.name, call.arguments, cwd) || argsText || "";
 
@@ -114,8 +121,12 @@ export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 			</span>
 		);
 	} else if (call.name === "read" && status === "done") {
-		resultLine = <span className="text-muted">读取了 {lines.length} 行</span>;
-	} else if (!output) {
+		resultLine = (
+			<span className="text-muted">
+				{images.length > 0 ? `读取了 ${images.length} 张图片` : `读取了 ${lines.length} 行`}
+			</span>
+		);
+	} else if (!output && images.length === 0) {
 		resultLine = <span className="text-muted">{status === "error" ? "失败" : "完成，无输出"}</span>;
 	}
 
@@ -151,6 +162,14 @@ export function ToolBlock({ call, cwd, argsText, run, result }: Props) {
 					<span className="text-muted">⎿</span>
 					<div className="min-w-0">
 						{resultLine}
+						{images.length > 0 && (
+							<div className="mt-1 flex flex-wrap gap-2">
+								{images.map((image, i) => (
+									// biome-ignore lint/suspicious/noArrayIndexKey: 工具结果内容块按位置稳定，没有独立 id
+									<ImageThumb key={i} image={image} alt={`工具结果图片 ${i + 1}`} />
+								))}
+							</div>
+						)}
 						{diff && <DiffView diff={diff} />}
 						{!diff && output && !(call.name === "read" && !expanded) && (
 							<pre

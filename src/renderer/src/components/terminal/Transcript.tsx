@@ -6,9 +6,10 @@
  *   ● tool(参数)  ⎿ 结果
  */
 import { useMemo, useState } from "react";
-import type { ChatMessage, ContentBlock } from "@shared/protocol";
+import type { ChatMessage, ContentBlock, ImageAttachment } from "@shared/protocol";
 import { parseSkillInvocation } from "@shared/skill-text";
 import { useApp } from "../../store";
+import { ImageThumb } from "./ImageThumb";
 import { Markdown } from "./Markdown";
 import { ToolBlock } from "./ToolBlock";
 
@@ -24,15 +25,27 @@ function Gutter({ mark, className = "", children }: { mark: React.ReactNode; cla
 	);
 }
 
+function imagesOf(content: ContentBlock[]): ImageAttachment[] {
+	return content.filter((b): b is ImageAttachment => b.type === "image");
+}
+
 function UserLine({ message }: { message: Extract<ChatMessage, { role: "user" }> }) {
-	const text = message.content
-		.map((b) => (b.type === "text" ? b.text : b.type === "image" ? "[图片]" : ""))
-		.join("");
+	// 图片单独渲染，文本里不再插占位符，避免污染 /skill: 解析
+	const text = message.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+	const images = imagesOf(message.content);
 	const skill = parseSkillInvocation(text);
 	return (
 		<div className="-mx-3 rounded-md bg-term-prompt px-3 py-1.5">
 			<Gutter mark="❯" className="font-bold text-accent">
 				{skill ? <SkillInvocation skill={skill} /> : <div className="whitespace-pre-wrap">{text}</div>}
+				{images.length > 0 && (
+					<div className="mt-1 flex flex-wrap gap-2">
+						{images.map((image, i) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: 消息内容块按位置稳定，没有独立 id
+							<ImageThumb key={i} image={image} alt={`消息中的图片 ${i + 1}`} />
+						))}
+					</div>
+				)}
 			</Gutter>
 		</div>
 	);

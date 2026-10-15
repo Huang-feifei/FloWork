@@ -47,6 +47,12 @@ export type ContentBlock =
 	| { type: "toolCall"; id: string; name: string; arguments: Record<string, unknown> }
 	| { type: "image"; mimeType: string; data: string };
 
+/**
+ * 随消息发送的图片附件。
+ * 与 pi 的 ImageContent 同形，worker 可直接透传给 session.prompt({ images })。
+ */
+export type ImageAttachment = Extract<ContentBlock, { type: "image" }>;
+
 export type StopReason = "pending" | "stop" | "length" | "toolUse" | "error" | "aborted" | "deferred";
 
 export type ChatMessage =
@@ -256,7 +262,7 @@ export interface TestResult {
 // ---------------------------------------------------------------------------
 
 export type SessionCommand =
-	| { type: "prompt"; message: string; streamingBehavior?: "steer" | "followUp" }
+	| { type: "prompt"; message: string; images?: ImageAttachment[]; streamingBehavior?: "steer" | "followUp" }
 	/** 清空并取回排队消息（界面把返回的文本填回输入框） */
 	| { type: "clear_queue" }
 	/** 按给定顺序重建排队消息（pi 队列是 FIFO，重排通过清空后重新入队实现） */

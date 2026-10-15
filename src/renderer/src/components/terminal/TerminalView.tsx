@@ -3,11 +3,12 @@
  * 窗口级的标题栏与状态栏在 App 中。
  */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ApprovalMode, ThinkingLevel } from "@shared/protocol";
+import type { ApprovalMode, ImageAttachment, ThinkingLevel } from "@shared/protocol";
 import { useApp, waitingCount } from "../../store";
 import { Icon } from "../Icon";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { ExtDialogPanel, ExtWidgets } from "./ExtDialogPanel";
+import { ImageThumb } from "./ImageThumb";
 import { Spinner, useElapsed } from "./Spinner";
 import { SlashMenu, useSlashMenu } from "./SlashMenu";
 import { Transcript } from "./Transcript";
@@ -109,6 +110,28 @@ function RunningLine() {
 }
 
 const QUEUE_DRAG_TYPE = "application/x-flowork-queue";
+
+/** 单张图片上限：超过就拒收，避免超大 base64 走 IPC */
+const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
+/** 把剪贴板 / 拖拽得到的图片文件读成附件（base64，不带 data URL 前缀） */
+function readImageFile(file: File): Promise<ImageAttachment> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onerror = () => reject(reader.error ?? new Error("读取图片失败"));
+		reader.onload = () => {
+			const url = typeof reader.result === "string" ? reader.result : "";
+			const comma = url.indexOf(",");
+			if (comma < 0) {
+				reject(new Error("无法解析图片数据"));
+				return;
+			}
+			const mimeType = /^data:([^;]+)/.exec(url)?.[1] ?? file.type ?? "image/png";
+			resolve({ type: "image", mimeType, data: url.slice(comma + 1) });
+		};
+		reader.readAsDataURL(file);
+	});
+}
 
 /** 运行中排队等待送达的消息（插话 / 排队）：可拖拽或 ↑↓ 调整顺序，也可一键取回输入框 */
 function QueueList() {
@@ -238,8 +261,11 @@ function QueueList() {
 
 function PromptInput() {
 	const [text, setText] = useState("");
+	/** 已选好、随下一条消息发送的图片 */
+	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const isRunning = useApp((s) => s.isRunning);
 	const ready = useApp((s) => s.handleId !== null);
+	const pushNotice = useApp((s) => s.pushNotice);
 	const { sendPrompt, abort } = useApp.getState();
 	const ref = useRef<HTMLTextAreaElement>(null);
 	const draft = useApp((s) => s.draft);
@@ -270,10 +296,44 @@ function PromptInput() {
 		ref.current?.focus();
 	};
 
+	const addImageFiles = async (files: File[]) => {
+		const accepted: ImageAttachment[] = [];
+		for (const file of files) {
+			if (file.size > MAX_IMAGE_BYTES) {
+				pushNotice("warning", `图片超过 ${Math.round(MAX_IMAGE_BYTES / 1024 / 1024)}MB，已忽略`);
+				continue;
+			}
+			try {
+				accepted.push(await readImageFile(file));
+			} catch (error) {
+				pushNotice("error", error instanceof Error ? error.message : "读取图片失败");
+			}
+		}
+		if (accepted.length > 0) setImages((prev) => [...prev, ...accepted]);
+	};
+
+	/** 剪贴板里有图片时接管粘贴（Ctrl+V / 截图后直接粘贴）；纯文本粘贴走浏览器默认行为 */
+	const onPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+		const items = event.clipboardData?.items;
+		if (!items) return;
+		const files: File[] = [];
+		for (let i = 0; i < items.length; i++) {
+			const item = items[i];
+			if (!item || item.kind !== "file" || !item.type.startsWith("image/")) continue;
+			const file = item.getAsFile();
+			if (file) files.push(file);
+		}
+		if (files.length === 0) return;
+		event.preventDefault();
+		void addImageFiles(files);
+	};
+
 	const submit = (behavior?: "steer" | "followUp") => {
-		if (!text.trim() || !ready) return;
-		void sendPrompt(text, behavior);
+		if (!ready) return;
+		if (!text.trim() && images.length === 0) return;
+		void sendPrompt(text, images, behavior);
 		setText("");
+		setImages([]);
 	};
 
 	return (
@@ -287,6 +347,7 @@ function PromptInput() {
 					rows={1}
 					disabled={!ready}
 					onChange={(e) => setText(e.target.value)}
+					onPaste={onPaste}
 					onKeyDown={(e) => {
 						if (menu.open && !e.nativeEvent.isComposing) {
 							const picked = menu.matches[menu.active];
@@ -321,8 +382,25 @@ function PromptInput() {
 					className="term min-h-[1.65em] w-full resize-none bg-transparent outline-none placeholder:text-muted/70"
 				/>
 			</div>
+			{images.length > 0 && (
+				<div className="flex flex-wrap gap-2 px-3.5 pb-1.5">
+					{images.map((image, i) => (
+						<div key={i} className="relative">
+							<ImageThumb image={image} alt={`待发送图片 ${i + 1}`} thumbClassName="h-16 max-w-[160px]" />
+							<button
+								type="button"
+								onClick={() => setImages((prev) => prev.filter((_, index) => index !== i))}
+								title="移除这张图片"
+								className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-panel-2 text-[11px] leading-none text-muted hover:bg-highlight hover:text-fg"
+							>
+								×
+							</button>
+						</div>
+					))}
+				</div>
+			)}
 			<ComposerToolbar
-				canSend={ready && text.trim().length > 0}
+				canSend={ready && (text.trim().length > 0 || images.length > 0)}
 				onSend={submit}
 			/>
 		</div>

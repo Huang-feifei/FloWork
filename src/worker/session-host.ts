@@ -18,6 +18,7 @@ import {
 	type ApprovalMode,
 	type CommandResultMap,
 	DEFAULT_APPROVAL_MODE,
+	type ImageAttachment,
 	READ_ONLY_TOOLS,
 	type SessionCommand,
 	type SessionEvent,
@@ -200,7 +201,7 @@ ${err.extensionPath}` });
 		const session = this.session;
 		switch (command.type) {
 			case "prompt":
-				return this.prompt(command.message, command.streamingBehavior);
+				return this.prompt(command.message, command.images, command.streamingBehavior);
 			case "clear_queue": {
 				const queue = session.clearQueue();
 				return { steering: [...queue.steering], followUp: [...queue.followUp] };
@@ -327,6 +328,7 @@ ${err.extensionPath}` });
 	 */
 	private prompt(
 		message: string,
+		images: ImageAttachment[] | undefined,
 		streamingBehavior: "steer" | "followUp" | undefined,
 	): Promise<CommandResultMap["prompt"]> {
 		const session = this.session;
@@ -335,6 +337,8 @@ ${err.extensionPath}` });
 			let accepted = false;
 			session
 				.prompt(message, {
+					// 空数组按未传处理；pi 在运行中排队时会带着图片一起送达
+					images: images && images.length > 0 ? images : undefined,
 					streamingBehavior: behavior,
 					preflightResult: (disposition) => {
 						accepted = true;

@@ -13,6 +13,7 @@ import {
 	type ApprovalMode,
 	type BackendPush,
 	DEFAULT_APPROVAL_MODE,
+	type ImageAttachment,
 	type ModelInfo,
 	type Project,
 	type ProjectsState,
@@ -137,7 +138,7 @@ interface AppState extends SessionSlice {
 	loadModels(): Promise<void>;
 	newSession(): Promise<void>;
 	switchSession(path: string): Promise<void>;
-	sendPrompt(text: string, streamingBehavior?: "steer" | "followUp"): Promise<void>;
+	sendPrompt(text: string, images?: ImageAttachment[], streamingBehavior?: "steer" | "followUp"): Promise<void>;
 	/** 清空排队消息并填回输入框 */
 	dequeue(): Promise<void>;
 	/** 调整排队消息顺序（steering / followUp 各自内部重排） */
@@ -724,10 +725,11 @@ export const useApp = create<AppState>()((set, get) => {
 			if (get().activeProjectId === pid) set({ view: "chat" });
 		},
 
-		async sendPrompt(text, streamingBehavior) {
+		async sendPrompt(text, images, streamingBehavior) {
 			const message = text.trim();
-			if (!message) return;
-			await active((h) => api.session(h, { type: "prompt", message, streamingBehavior }));
+			// 允许只带图片、不带文字的消息
+			if (!message && !(images && images.length > 0)) return;
+			await active((h) => api.session(h, { type: "prompt", message, images, streamingBehavior }));
 		},
 
 		async dequeue() {
