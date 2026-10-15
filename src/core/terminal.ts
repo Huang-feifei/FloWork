@@ -7,13 +7,16 @@
  */
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { spawn as spawnPty, type IPty } from "node-pty";
-import type { BackendMethods, BackendPush } from "@shared/protocol";
+import type { BackendMethods, BackendPush, SshHost } from "@shared/protocol";
 import { isDirectory } from "./fs";
 import { findGitBash, withGitBashOnPath } from "./git-bash";
 import { getPiAgentDir } from "./paths";
 import { samePath } from "./projects";
+import { remoteIsDirectory } from "./remote-fs";
+import { shQuote, sshTerminalArgs } from "./ssh";
 
 export type TerminalOpenParams = BackendMethods["terminal.open"]["params"];
 export type TerminalOpenResult = BackendMethods["terminal.open"]["result"];
@@ -36,6 +39,8 @@ interface TerminalEntry {
 	id: string;
 	cwd: string;
 	shell: string;
+	/** 所属远程主机；本地终端为 undefined */
+	hostId?: string;
 	pty: IPty;
 }
 
@@ -78,16 +83,32 @@ export class TerminalManager {
 	/** terminalId → 终端。按 cwd 复用需要线性查找，但同时存活的终端数量很小 */
 	private readonly terminals = new Map<string, TerminalEntry>();
 
-	constructor(private readonly emit: (push: BackendPush) => void) {}
+	constructor(
+		private readonly emit: (push: BackendPush) => void,
+		/** 解析远程主机；未注入或找不到时远程终端不可用 */
+		private readonly resolveHost?: (id: string) => Promise<SshHost>,
+	) {}
 
 	async open(params: TerminalOpenParams): Promise<TerminalOpenResult> {
 		if (typeof params?.cwd !== "string" || !params.cwd.trim()) throw new Error("终端的工作目录不能为空");
+		const host = params.hostId ? await this.resolveHost?.(params.hostId) : undefined;
+		if (params.hostId && !host) throw new Error("远程主机不存在，可能已被删除");
+
+		if (host) {
+			const cwd = params.cwd.trim();
+			if (!cwd.startsWith("/")) throw new Error(`远程终端的工作目录必须是绝对路径：${cwd}`);
+			if (!(await remoteIsDirectory(host, cwd))) throw new Error(`远程目录不存在或不是文件夹：${cwd}`);
+			const existing = [...this.terminals.values()].find((entry) => entry.hostId === host.id && entry.cwd === cwd);
+			if (existing) return { terminalId: existing.id, shell: existing.shell, reused: true };
+			return this.spawnRemote(host, cwd, params);
+		}
+
 		// 相对路径会让 pty 落在后端进程的当前目录，与界面显示的项目不符，直接拒绝
 		if (!isAbsolute(params.cwd)) throw new Error(`终端的工作目录必须是绝对路径：${params.cwd}`);
 		const cwd = resolve(params.cwd);
 		if (!(await isDirectory(cwd))) throw new Error(`终端的工作目录不存在或不是文件夹：${cwd}`);
 
-		const existing = [...this.terminals.values()].find((entry) => samePath(entry.cwd, cwd));
+		const existing = [...this.terminals.values()].find((entry) => !entry.hostId && samePath(entry.cwd, cwd));
 		if (existing) return { terminalId: existing.id, shell: existing.shell, reused: true };
 
 		const { path: shell, args } = resolveShell();
@@ -107,16 +128,43 @@ export class TerminalManager {
 		} catch (error) {
 			throw new Error(`无法启动 shell（${shell}）：${error instanceof Error ? error.message : String(error)}`);
 		}
-		const entry: TerminalEntry = { id, cwd, shell, pty: child };
-		this.terminals.set(id, entry);
-		child.onData((data) => this.emit({ type: "terminal_data", terminalId: id, data }));
-		child.onExit(({ exitCode }) => {
+		return this.attach({ id, cwd, shell, pty: child });
+	}
+
+	/** 远程终端：直接 spawn `ssh -tt`，远程侧 cd 到项目目录后起登录 shell */
+	private spawnRemote(host: SshHost, cwd: string, params: TerminalOpenParams): TerminalOpenResult {
+		const cols = clamp(params.cols, MIN_COLS, MAX_COLS, DEFAULT_COLS);
+		const rows = clamp(params.rows, MIN_ROWS, MAX_ROWS, DEFAULT_ROWS);
+		const remoteCommand = `cd ${shQuote(cwd)} 2>/dev/null; exec "\${SHELL:-/bin/sh}" -l`;
+		const { command, args } = sshTerminalArgs(host, remoteCommand);
+		const id = randomUUID();
+		let child: IPty;
+		try {
+			child = spawnPty(command, args, {
+				name: "xterm-256color",
+				cols,
+				rows,
+				// ssh 是本地进程，cwd 必须是本地存在的目录
+				cwd: homedir(),
+				env: { ...process.env, TERM: "xterm-256color" },
+			});
+		} catch (error) {
+			throw new Error(`无法连接远程主机（${host.user ? `${host.user}@` : ""}${host.host}）：${error instanceof Error ? error.message : String(error)}`);
+		}
+		return this.attach({ id, cwd, shell: `ssh ${host.user ? `${host.user}@` : ""}${host.host}`, hostId: host.id, pty: child });
+	}
+
+	/** 登记终端并挂上输出 / 退出回调 */
+	private attach(entry: TerminalEntry): TerminalOpenResult {
+		this.terminals.set(entry.id, entry);
+		entry.pty.onData((data) => this.emit({ type: "terminal_data", terminalId: entry.id, data }));
+		entry.pty.onExit(({ exitCode }) => {
 			// 已显式 close 的终端不在表里：那条路径由调用方负责，这里只处理自行退出（exit、崩溃）
-			if (this.terminals.get(id) !== entry) return;
-			this.terminals.delete(id);
-			this.emit({ type: "terminal_exit", terminalId: id, code: exitCode });
+			if (this.terminals.get(entry.id) !== entry) return;
+			this.terminals.delete(entry.id);
+			this.emit({ type: "terminal_exit", terminalId: entry.id, code: exitCode });
 		});
-		return { terminalId: id, shell, reused: false };
+		return { terminalId: entry.id, shell: entry.shell, reused: false };
 	}
 
 	/** 透传原始按键数据（含 \r）。id 不存在说明终端已退出，报错让界面重新 open */
@@ -148,10 +196,20 @@ export class TerminalManager {
 		return null;
 	}
 
-	/** 项目被移除时关闭它名下的终端 */
-	closeByCwd(cwd: string): void {
+	/** 项目被移除时关闭它名下的终端（hostId 区分本地与远程） */
+	closeByCwd(cwd: string, hostId?: string): void {
 		for (const entry of [...this.terminals.values()]) {
-			if (!samePath(entry.cwd, cwd)) continue;
+			if (entry.hostId !== hostId) continue;
+			if (hostId ? entry.cwd !== cwd : !samePath(entry.cwd, cwd)) continue;
+			this.terminals.delete(entry.id);
+			this.kill(entry);
+		}
+	}
+
+	/** 远程主机被移除时关闭它名下的所有终端 */
+	closeByHost(hostId: string): void {
+		for (const entry of [...this.terminals.values()]) {
+			if (entry.hostId !== hostId) continue;
 			this.terminals.delete(entry.id);
 			this.kill(entry);
 		}

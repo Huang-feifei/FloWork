@@ -10,7 +10,7 @@ import { ProjectTree } from "./sidebar/ProjectTree";
 export function Sidebar() {
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const canNewSession = useApp((s) => s.handleId !== null && hasProject);
-	const { importProjects, setView, setDiscoverOpen, pushNotice, newSession } = useApp.getState();
+	const { importProjects, setView, setDiscoverOpen, setRemoteOpen, pushNotice, newSession } = useApp.getState();
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
 	return (
@@ -69,6 +69,7 @@ export function Sidebar() {
 					onClose={() => setMenu(null)}
 					items={[
 						{ label: "导入文件夹…", onClick: () => void importProjects() },
+						{ label: "添加远程项目（SSH）…", onClick: () => setRemoteOpen(true) },
 						{ label: "从已有会话发现项目…", onClick: () => setDiscoverOpen(true) },
 						{ separator: true, label: "" },
 						{

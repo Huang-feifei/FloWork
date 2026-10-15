@@ -20,6 +20,7 @@ import {
 	type SessionEvent,
 	type SessionState,
 	type SessionSummary,
+	type SshHost,
 	type ThinkingLevel,
 } from "@shared/protocol";
 import { api, errorText } from "./api/client";
@@ -81,6 +82,10 @@ interface AppState extends SessionSlice {
 	discoverOpen: boolean;
 
 	projects: ProjectsState;
+	/** SSH 主机列表（远程项目用） */
+	hosts: SshHost[];
+	/** 添加远程项目对话框是否打开 */
+	remoteOpen: boolean;
 	activeProjectId: string | null;
 	/** 后台项目的会话切片 */
 	background: Record<string, SessionSlice>;
@@ -125,6 +130,9 @@ interface AppState extends SessionSlice {
 	importProjects(): Promise<void>;
 	closeFolderPicker(): void;
 	addProjects(paths: string[], open?: boolean): Promise<void>;
+	/** 添加并打开一个远程项目（服务器上的目录） */
+	addRemoteProject(hostId: string, path: string, name?: string): Promise<void>;
+	setRemoteOpen(open: boolean): void;
 	setDiscoverOpen(open: boolean): void;
 	openProject(projectId: string, sessionPath?: string): Promise<void>;
 	/** 停止项目的 pi 进程；当前项目会被关闭回到空白页 */
@@ -399,6 +407,8 @@ export const useApp = create<AppState>()((set, get) => {
 		folderPicker: { open: false },
 		discoverOpen: false,
 		projects: { projects: [], groups: [] },
+		hosts: [],
+		remoteOpen: false,
 		activeProjectId: null,
 		background: {},
 		projectSessions: {},
@@ -437,6 +447,7 @@ export const useApp = create<AppState>()((set, get) => {
 				const [info, projects] = await Promise.all([api.info(), api.projects.get()]);
 				set({ info, projects, connection: "open" });
 				everOpened = true;
+				void api.hosts.list().then((hosts) => set({ hosts })).catch(() => undefined);
 			} catch (error) {
 				get().pushNotice("error", `无法连接本地后端：${errorText(error)}`);
 				return;
@@ -501,6 +512,21 @@ export const useApp = create<AppState>()((set, get) => {
 			}
 		},
 
+		async addRemoteProject(hostId, path, name) {
+			try {
+				const r = await api.projects.addRemote(hostId, path, name);
+				set({ projects: r.state, remoteOpen: false });
+				get().pushNotice("info", `已添加远程项目：${r.project.path}`);
+				await get().openProject(r.project.id);
+			} catch (error) {
+				get().pushNotice("error", `添加远程项目失败：${errorText(error)}`);
+			}
+		},
+
+		setRemoteOpen(open) {
+			set({ remoteOpen: open });
+		},
+
 		setDiscoverOpen(open) {
 			set({ discoverOpen: open });
 		},
@@ -516,6 +542,24 @@ export const useApp = create<AppState>()((set, get) => {
 			if (pid !== get().activeProjectId || !get().handleId) {
 				if (target.missing) {
 					get().pushNotice("error", `文件夹不存在：${target.path}`);
+					return;
+				}
+				if (target.hostId) {
+					// 远程项目没有本地 pi 会话：只切换工作区，主区域展示文件与终端
+					const remotePrevId = get().activeProjectId;
+					const remotePrev = pickSlice(get());
+					const remoteBackground = { ...get().background };
+					if (remotePrevId && remotePrevId !== pid && remotePrev.handleId) remoteBackground[remotePrevId] = remotePrev;
+					delete remoteBackground[pid];
+					set({
+						...emptySlice(target.path),
+						background: remoteBackground,
+						activeProjectId: pid,
+						connecting: false,
+						unread: { ...get().unread, [pid]: false },
+					});
+					localStorage.setItem(LAST_PROJECT_KEY, pid);
+					void api.projects.touch(pid).then((projects) => set({ projects })).catch(() => undefined);
 					return;
 				}
 				// 当前项目移入后台（保留 pi 进程）
@@ -602,7 +646,7 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async refreshProjectSessions(pid) {
 			const p = project(pid);
-			if (!p || p.missing) return;
+			if (!p || p.missing || p.hostId) return;
 			const request = (historyRequests.get(pid) ?? 0) + 1;
 			historyRequests.set(pid, request);
 			try {
@@ -695,6 +739,7 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async newSessionIn(pid) {
 			await get().openProject(pid);
+			if (project(pid)?.hostId) return;
 			if (get().activeProjectId === pid) await get().newSession();
 			get().toggleExpanded(pid, true);
 		},
@@ -905,6 +950,9 @@ export const useApp = create<AppState>()((set, get) => {
 				}
 				case "projects_changed":
 					set({ projects: push.state });
+					return;
+				case "hosts_changed":
+					set({ hosts: push.hosts });
 					return;
 				case "resources_changed":
 					set((st) => ({ resourcesVersion: st.resourcesVersion + 1 }));

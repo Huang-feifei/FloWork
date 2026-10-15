@@ -216,7 +216,7 @@ function ProjectRow({
 	};
 
 	const items: MenuItem[] = [
-		{ label: "新会话", onClick: () => void newSessionIn(project.id), disabled: project.missing },
+		...(project.hostId ? [] : [{ label: "新会话", onClick: () => void newSessionIn(project.id), disabled: project.missing }]),
 		{ label: "重命名", onClick: () => setRenaming(true) },
 		{ label: project.pinned ? "取消置顶" : "置顶", onClick: () => update({ pinned: !project.pinned }) },
 		{ separator: true, label: "" },
@@ -309,6 +309,9 @@ function ProjectRow({
 						<span className={`min-w-0 truncate text-[13px] ${active ? "font-medium" : ""} ${project.missing ? "text-muted" : ""}`}>
 							{name}
 						</span>
+						{project.hostId && (
+							<span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-normal text-accent">远程</span>
+						)}
 					</button>
 				)}
 				<StatusMark pid={project.id} />
@@ -324,7 +327,14 @@ function ProjectRow({
 					⋯
 				</button>
 			</div>
-			{expanded && <SessionList project={project} />}
+			{expanded &&
+				(project.hostId ? (
+					<div className="mb-1 ml-[18px] border-l border-border py-1 pl-3 text-[11px] leading-4 text-muted">
+						远程项目：文件与终端可直接操作，AI 会话尚未开放。
+					</div>
+				) : (
+					<SessionList project={project} />
+				))}
 			{menu && <Menu items={items} position={menu} onClose={() => setMenu(null)} />}
 		</div>
 	);

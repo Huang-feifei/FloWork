@@ -71,7 +71,9 @@ scripts/                    网页版构建、开发、启动脚本，以及自�
 
 ## pi 配置目录
 
-默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。设置页中的所有修改都写入这个目录：
+默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。
+
+FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）、hosts.json（SSH 主机）、trust.json（项目信任决定）。设置页中的所有修改都写入 pi 配置目录：
 
 | 设置页 | 写入 |
 | --- | --- |
@@ -117,7 +119,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - **CSP**：`renderer.config.ts` 中的插件只在生产构建往 `index.html` 注入 `Content-Security-Policy`（桌面版与网页版共用同一份策略）；开发模式不注入，否则 Vite HMR 的内联脚本与 websocket 会被挡掉。具体策略见该文件里的注释。
 - **外链白名单**：主进程只把 `http:` / `https:` 链接交给系统浏览器（`setWindowOpenHandler`），其它协议一律拒绝并打日志；页面内导航（`will-navigate`）只允许留在应用自身，其余同样交给白名单处理。
 - **内置浏览器**：网页运行在独立隔离 session（独立 partition、禁缓存），权限请求、设备权限、屏幕共享与下载一律拒绝；只允许 HTTP(S)，`will-frame-navigate` / `will-redirect` 拦截非白名单导航与重定向；禁止访问 FloWork 应用自身地址与控制端口，避免页面回连本地控制服务；弹窗需用户手势（1 秒内点击 / 回车）才开新标签，否则拒绝。
-- **凭据**：auth.json 目前仍是明文（见「pi 配置目录」），改用系统加密存储尚未实现。
+- **凭据**：auth.json 与 hosts.json（SSH 密码）目前仍是明文（见「pi 配置目录」），改用系统加密存储尚未实现。
 
 ## 已实现
 
@@ -127,6 +129,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - 修改 diff：edit 使用 pi 自带的 diff；write 由 FloWork 扩展在执行前快照、执行后生成 diff
 - 会话树窄轨：会话区右缘一条竖轨，每个用户消息一条横条（屏幕上可见的最亮、当前分支上其余淡亮、其他分支最暗，当前位置加粗，分叉点带竖线与缩进）；悬停弹出节点卡片，可回到任意节点继续（用户消息会填回输入框以便修改重发）、分叉为新会话、节点标签。命令面板与标题栏「会话」菜单可隐藏 / 显示窄轨（默认显示，选择记在 localStorage）
 - 会话输出滚动：默认跟随最新输出（内容长高即贴底，不做滚动动画，避免流式输出时追不上）；上滚查看历史后停止跟随，并浮出「回到最新」按钮
+- 远程项目（SSH）：添加 SSH 主机（ssh-agent / 私钥文件 / 密码，端口与默认目录可选，可测试连接并探测远端平台与 Node 版本），浏览服务器目录后加为项目。远程项目不启动本地 pi 会话，主区域给出远程终端与文件浏览 / 编辑 / 搜索；文件操作走系统 `ssh`，因此 `~/.ssh/config` 的主机别名、ssh-agent、known_hosts 与 ProxyJump 都能直接复用。远程删除是永久删除（不进回收站）。主机列表保存在 `~/.flowork/hosts.json`
 - Windows：自动识别 Git Bash（包括非默认安装位置），避免 bash 工具落到 WSL；设置页显示实际使用的 shell
 - 项目：侧边栏导入多个项目（可多选、可从已有会话发现），置顶、分组、拖拽排序、重命名、移除；项目展开显示会话；切换项目时原项目的 pi 进程继续在后台运行，侧边栏显示运行中 / 待确认 / 已完成。项目列表保存在 `~/.flowork/projects.json`
 - 会话管理：历史会话可重命名（留空恢复默认标题）与删除；当前打开和后台项目的会话同样支持。删除前确认，只删除会话记录，不删除项目文件、不级联删除分叉会话；运行中或等待交互的会话拒绝删除，空闲的打开会话先关闭 pi 进程再删除，避免记录被重新写回
@@ -161,3 +164,4 @@ node scripts/test-ext-ui.mjs      # 第三方扩展对话框与界面接口
 ## 路线图
 
 - **M3**：内置终端与内置浏览器；转为桌面版发布。electron-builder 打包与收紧 CSP 已完成（见「桌面版发布」），凭据改用系统加密存储待做。
+- **远程 AI 会话**：目前远程项目只提供终端与文件操作，pi 仍跑在本机。在服务器上运行 pi 需要给 worker 增加 stdio 传输、把 pi-worker 与运行时部署到远端并管理每台主机的常驻进程。

@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, join, posix, resolve } from "node:path";
 import type { Project, ProjectGroup, ProjectPatch, ProjectsState } from "@shared/protocol";
 import { getFloworkDataDir } from "./paths";
 
@@ -26,6 +26,12 @@ function isDir(path: string): boolean {
 	} catch {
 		return false;
 	}
+}
+
+/** 远程路径一律用 POSIX 语义：不能走 resolve()，否则 Windows 上会把 /home/x 变成 E:\\home\\x */
+export function normalizeRemotePath(path: string): string {
+	const normalized = posix.normalize(path.trim().replace(/\/{2,}/g, "/"));
+	return normalized.length > 1 ? normalized.replace(/\/+$/, "") : normalized;
 }
 
 export class ProjectStore {
@@ -111,6 +117,26 @@ export class ProjectStore {
 		});
 	}
 
+	/** 添加远程项目：路径是服务器上的 POSIX 路径，不做本地解析与目录校验 */
+	addRemote(hostId: string, path: string, name?: string) {
+		return this.mutate((state) => {
+			const remotePath = normalizeRemotePath(path);
+			if (!remotePath.startsWith("/")) throw new Error("远程路径必须是绝对路径");
+			const existing = state.projects.find((p) => p.hostId === hostId && p.path === remotePath);
+			if (existing) return existing;
+			const project = {
+				id: randomUUID(),
+				hostId,
+				path: remotePath,
+				...(name?.trim() ? { name: name.trim() } : {}),
+				order: this.nextOrder(state, false, undefined),
+				addedAt: Date.now(),
+			};
+			state.projects.push(project);
+			return project;
+		});
+	}
+
 	update(id: string, patch: ProjectPatch) {
 		return this.mutate((state) => {
 			const project = state.projects.find((p) => p.id === id);
@@ -161,6 +187,12 @@ export class ProjectStore {
 				project.order = index;
 			});
 		}).then((r) => r.state);
+	}
+
+	/** 按路径查找项目（用于把 root 映射回所属主机） */
+	async findByPath(path: string): Promise<Project | undefined> {
+		const state = await this.load();
+		return state.projects.find((p) => (p.hostId ? p.path === path : samePath(p.path, path)));
 	}
 
 	createGroup(name: string) {

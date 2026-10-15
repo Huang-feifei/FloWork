@@ -65,6 +65,15 @@ const backend = new Backend({
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
 		return result.canceled ? [] : result.filePaths;
 	},
+	// 挑选 SSH 私钥文件
+	pickFile: async () => {
+		const options = {
+			properties: ["openFile" as const],
+			filters: [{ name: "私钥", extensions: ["pem", "key", "ppk", "*"] }],
+		};
+		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+		return result.canceled ? null : (result.filePaths[0] ?? null);
+	},
 	// 删除走系统回收站，可恢复
 	trashItem: (abs) => shell.trashItem(abs),
 	// 在资源管理器中定位

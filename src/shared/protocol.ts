@@ -486,6 +486,8 @@ export interface AppInfo {
 	shell: "electron" | "web";
 	/** 是否支持系统原生文件夹对话框（仅桌面版） */
 	nativeDialogs: boolean;
+	/** 本机 ssh 可执行文件路径；为 null 时无法使用远程功能 */
+	ssh: string | null;
 }
 
 export interface DirListing {
@@ -545,8 +547,10 @@ export interface ProjectGroup {
 
 export interface Project {
 	id: string;
-	/** 文件夹绝对路径 */
+	/** 文件夹绝对路径（远程项目为服务器上的路径） */
 	path: string;
+	/** 关联的 SSH 主机；未设置表示本地文件夹 */
+	hostId?: string;
 	/** 自定义显示名；未设置时显示文件夹名 */
 	name?: string;
 	groupId?: string;
@@ -570,6 +574,55 @@ export interface ProjectPatch {
 	pinned?: boolean;
 }
 
+// ---------------------------------------------------------------------------
+// SSH 主机（远程服务器）
+// ---------------------------------------------------------------------------
+
+/** 认证方式：agent 走 ssh-agent 与 ~/.ssh/config；key 指定私钥文件；password 仅交互式终端可用 */
+export type SshAuthMethod = "agent" | "key" | "password";
+
+export interface SshHost {
+	id: string;
+	/** 显示名；未设置时用 user@host */
+	name?: string;
+	/** 主机名或 IP */
+	host: string;
+	/** 端口；未设置时用 ssh 默认（22） */
+	port?: number;
+	user?: string;
+	auth: SshAuthMethod;
+	/** auth = key 时的私钥路径（本机路径） */
+	keyPath?: string;
+	/** auth = password 时保存的口令（明文，仅用于交互式终端） */
+	password?: string;
+	/** 连接后的默认工作目录；未设置时用远程 home */
+	defaultPath?: string;
+	/** 远程平台，连接测试后记录，用于路径语义 */
+	platform?: "linux" | "darwin" | "win32" | "unknown";
+	createdAt: number;
+}
+
+export type SshHostInput = Omit<SshHost, "id" | "createdAt" | "platform">;
+
+/** 连接测试结果：连通性 + 远程环境探测 */
+export interface SshTestResult {
+	ok: boolean;
+	latencyMs: number;
+	platform?: string;
+	home?: string;
+	/** 远程 Node 版本；未安装时为 null */
+	node?: string | null;
+	error?: string;
+}
+
+/** 远程目录浏览（用于挑选远程项目目录） */
+export interface RemoteDirListing {
+	path: string;
+	parent: string | null;
+	entries: Array<{ name: string; path: string }>;
+	home: string;
+}
+
 export interface DiscoveredProject {
 	path: string;
 	sessionCount: number;
@@ -586,6 +639,8 @@ export interface BackendMethods {
 	"app.pickFolders": { params: undefined; result: string[] };
 	"projects.get": { params: undefined; result: ProjectsState };
 	"projects.add": { params: { paths: string[]; groupId?: string }; result: { state: ProjectsState; added: Project[]; skipped: string[] } };
+	/** 添加远程项目：path 为服务器上的绝对路径 */
+	"projects.addRemote": { params: { hostId: string; path: string; name?: string }; result: { state: ProjectsState; project: Project } };
 	"projects.update": { params: { id: string; patch: ProjectPatch }; result: ProjectsState };
 	"projects.remove": { params: { id: string }; result: ProjectsState };
 	"projects.touch": { params: { id: string }; result: ProjectsState };
@@ -595,6 +650,17 @@ export interface BackendMethods {
 	"projects.groupUpdate": { params: { id: string; name?: string; collapsed?: boolean }; result: ProjectsState };
 	"projects.groupRemove": { params: { id: string }; result: ProjectsState };
 	"projects.discover": { params: undefined; result: DiscoveredProject[] };
+	// ----- SSH 主机 -----
+	"hosts.get": { params: undefined; result: SshHost[] };
+	"hosts.add": { params: SshHostInput; result: { hosts: SshHost[]; host: SshHost } };
+	"hosts.update": { params: { id: string; patch: Partial<SshHostInput> }; result: SshHost[] };
+	"hosts.remove": { params: { id: string }; result: SshHost[] };
+	/** 连接测试：探测平台、home、远程 Node 版本 */
+	"hosts.test": { params: { id: string }; result: SshTestResult };
+	/** 浏览远程目录，用于挑选远程项目路径 */
+	"hosts.listDirs": { params: { id: string; path?: string }; result: RemoteDirListing };
+	/** 系统对话框挑选私钥文件（仅桌面版） */
+	"hosts.pickKey": { params: undefined; result: string | null };
 	"fs.listDirs": { params: { path?: string }; result: DirListing };
 	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
 	"workspace.read": { params: { root: string; path: string }; result: FilePreview };
@@ -625,7 +691,7 @@ export interface BackendMethods {
 	"auth.answer": { params: { flowId: string; promptId: string; value?: string; cancel?: boolean }; result: null };
 	"auth.cancel": { params: { flowId: string }; result: null };
 	/** 打开真终端（PTY）；同一 cwd 已有存活终端时复用，reused 为 true */
-	"terminal.open": { params: { cwd: string; cols: number; rows: number }; result: { terminalId: string; shell: string; reused: boolean } };
+	"terminal.open": { params: { cwd: string; cols: number; rows: number; /** 远程主机；不传为本地终端 */ hostId?: string }; result: { terminalId: string; shell: string; reused: boolean } };
 	"terminal.write": { params: { terminalId: string; data: string }; result: null };
 	"terminal.resize": { params: { terminalId: string; cols: number; rows: number }; result: null };
 	"terminal.close": { params: { terminalId: string }; result: null };
@@ -641,6 +707,8 @@ export type BackendPush =
 	/** 凭据或配置文件变更，界面应刷新模型与供应商列表 */
 	| { type: "config_changed" }
 	| { type: "projects_changed"; state: ProjectsState }
+	/** SSH 主机列表变更 */
+	| { type: "hosts_changed"; hosts: SshHost[] }
 	/** 技能 / 扩展变化，设置页与斜杠命令列表应刷新 */
 	| { type: "resources_changed" }
 	/** 终端输出；不做回放，重连后只收到之后的数据 */

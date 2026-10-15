@@ -113,23 +113,27 @@ export function BottomPanel() {
 	const open = useApp((s) => s.terminalPanel);
 	const tab = useApp((s) => s.panelTab);
 	const toolRuns = useApp((s) => s.toolRuns);
+	// 远程项目的主区域本身就是远程终端，底部面板不再重复给一个终端页签
+	const isRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const { setPanelTab, setTerminalPanel } = useApp.getState();
 	const running = Object.values(toolRuns).some((r) => r.status === "running");
 
 	if (!open) return null;
+	const tabs = isRemote ? TABS.filter((t) => t.id !== "terminal") : TABS;
+	const activeTab = isRemote && tab === "terminal" ? "output" : tab;
 
 	return (
 		<section className="flex h-[250px] shrink-0 flex-col border-t border-border bg-bg">
 			<div className="flex h-8 shrink-0 items-stretch gap-1 border-b border-border px-2 font-mono text-[11px]">
-				{TABS.map((t) => (
+				{tabs.map((t) => (
 					<button
 						type="button"
 						key={t.id}
 						onClick={() => setPanelTab(t.id)}
-						className={`relative flex items-center px-2 tracking-[0.04em] ${t.id === tab ? "text-fg" : "text-faint hover:text-muted"}`}
+						className={`relative flex items-center px-2 tracking-[0.04em] ${t.id === activeTab ? "text-fg" : "text-faint hover:text-muted"}`}
 					>
 						{t.label}
-						{t.id === tab && <span className="absolute inset-x-2 bottom-0 h-px bg-accent" />}
+						{t.id === activeTab && <span className="absolute inset-x-2 bottom-0 h-px bg-accent" />}
 					</button>
 				))}
 				<div className="flex-1" />
@@ -150,9 +154,9 @@ export function BottomPanel() {
 				</button>
 			</div>
 
-			{tab === "terminal" && <TerminalTab />}
-			{tab === "output" && <OutputTab />}
-			{tab === "logs" && <LogsTab />}
+			{activeTab === "terminal" && <TerminalTab />}
+			{activeTab === "output" && <OutputTab />}
+			{activeTab === "logs" && <LogsTab />}
 		</section>
 	);
 }

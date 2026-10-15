@@ -184,6 +184,14 @@ const PATHS = {
 			<path d="M12 5v14" />
 		</>
 	),
+	server: (
+		<>
+			<rect width="20" height="8" x="2" y="2" rx="2" />
+			<rect width="20" height="8" x="2" y="14" rx="2" />
+			<path d="M6 6h.01" />
+			<path d="M6 18h.01" />
+		</>
+	),
 	"arrow-right": (
 		<>
 			<path d="m12 5 7 7-7 7" />

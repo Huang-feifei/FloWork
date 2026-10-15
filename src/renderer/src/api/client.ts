@@ -8,6 +8,7 @@ import type {
 	CommandResult,
 	ServiceCommand,
 	SessionCommand,
+	SshHostInput,
 } from "@shared/protocol";
 import { transport } from "./transport";
 
@@ -30,6 +31,17 @@ export const api = {
 		groupUpdate: (id: string, patch: { name?: string; collapsed?: boolean }) => call("projects.groupUpdate", { id, ...patch }),
 		groupRemove: (id: string) => call("projects.groupRemove", { id }),
 		discover: () => call("projects.discover", undefined),
+		addRemote: (hostId: string, path: string, name?: string) => call("projects.addRemote", { hostId, path, name }),
+	},
+	/** SSH 主机管理 */
+	hosts: {
+		list: () => call("hosts.get", undefined),
+		add: (input: SshHostInput) => call("hosts.add", input),
+		update: (id: string, patch: Partial<SshHostInput>) => call("hosts.update", { id, patch }),
+		remove: (id: string) => call("hosts.remove", { id }),
+		test: (id: string) => call("hosts.test", { id }),
+		listDirs: (id: string, path?: string) => call("hosts.listDirs", { id, path }),
+		pickKey: () => call("hosts.pickKey", undefined),
 	},
 	listDirs: (path?: string) => call("fs.listDirs", { path }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
@@ -57,7 +69,7 @@ export const api = {
 		delete: (cwd: string, path: string) => call("sessions.delete", { cwd, path }),
 	},
 
-	/** 终端按 cwd 幂等：同一目录重复 open 会复用同一个 shell */
+	/** 终端按 cwd 幂等：同一目录重复 open 会复用同一个 shell（远程路径由后端根据项目注册表自动识别） */
 	terminal: {
 		open: (cwd: string, cols: number, rows: number) => call("terminal.open", { cwd, cols, rows }),
 		write: (terminalId: string, data: string) => call("terminal.write", { terminalId, data }),

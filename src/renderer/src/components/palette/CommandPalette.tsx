@@ -70,6 +70,7 @@ export function CommandPalette() {
 				{ icon: "square-pen", label: "新建会话", key: "Ctrl+N", when: s.activeProjectId !== null, run: () => void s.newSession() },
 				{ icon: "git-compare", label: "审查本会话的修改", key: "Ctrl+Shift+D", when: s.activeProjectId !== null, run: () => s.setView("review") },
 				{ icon: "folder-plus", label: "导入项目文件夹…", key: "Ctrl+O", when: true, run: () => void s.importProjects() },
+				{ icon: "server", label: "添加远程项目（SSH）…", when: true, run: () => s.setRemoteOpen(true) },
 				{ icon: "search", label: "快速打开文件…", key: "Ctrl+P", when: s.activeProjectId !== null, run: () => s.setQuickOpen(true) },
 				{ icon: "cpu", label: "切换模型…", key: "Ctrl+M", when: s.activeProjectId !== null, run: () => s.setView("settings", "providers") },
 				{ icon: "square-terminal", label: "切换终端面板", key: "Ctrl+`", when: true, run: () => s.setTerminalPanel(!s.terminalPanel) },
