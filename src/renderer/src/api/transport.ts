@@ -86,8 +86,13 @@ class WebSocketTransport implements ManagedTransport {
 function createTransport(): ManagedTransport {
 	const electron = window.floworkTransport;
 	if (electron) {
-		// IPC 不会断开，连接状态恒为 open
-		return { ...electron, onStatus: () => () => undefined };
+		// 桌面版：主进程与 preload 只传 JSON 字符串（contextBridge 不允许超过 1000 层嵌套，
+		// 长会话的会话树会越界），解析放在渲染进程侧，与网页版的 WebSocket 形态一致。
+		return {
+			request: async (method, params) => JSON.parse(await electron.request(method, params)) as unknown,
+			onPush: (listener) => electron.onPush((payload) => listener(JSON.parse(payload) as BackendPush)),
+			onStatus: () => () => undefined,
+		};
 	}
 	const protocol = location.protocol === "https:" ? "wss:" : "ws:";
 	return new WebSocketTransport(`${protocol}//${location.host}/ws`);

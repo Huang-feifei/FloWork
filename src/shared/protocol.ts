@@ -728,6 +728,17 @@ export interface Transport {
 	onPush(listener: (push: BackendPush) => void): () => void;
 }
 
+/**
+ * 桌面版 preload 暴露的原始通道。
+ * contextBridge 只允许 1000 层嵌套（实测约 330 层就报错），而会话树这种「每多一条记录就深一层」
+ * 的响应很容易越界，所以跨桥的请求结果与推送一律先序列化成字符串，
+ * 由渲染进程侧 parse（见 renderer/src/api/transport.ts）。
+ */
+export interface ElectronBridge {
+	request(method: BackendMethod, params: unknown): Promise<string>;
+	onPush(listener: (payload: string) => void): () => void;
+}
+
 export const ELECTRON_CHANNELS = {
 	request: "flowork:request",
 	push: "flowork:push",

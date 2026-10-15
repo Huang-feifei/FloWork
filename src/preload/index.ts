@@ -3,13 +3,15 @@
  * 窗口控制只在桌面版存在（自绘标题栏的窗口按钮）。
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
-import { type BackendPush, ELECTRON_CHANNELS, type Transport } from "@shared/protocol";
+import { type ElectronBridge, ELECTRON_CHANNELS } from "@shared/protocol";
 import { BROWSER_CHANNELS, type BrowserBridge, type BrowserState } from "@shared/browser";
 
-const transport: Transport = {
-	request: (method, params) => ipcRenderer.invoke(ELECTRON_CHANNELS.request, method, params),
+// 只做转发：跨 contextBridge 的载荷一律是 JSON 字符串，解析在渲染进程侧做（见 api/transport.ts）。
+// 原因是 contextBridge 不允许超过 1000 层的嵌套，深层对象（如长会话的会话树）必须走字符串。
+const transport: ElectronBridge = {
+	request: (method, params) => ipcRenderer.invoke(ELECTRON_CHANNELS.request, method, params) as Promise<string>,
 	onPush: (listener) => {
-		const handler = (_e: IpcRendererEvent, push: BackendPush) => listener(push);
+		const handler = (_e: IpcRendererEvent, payload: string) => listener(payload);
 		ipcRenderer.on(ELECTRON_CHANNELS.push, handler);
 		return () => ipcRenderer.off(ELECTRON_CHANNELS.push, handler);
 	},
