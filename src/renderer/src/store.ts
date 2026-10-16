@@ -50,7 +50,7 @@ export interface Notice {
 }
 
 export type View = "welcome" | "chat" | "review" | "settings";
-export type RightPanel = "files" | "session" | "browser";
+export type RightPanel = "files" | "session" | "server" | "browser";
 export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
@@ -179,7 +179,7 @@ interface AppState extends SessionSlice {
 	setPalette(open: boolean, mode?: PaletteMode): void;
 	setTerminalPanel(open: boolean): void;
 	setPanelTab(tab: BottomTab): void;
-	openPreview(path: string | null): void;
+	openPreview(path: string | null, hostId?: string | null): void;
 	/** 把文本追加到输入框（例如引用文件路径） */
 	insertIntoPrompt(text: string): void;
 	/** 显示 / 关闭「已更新到」弹窗；传 null 关闭 */
@@ -208,7 +208,7 @@ const EXPANDED_KEY = "flowork.expandedProjects";
 
 function storedPanel(): RightPanel | null {
 	const v = localStorage.getItem(PANEL_KEY);
-	return v === "files" || v === "session" || v === "browser" ? v : null;
+	return v === "files" || v === "session" || v === "server" || v === "browser" ? v : null;
 }
 
 /** 会话树窄轨默认显示；只有显式关过才隐藏 */
@@ -900,8 +900,8 @@ export const useApp = create<AppState>()((set, get) => {
 			set({ panelTab: tab });
 		},
 
-		openPreview(path) {
-			set({ preview: path });
+		openPreview(path, hostId = null) {
+			set({ preview: path, previewHostId: hostId });
 		},
 
 		insertIntoPrompt(text) {

@@ -3,10 +3,12 @@ import { collectSessionFiles } from "../../lib/session-files";
 import { type RightPanel as Panel, useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
 import { ProjectFiles } from "./ProjectFiles";
+import { ServerFiles } from "./ServerFiles";
 import { SessionFiles } from "./SessionFiles";
 
-export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string }> = [
+export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteOnly?: boolean }> = [
 	{ id: "files", label: "项目文件", hint: "浏览工作区目录" },
+	{ id: "server", label: "服务器目录", hint: "浏览服务器上的任意目录、上传下载", remoteOnly: true },
 	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
 	{ id: "browser", label: "浏览器", hint: "在聊天旁浏览网页（桌面版）" },
 ];
@@ -33,6 +35,10 @@ function browserWidth(available: number, ratio: number): number {
 export function RightPanel() {
 	const panel = useApp((s) => s.rightPanel);
 	const setRightPanel = useApp((s) => s.setRightPanel);
+	const isRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
+	const tabs = PANEL_TABS.filter((t) => !t.remoteOnly || isRemote);
+	// 本地项目里如果存着「服务器目录」，回退到项目文件
+	const active = panel === "server" && !isRemote ? "files" : panel;
 	const changedCount = useChangedCount();
 	const ref = useRef<HTMLElement>(null);
 	const [available, setAvailable] = useState(0);
@@ -83,9 +89,9 @@ export function RightPanel() {
 					localStorage.setItem(WIDTH_KEY, String(next));
 				}} />}
 			<div className="flex h-9 shrink-0 items-stretch gap-0.5 border-b border-border px-1 pl-2">
-				{PANEL_TABS.map((t) => (
+				{tabs.map((t) => (
 					<button type="button" key={t.id} onClick={() => setRightPanel(t.id)} title={t.hint}
-						className={`relative min-w-0 truncate rounded-md px-2 py-1 text-xs ${t.id === panel ? "bg-panel-2 font-medium text-fg" : "text-muted hover:text-fg"}`}>
+						className={`relative min-w-0 truncate rounded-md px-2 py-1 text-xs ${t.id === active ? "bg-panel-2 font-medium text-fg" : "text-muted hover:text-fg"}`}>
 						{t.label}
 						{t.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}
 					</button>
@@ -93,8 +99,9 @@ export function RightPanel() {
 				<div className="flex-1" />
 				<button type="button" onClick={() => setRightPanel(null)} title="收起" className="shrink-0 px-1.5 text-muted hover:text-fg">✕</button>
 			</div>
-			{panel === "files" && <ProjectFiles />}
-			{panel === "session" && <SessionFiles />}
+			{active === "files" && <ProjectFiles />}
+			{active === "server" && isRemote && <ServerFiles />}
+			{active === "session" && <SessionFiles />}
 			{isBrowser && <BrowserPanel />}
 		</aside>
 	);

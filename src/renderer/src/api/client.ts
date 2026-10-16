@@ -46,6 +46,20 @@ export const api = {
 		acceptKey: (id: string, fingerprints: string[]) => call("hosts.acceptKey", { id, fingerprints }),
 	},
 	listDirs: (path?: string) => call("fs.listDirs", { path }),
+	/** 服务器目录：按主机 + 绝对路径操作，不受项目根限制 */
+	server: {
+		list: (hostId: string, path?: string) => call("server.list", { hostId, path }),
+		read: (hostId: string, path: string) => call("server.read", { hostId, path }),
+		write: (hostId: string, path: string, content: string, expectedMtime?: number) => call("server.write", { hostId, path, content, expectedMtime }),
+		create: (hostId: string, path: string, type: "file" | "dir") => call("server.create", { hostId, path, type }),
+		rename: (hostId: string, path: string, name: string) => call("server.rename", { hostId, path, name }),
+		remove: (hostId: string, path: string) => call("server.delete", { hostId, path }),
+		move: (hostId: string, path: string, targetDir: string) => call("server.move", { hostId, path, targetDir }),
+		upload: (hostId: string, dir: string, name: string, dataBase64: string) => call("server.upload", { hostId, dir, name, dataBase64 }),
+		download: (hostId: string, path: string) => call("server.download", { hostId, path }),
+		exportToLocal: (hostId: string, path: string, targetPath: string) => call("server.exportToLocal", { hostId, path, targetPath }),
+	},
+	pickSavePath: (defaultName?: string) => call("app.pickSavePath", { defaultName }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
 	readWorkspaceFile: (root: string, path: string) => call("workspace.read", { root, path }),
 	writeWorkspaceFile: (root: string, path: string, content: string, expectedMtime?: number) =>

@@ -83,6 +83,12 @@ export function CommandPalette() {
 				{ icon: "list-tree", label: "切换会话树轨道", when: true, run: () => s.toggleRail() },
 				{ icon: "message-square", label: "查看更新内容", when: true, run: () => s.setUpdatedTo(s.info?.version ?? null) },
 				{
+					icon: "folder-open",
+					label: "打开服务器目录",
+					when: !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId,
+					run: () => s.setRightPanel("server"),
+				},
+				{
 					icon: foldProcess ? "chevron-down" : "chevron-right",
 					label: foldProcess ? "展开思考与工具调用" : "折叠思考与工具调用",
 					when: s.activeProjectId !== null,

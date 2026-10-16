@@ -26,6 +26,8 @@ function SessionHeader() {
 	const waiting = useApp((s) => waitingCount(s));
 	const rightPanel = useApp((s) => s.rightPanel);
 	const setRightPanel = useApp((s) => s.setRightPanel);
+	const isRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
+	const panelTabs = PANEL_TABS.filter((t) => !t.remoteOnly || isRemote);
 	const foldProcess = useApp((s) => s.foldProcess);
 	const toggleFoldProcess = useApp((s) => s.toggleFoldProcess);
 	const changedCount = useChangedCount();
@@ -63,7 +65,7 @@ function SessionHeader() {
 			</button>
 			{/* 右侧面板打开时它自己有标签栏，这里不再重复显示 */}
 			{!rightPanel && <div className="flex shrink-0 gap-0.5">
-				{PANEL_TABS.map((tab) => (
+				{panelTabs.map((tab) => (
 					<button
 						type="button"
 						key={tab.id}

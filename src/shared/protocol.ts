@@ -540,6 +540,16 @@ export interface WorkspaceDirListing {
 	entries: WorkspaceEntry[];
 }
 
+/** 服务器目录（自由导航，绝对路径）的列表结果 */
+export interface ServerDirListing {
+	/** 当前目录的绝对路径 */
+	path: string;
+	/** 上一级绝对路径；已在 / 时为 null */
+	parent: string | null;
+	/** 条目；path 为绝对路径（与 WorkspaceEntry 的相对路径语义不同） */
+	entries: WorkspaceEntry[];
+}
+
 export interface FilePreview {
 	path: string;
 	absolutePath: string;
@@ -686,6 +696,8 @@ export interface BackendMethods {
 	"app.pickFolder": { params: undefined; result: string | null };
 	/** 系统对话框多选文件夹（仅桌面版） */
 	"app.pickFolders": { params: undefined; result: string[] };
+	/** 系统「保存到」对话框（仅桌面版）；取消返回 null */
+	"app.pickSavePath": { params: { defaultName?: string }; result: string | null };
 	"projects.get": { params: undefined; result: ProjectsState };
 	"projects.add": { params: { paths: string[]; groupId?: string }; result: { state: ProjectsState; added: Project[]; skipped: string[] } };
 	/** 添加远程项目：path 为服务器上的绝对路径 */
@@ -735,6 +747,29 @@ export interface BackendMethods {
 	"workspace.reveal": { params: { root: string; path: string }; result: null };
 	/** 在系统终端中打开所在目录（仅桌面版） */
 	"workspace.openTerminal": { params: { root: string; path: string }; result: null };
+	// ----- 服务器目录：按 hostId + 绝对路径操作，不限定在项目根内 -----
+	/** 列目录；path 省略时从 / 开始 */
+	"server.list": { params: { hostId: string; path?: string }; result: ServerDirListing };
+	"server.read": { params: { hostId: string; path: string }; result: FilePreview };
+	/** 保存文件；expectedMtime 与远端不一致时拒绝（文件已被 AI 或外部修改） */
+	"server.write": {
+		params: { hostId: string; path: string; content: string; expectedMtime?: number };
+		result: FilePreview;
+	};
+	/** 新建文件或文件夹；文件夹会自动创建父目录 */
+	"server.create": { params: { hostId: string; path: string; type: "file" | "dir" }; result: { path: string } };
+	/** 重命名（同目录改名）；name 不能包含路径分隔符 */
+	"server.rename": { params: { hostId: string; path: string; name: string }; result: { path: string } };
+	/** 删除文件/文件夹；远端没有回收站，是永久删除 */
+	"server.delete": { params: { hostId: string; path: string }; result: { trashed: boolean } };
+	/** 移动到另一个绝对路径目录 */
+	"server.move": { params: { hostId: string; path: string; targetDir: string }; result: { path: string } };
+	/** 上传：把本地文件内容（base64）写到 dir/name；同名文件已存在时拒绝 */
+	"server.upload": { params: { hostId: string; dir: string; name: string; dataBase64: string }; result: { path: string } };
+	/** 下载：把远端文件内容以 base64 返回；超过上限时拒绝 */
+	"server.download": { params: { hostId: string; path: string }; result: { name: string; dataBase64: string; size: number } };
+	/** 下载到本地指定路径（桌面版：先弹「保存到」对话框拿 targetPath，再一步写盘，内容不过渲染进程） */
+	"server.exportToLocal": { params: { hostId: string; path: string; targetPath: string }; result: { size: number } };
 	"service.send": { params: ServiceCommand; result: unknown };
 	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };

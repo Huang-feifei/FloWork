@@ -33,6 +33,7 @@ function DiffBlock({ diff }: { diff: string }) {
 
 export function FilePreview() {
 	const path = useApp((s) => s.preview);
+	const previewHostId = useApp((s) => s.previewHostId);
 	const cwd = useApp((s) => s.cwd);
 	const messages = useApp((s) => s.messages);
 	const filesVersion = useApp((s) => s.filesVersion);
@@ -55,10 +56,17 @@ export function FilePreview() {
 	const dirty = file !== null && editing && draft !== normalizeEol(file.text);
 	const editable = file !== null && !file.binary && !file.truncated;
 
+	/** 读文件：服务器目录里的文件（带 hostId）走 server.read，其余走本地工作区 */
+	const readFile = useCallback(
+		async (target: string) =>
+			previewHostId ? api.server.read(previewHostId, target) : cwd ? api.readWorkspaceFile(cwd, target) : Promise.reject(new Error("没有打开的项目")),
+		[previewHostId, cwd],
+	);
+
 	const load = useCallback(async () => {
-		if (!path || !cwd) return;
+		if (!path) return;
 		try {
-			const f = await api.readWorkspaceFile(cwd, path);
+			const f = await readFile(path);
 			setFile(f);
 			setDraft(normalizeEol(f.text));
 			setRevision((r) => r + 1);
@@ -68,7 +76,7 @@ export function FilePreview() {
 			setFile(null);
 			setError(errorText(e));
 		}
-	}, [path, cwd]);
+	}, [path, readFile]);
 
 	// 切换文件时重置
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 仅在文件切换时执行
@@ -77,17 +85,17 @@ export function FilePreview() {
 		setEditing(false);
 		setFile(null);
 		void load();
-	}, [path, cwd]);
+	}, [path, cwd, previewHostId]);
 
 	// 工作区文件可能变化：未编辑时直接重新加载；编辑中且有改动时提示冲突
 	// biome-ignore lint/correctness/useExhaustiveDependencies: filesVersion 只用于触发
 	useEffect(() => {
-		if (!path || !cwd || filesVersion === 0) return;
+		if (!path || (!cwd && !previewHostId) || filesVersion === 0) return;
 		if (!dirty) {
 			void load();
 			return;
 		}
-		void api.readWorkspaceFile(cwd, path).then(
+		void readFile(path).then(
 			(f) => file && f.mtime !== file.mtime && setConflict(true),
 			() => undefined,
 		);
@@ -99,11 +107,13 @@ export function FilePreview() {
 	}, [dirty, openPreview]);
 
 	const save = useCallback(async () => {
-		if (!path || !cwd || !file || !dirty || saving) return;
+		if (!path || !file || !dirty || saving || (!previewHostId && !cwd)) return;
 		setSaving(true);
 		try {
 			const content = file.text.includes("\r\n") ? draft.replace(/\n/g, "\r\n") : draft;
-			const saved = await api.writeWorkspaceFile(cwd, path, content, file.mtime);
+			const saved = previewHostId
+				? await api.server.write(previewHostId, path, content, file.mtime)
+				: await api.writeWorkspaceFile(cwd as string, path, content, file.mtime);
 			setFile(saved);
 			setDraft(normalizeEol(saved.text));
 			setConflict(false);
@@ -116,7 +126,7 @@ export function FilePreview() {
 		} finally {
 			setSaving(false);
 		}
-	}, [path, cwd, file, dirty, saving, draft, pushNotice, refreshFiles]);
+	}, [path, previewHostId, cwd, file, dirty, saving, draft, pushNotice, refreshFiles]);
 
 	// 查看模式下 Esc 关闭（编辑模式下 Esc 留给编辑器的查找面板等使用）
 	useEffect(() => {

@@ -52,6 +52,8 @@ export interface SessionSlice {
 	leafId: string | null;
 	/** 正在预览的文件（相对工作区的路径） */
 	preview: string | null;
+	/** 预览文件所属的 SSH 主机；null 表示本地工作区文件（服务器目录面板用） */
+	previewHostId: string | null;
 	/** 第三方扩展发起、等待用户应答的对话框，按到达顺序 */
 	extDialogs: ExtUIRequest[];
 	/** 扩展通过 ctx.ui.setStatus 设置的状态文字 */
@@ -85,6 +87,7 @@ export const SLICE_KEYS = [
 	"tree",
 	"leafId",
 	"preview",
+	"previewHostId",
 	"extDialogs",
 	"extStatus",
 	"extWidgets",
@@ -106,6 +109,7 @@ export function emptySlice(cwd: string | null = null): SessionSlice {
 		tree: [],
 		leafId: null,
 		preview: null,
+		previewHostId: null,
 		extDialogs: [],
 		extStatus: {},
 		extWidgets: {},

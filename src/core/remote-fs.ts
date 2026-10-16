@@ -10,6 +10,7 @@ import ignore, { type Ignore } from "ignore";
 import {
 	type FilePreview,
 	type FileSearchResult,
+	type ServerDirListing,
 	WRITE_CONFLICT_PREFIX,
 	type SshHost,
 	type WorkspaceDirListing,
@@ -19,6 +20,8 @@ import { fuzzyScore } from "./workspace-fs";
 import { shQuote, sshExec, sshRun } from "./ssh";
 
 const ALWAYS_DIMMED = ["node_modules/", ".git/", "out/", "dist/", "build/", ".next/", "__pycache__/", ".venv/", "target/"];
+/** 不读 .gitignore 时用的匹配器（服务器目录场景） */
+const ALWAYS_DIMMED_MATCHER = ignore().add(ALWAYS_DIMMED);
 const MAX_PREVIEW_BYTES = 512 * 1024;
 const BINARY_SNIFF_BYTES = 8 * 1024;
 const MAX_INDEXED_FILES = 20_000;
@@ -67,7 +70,12 @@ async function getIgnore(host: SshHost, root: string): Promise<Ignore> {
 	return matcher;
 }
 
-export async function listWorkspaceDir(host: SshHost, root: string, path?: string): Promise<WorkspaceDirListing> {
+export async function listWorkspaceDir(
+	host: SshHost,
+	root: string,
+	path?: string,
+	options: { ignore?: boolean } = {},
+): Promise<WorkspaceDirListing> {
 	const { abs, rel } = remoteResolve(root, path);
 	const script = [
 		`cd ${shQuote(abs)} 2>/dev/null || { echo "__ERR__"; exit 1; }`,
@@ -79,7 +87,7 @@ export async function listWorkspaceDir(host: SshHost, root: string, path?: strin
 		"done",
 	].join("\n");
 	const stdout = await sshRun(host, script, { timeoutMs: 30_000 });
-	const matcher = await getIgnore(host, posix.resolve(root));
+	const matcher = options.ignore === false ? ALWAYS_DIMMED_MATCHER : await getIgnore(host, posix.resolve(root));
 	const entries: WorkspaceEntry[] = [];
 	for (const line of stdout.split("\n")) {
 		if (!line) continue;
@@ -310,4 +318,102 @@ export async function listRemoteDirs(host: SshHost, path?: string): Promise<{ pa
 		.sort((a, b) => a.name.localeCompare(b.name));
 	const parent = cwd === "/" ? null : posix.dirname(cwd);
 	return { path: cwd, parent: parent === cwd ? null : parent, entries, home };
+}
+
+// ----- 服务器目录：绝对路径，不限定在项目根内 -----
+
+/**
+ * 服务器目录把根固定为 /：现有实现都经过 remoteResolve(root, path)，
+ * 以 / 为根时任意绝对路径都算在根内，于是可以直接复用上面那些脚本，
+ * 只在进出边界把「相对 / 的路径」与「绝对路径」互转。
+ */
+const SERVER_ROOT = "/";
+/** 单次上传 / 下载的大小上限：内容整块经过 base64 传输，过大既慢又占内存 */
+export const SERVER_TRANSFER_LIMIT = 32 * 1024 * 1024;
+
+function serverAbs(path: string): string {
+	return posix.resolve(SERVER_ROOT, path);
+}
+
+export async function listServerDir(host: SshHost, path?: string): Promise<ServerDirListing> {
+	const abs = path ? serverAbs(path) : SERVER_ROOT;
+	const listing = await listWorkspaceDir(host, SERVER_ROOT, abs, { ignore: false });
+	return {
+		path: abs,
+		parent: abs === SERVER_ROOT ? null : posix.dirname(abs),
+		entries: listing.entries.map((entry) => ({ ...entry, path: posix.join(SERVER_ROOT, entry.path) })),
+	};
+}
+
+export async function readServerFile(host: SshHost, path: string): Promise<FilePreview> {
+	const abs = serverAbs(path);
+	const preview = await readWorkspaceFile(host, SERVER_ROOT, abs);
+	return { ...preview, path: abs };
+}
+
+export async function writeServerFile(host: SshHost, path: string, content: string, expectedMtime?: number): Promise<FilePreview> {
+	const abs = serverAbs(path);
+	const preview = await writeWorkspaceFile(host, SERVER_ROOT, abs, content, expectedMtime);
+	return { ...preview, path: abs };
+}
+
+export async function createServerEntry(host: SshHost, path: string, type: "file" | "dir"): Promise<{ path: string }> {
+	const abs = serverAbs(path);
+	await createWorkspaceEntry(host, SERVER_ROOT, abs, type);
+	return { path: abs };
+}
+
+export async function renameServerEntry(host: SshHost, path: string, name: string): Promise<{ path: string }> {
+	const abs = serverAbs(path);
+	await renameWorkspaceEntry(host, SERVER_ROOT, abs, name);
+	return { path: posix.join(posix.dirname(abs), name.trim()) };
+}
+
+export async function deleteServerEntry(host: SshHost, path: string): Promise<{ trashed: boolean }> {
+	return deleteWorkspaceEntry(host, SERVER_ROOT, serverAbs(path));
+}
+
+export async function moveServerEntry(host: SshHost, path: string, targetDir: string): Promise<{ path: string }> {
+	const abs = serverAbs(path);
+	const dir = serverAbs(targetDir);
+	await moveWorkspaceEntry(host, SERVER_ROOT, abs, dir);
+	return { path: posix.join(dir, posix.basename(abs)) };
+}
+
+/** 上传：本地字节经 base64 → stdin 写到 dir/name；目标同名文件已存在时拒绝 */
+export async function uploadServerFile(host: SshHost, dir: string, name: string, data: Buffer): Promise<{ path: string }> {
+	if (data.byteLength > SERVER_TRANSFER_LIMIT) {
+		throw new Error(`文件超过 ${Math.round(SERVER_TRANSFER_LIMIT / 1024 / 1024)} MB，暂不支持上传`);
+	}
+	const folder = serverAbs(dir);
+	const target = posix.join(folder, assertEntryName(name));
+	const script = [
+		`p=${shQuote(target)}`,
+		`[ -d ${shQuote(folder)} ] || { echo "目标目录不存在" >&2; exit 1; }`,
+		`[ -e "$p" ] && { echo "目标目录已有同名文件" >&2; exit 1; }`,
+		'base64 -d > "$p" || exit 1',
+	].join("\n");
+	const result = await sshExec(host, script, { timeoutMs: 300_000, stdin: data.toString("base64") });
+	if (result.code !== 0) throw new Error(`上传失败：${result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`}`);
+	return { path: target };
+}
+
+/** 下载：把远端文件内容以 base64 返回（超过上限时直接拒绝，不传输） */
+export async function downloadServerFile(host: SshHost, path: string): Promise<{ name: string; dataBase64: string; size: number }> {
+	const abs = serverAbs(path);
+	const limitMb = Math.round(SERVER_TRANSFER_LIMIT / 1024 / 1024);
+	const script = [
+		`p=${shQuote(abs)}`,
+		'[ -f "$p" ] || { echo "不是文件" >&2; exit 3; }',
+		'sz=$(wc -c < "$p")',
+		`[ "$sz" -gt ${SERVER_TRANSFER_LIMIT} ] && { echo "文件超过 ${limitMb} MB，暂不支持下载" >&2; exit 4; }`,
+		`printf 'M %s\\n' "$sz"`,
+		`base64 < "$p" | tr -d '\\n'`,
+		`printf '\\n'`,
+	].join("\n");
+	const stdout = await sshRun(host, script, { timeoutMs: 300_000 });
+	const newline = stdout.indexOf("\n");
+	if (newline < 0 || !stdout.startsWith("M ")) throw new Error(`下载失败：${stdout.trim().slice(0, 200) || "无输出"}`);
+	const size = Number(stdout.slice(2, newline)) || 0;
+	return { name: posix.basename(abs), size, dataBase64: stdout.slice(newline + 1).replace(/\s+/g, "") };
 }

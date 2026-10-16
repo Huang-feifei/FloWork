@@ -13,6 +13,7 @@ import { api, errorText } from "../../api/client";
 import { isMac } from "../../lib/desktop";
 import { normalizedPath, useApp } from "../../store";
 import { Icon } from "../Icon";
+import { Button, Field, Input, Modal, Select } from "../ui";
 
 /** xterm 只认具体色值，这里给出深 / 浅两套，与 styles.css 的 token 对应 */
 const DARK_THEME: ITheme = {
@@ -113,9 +114,40 @@ const EMPTY_VIEW: EntryView = { status: "idle", shell: null, exitCode: null, err
 const entries = new Map<string, Entry>();
 let listening = false;
 
+/** 连接列表的订阅：entries 的增删与状态变化都改这个版本号，供连接条重渲染 */
+const listListeners = new Set<() => void>();
+let listVersion = 0;
+
+function bumpList(): void {
+	listVersion += 1;
+	for (const listener of listListeners) listener();
+}
+
+function subscribeList(listener: () => void): () => void {
+	listListeners.add(listener);
+	return () => listListeners.delete(listener);
+}
+
+function listSnapshot(): number {
+	return listVersion;
+}
+
+/** 订阅连接列表；返回版本号，值不重要，只用于触发重渲染 */
+function useTerminalList(): number {
+	return useSyncExternalStore(subscribeList, listSnapshot, listSnapshot);
+}
+
+/** 连接条上的显示名 */
+function connectionLabel(entry: Entry): string {
+	if (!entry.hostId) return "本地";
+	const host = useApp.getState().hosts.find((h) => h.id === entry.hostId);
+	return host ? host.name || `${host.user ? `${host.user}@` : ""}${host.host}` : "远程主机";
+}
+
 function setView(entry: Entry, patch: Partial<EntryView>): void {
 	entry.view = { ...entry.view, ...patch };
 	for (const listener of entry.listeners) listener();
+	bumpList();
 }
 
 function subscribeEntry(entry: Entry, listener: () => void): () => void {
@@ -227,6 +259,7 @@ function getOrCreate(cwd: string, hostId?: string): Entry {
 	const entry = createEntry(cwd, hostId);
 	entries.set(key, entry);
 	listen();
+	bumpList();
 	return entry;
 }
 
@@ -237,6 +270,7 @@ export function disposeTerminal(cwd: string, hostId?: string): void {
 	if (!entry) return;
 	entries.delete(key);
 	entry.disposed = true;
+	bumpList();
 	if (entry.fitTimer !== null) {
 		clearTimeout(entry.fitTimer);
 		entry.fitTimer = null;
@@ -357,18 +391,116 @@ function useTerminalView(entry: Entry | null): EntryView {
 	return useSyncExternalStore(subscribe, snapshot);
 }
 
+/** 新建终端连接：选主机（含本地终端）与起始目录 */
+function ConnectDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (cwd: string, hostId?: string) => void }) {
+	const hosts = useApp((s) => s.hosts);
+	const projectCwd = useApp((s) => s.cwd);
+	const [hostId, setHostId] = useState("");
+	const [dir, setDir] = useState(projectCwd ?? "");
+	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
+
+	// 选主机后预填目录：优先主机设置的默认目录，否则取远端 home
+	useEffect(() => {
+		if (!hostId) {
+			setDir(projectCwd ?? "");
+			setError(null);
+			return;
+		}
+		const host = hosts.find((h) => h.id === hostId);
+		if (host?.defaultPath) {
+			setDir(host.defaultPath);
+			setError(null);
+			return;
+		}
+		let cancelled = false;
+		setBusy(true);
+		api.hosts
+			.listDirs(hostId)
+			.then((r) => {
+				if (cancelled) return;
+				setDir(r.home);
+				setError(null);
+			})
+			.catch((e) => {
+				if (!cancelled) setError(errorText(e));
+			})
+			.finally(() => {
+				if (!cancelled) setBusy(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [hostId, hosts, projectCwd]);
+
+	return (
+		<Modal
+			title="新建终端连接"
+			width="w-[460px]"
+			onClose={onClose}
+			footer={
+				<>
+					<Button onClick={onClose}>取消</Button>
+					<Button
+						variant="primary"
+						disabled={!dir.trim() || busy}
+						onClick={() => onOpen(dir.trim(), hostId || undefined)}
+					>
+						打开终端
+					</Button>
+				</>
+			}
+		>
+			<div className="space-y-3">
+				<Field label="主机">
+					<Select
+						value={hostId}
+						onChange={(e) => setHostId(e.target.value)}
+					>
+						<option value="">本地终端</option>
+						{hosts.map((h) => (
+							<option
+								key={h.id}
+								value={h.id}
+							>
+								{h.name || `${h.user ? `${h.user}@` : ""}${h.host}`}
+							</option>
+						))}
+					</Select>
+				</Field>
+				<Field label="起始目录" hint={hostId ? "服务器上的绝对路径" : "本机目录"}>
+					<Input
+						value={dir}
+						onChange={(e) => setDir(e.target.value)}
+						placeholder={hostId ? "/root" : (projectCwd ?? "")}
+					/>
+				</Field>
+				{error && <div className="rounded border border-err/40 bg-err-soft px-2 py-1 text-[12px] text-err">{error}</div>}
+				{hosts.length === 0 && <div className="text-[12px] text-muted">还没有远程主机：在侧边栏「远程主机」里添加后就能在这里选。</div>}
+			</div>
+		</Modal>
+	);
+}
+
 export function TerminalTab() {
 	const cwd = useApp((s) => s.cwd);
 	const hostId = useApp((s) => s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const resolvedTheme = useApp((s) => s.resolvedTheme);
-	const [entry, setEntry] = useState<Entry | null>(null);
+	const [activeKey, setActiveKey] = useState<string | null>(null);
+	const [connecting, setConnecting] = useState(false);
 	const hostRef = useRef<HTMLDivElement>(null);
-	const view = useTerminalView(entry);
+	useTerminalList();
 
-	// 懒启动：终端页签真正显示（本组件被挂载）时才创建实例
+	// 懒启动：终端页签真正显示（本组件被挂载）时才创建当前项目的实例，并切到它
 	useEffect(() => {
-		setEntry(cwd ? getOrCreate(cwd, hostId) : null);
+		if (!cwd) return;
+		getOrCreate(cwd, hostId);
+		setActiveKey(entryKey(cwd, hostId));
 	}, [cwd, hostId]);
+
+	const list = [...entries.values()].filter((item) => !item.disposed);
+	const active = list.find((item) => entryKey(item.cwd, item.hostId) === activeKey) ?? list[0] ?? null;
+	const view = useTerminalView(active);
 
 	// 主题切换：已创建的终端实例同步换色
 	useEffect(() => {
@@ -376,77 +508,127 @@ export function TerminalTab() {
 		for (const item of entries.values()) item.term.options.theme = theme;
 	}, [resolvedTheme]);
 
+	// 把活动终端挂到面板上（attach 会隐藏其它实例）
 	useEffect(() => {
 		const host = hostRef.current;
-		if (!host || !entry) return;
-		attach(entry, host);
-		const observer = new ResizeObserver(() => scheduleFit(entry));
+		if (!host || !active) return;
+		attach(active, host);
+		const observer = new ResizeObserver(() => scheduleFit(active));
 		observer.observe(host);
 		return () => {
 			observer.disconnect();
-			if (entry.fitTimer !== null) {
-				clearTimeout(entry.fitTimer);
-				entry.fitTimer = null;
+			if (active.fitTimer !== null) {
+				clearTimeout(active.fitTimer);
+				active.fitTimer = null;
 			}
 		};
-	}, [entry]);
+	}, [active]);
 
-	if (!cwd) {
-		return (
-			<div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
-				<div className="text-muted">打开一个项目后，这里会出现该项目目录下的终端。</div>
-				<div className="text-faint">按 {isMac ? "⌘`" : "Ctrl+`"} 收起本面板。</div>
-			</div>
-		);
-	}
+	const close = async (entry: Entry) => {
+		const key = entryKey(entry.cwd, entry.hostId);
+		if (entry.terminalId) await api.terminal.close(entry.terminalId).catch(() => undefined);
+		disposeTerminal(entry.cwd, entry.hostId);
+		if (activeKey === key) setActiveKey(null);
+	};
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-6 shrink-0 items-center gap-2 border-b border-border px-3 font-mono text-[11px]">
-				<span className={`size-1.5 shrink-0 rounded-full ${statusDot(view.status)}`} />
-				<span className="shrink-0 text-muted">{statusText(view)}</span>
-				<span
-					className="min-w-0 truncate text-faint"
-					title={cwd}
-				>
-					{cwd}
-				</span>
-				<div className="flex-1" />
-				{view.error ? (
-					<span
-						className="max-w-[45%] min-w-0 truncate text-err"
-						title={view.error}
-					>
-						{view.error}
-					</span>
-				) : (
-					view.shell && (
-						<span
-							className="max-w-[45%] min-w-0 truncate text-faint"
-							title={view.shell}
+			{/* 连接条：每个连接一项，可切换 / 关闭；＋ 新建连接（本地或远程主机） */}
+			<div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2 font-mono text-[11px]">
+				{list.map((item) => {
+					const key = entryKey(item.cwd, item.hostId);
+					const on = item === active;
+					return (
+						<div
+							key={key}
+							className={`flex min-w-0 max-w-[42%] items-center gap-1 rounded px-1.5 py-0.5 ${on ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2"}`}
 						>
-							{view.shell}
-						</span>
-					)
-				)}
-				{(view.status === "exited" || view.status === "error") && (
-					<button
-						type="button"
-						onClick={() => entry && void restart(entry)}
-						className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
-					>
-						<Icon
-							name="refresh"
-							className="size-3"
-						/>
-						重新启动终端
-					</button>
+							<button
+								type="button"
+								onClick={() => setActiveKey(key)}
+								title={`${connectionLabel(item)} · ${item.cwd}`}
+								className="flex min-w-0 items-center gap-1.5"
+							>
+								<span className={`size-1.5 shrink-0 rounded-full ${statusDot(item.view.status)}`} />
+								<span className="shrink-0">{connectionLabel(item)}</span>
+								<span className="truncate text-faint">{item.cwd}</span>
+							</button>
+							<button
+								type="button"
+								onClick={() => void close(item)}
+								title="关闭这个连接"
+								className="shrink-0 text-faint hover:text-err"
+							>
+								✕
+							</button>
+						</div>
+					);
+				})}
+				<button
+					type="button"
+					onClick={() => setConnecting(true)}
+					title="新建终端连接"
+					className="shrink-0 rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+				>
+					＋
+				</button>
+				<div className="flex-1" />
+				{active && (
+					<>
+						{view.error ? (
+							<span
+								className="max-w-[38%] min-w-0 truncate text-err"
+								title={view.error}
+							>
+								{view.error}
+							</span>
+						) : (
+							<span className="max-w-[38%] min-w-0 truncate text-faint" title={view.shell ?? undefined}>
+								{statusText(view)}
+								{view.shell ? ` · ${view.shell}` : ""}
+							</span>
+						)}
+						{(view.status === "exited" || view.status === "error") && (
+							<button
+								type="button"
+								onClick={() => void restart(active)}
+								className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+							>
+								<Icon
+									name="refresh"
+									className="size-3"
+								/>
+								重新启动
+							</button>
+						)}
+					</>
 				)}
 			</div>
-			<div
-				ref={hostRef}
-				className="min-h-0 flex-1 px-2 py-1"
-			/>
+
+			{active ? (
+				<div
+					ref={hostRef}
+					className="min-h-0 flex-1 px-2 py-1"
+				/>
+			) : (
+				<div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
+					<div className="text-muted">还没有终端连接：点上方「＋」新建一个（本地或远程主机）。</div>
+					<div className="text-faint">
+						打开项目后会自动带上该项目目录的终端；按 {isMac ? "⌘`" : "Ctrl+`"} 收起本面板。
+					</div>
+				</div>
+			)}
+
+			{connecting && (
+				<ConnectDialog
+					onClose={() => setConnecting(false)}
+					onOpen={(dir, host) => {
+						setConnecting(false);
+						getOrCreate(dir, host);
+						setActiveKey(entryKey(dir, host));
+					}}
+				/>
+			)}
 		</div>
 	);
 }

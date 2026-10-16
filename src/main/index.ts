@@ -74,6 +74,12 @@ const backend = new Backend({
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
 		return result.canceled ? null : (result.filePaths[0] ?? null);
 	},
+	// 下载远端文件时选保存位置
+	pickSavePath: async (defaultName?: string) => {
+		const options = { defaultPath: defaultName };
+		const result = mainWindow ? await dialog.showSaveDialog(mainWindow, options) : await dialog.showSaveDialog(options);
+		return result.canceled || !result.filePath ? null : result.filePath;
+	},
 	// SSH 密码落盘前用系统加密（Windows 上是 DPAPI，绑定当前系统用户）
 	secrets: {
 		available: () => app.isReady() && safeStorage.isEncryptionAvailable(),

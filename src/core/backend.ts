@@ -17,6 +17,8 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { acceptHostKey, inspectHostKey } from "./host-key";
 import { OpsPathMap } from "./ops-paths";
 import { HostStore, type SecretCodec } from "./hosts";
@@ -55,6 +57,8 @@ export interface BackendHost {
 	openTerminal?: (absDir: string) => void;
 	/** 系统原生文件选择对话框（挑选 SSH 私钥）；网页版不提供 */
 	pickFile?: () => Promise<string | null>;
+	/** 系统「保存到」对话框（下载远端文件用）；网页版不提供（退回浏览器下载） */
+	pickSavePath?: (defaultName?: string) => Promise<string | null>;
 	/** 系统级加密（Windows DPAPI / macOS 钥匙串 / libsecret），用于落盘的 SSH 密码；网页版不提供（退回明文） */
 	secrets?: SecretCodec;
 }
@@ -144,6 +148,9 @@ export class Backend {
 			case "app.pickFolders":
 				if (!this.host.pickFolders) throw new Error("当前外壳不支持系统文件夹对话框");
 				return this.host.pickFolders();
+			case "app.pickSavePath":
+				if (!this.host.pickSavePath) throw new Error("当前外壳不支持系统保存对话框");
+				return this.host.pickSavePath((rawParams as BackendMethods["app.pickSavePath"]["params"]).defaultName);
 			case "projects.get":
 				return this.projects.get();
 			case "projects.add": {
@@ -253,6 +260,50 @@ export class Backend {
 				if (!this.host.openTerminal) throw new Error("当前外壳不支持在终端中打开");
 				this.host.openTerminal(resolveInside(params.root, params.path).abs);
 				return null;
+			}
+			// ----- 服务器目录：按 hostId + 绝对路径操作 -----
+			case "server.list": {
+				const params = rawParams as BackendMethods["server.list"]["params"];
+				return remoteFs.listServerDir(await this.hosts.require(params.hostId), params.path);
+			}
+			case "server.read": {
+				const params = rawParams as BackendMethods["server.read"]["params"];
+				return remoteFs.readServerFile(await this.hosts.require(params.hostId), params.path);
+			}
+			case "server.write": {
+				const params = rawParams as BackendMethods["server.write"]["params"];
+				return remoteFs.writeServerFile(await this.hosts.require(params.hostId), params.path, params.content, params.expectedMtime);
+			}
+			case "server.create": {
+				const params = rawParams as BackendMethods["server.create"]["params"];
+				return remoteFs.createServerEntry(await this.hosts.require(params.hostId), params.path, params.type);
+			}
+			case "server.rename": {
+				const params = rawParams as BackendMethods["server.rename"]["params"];
+				return remoteFs.renameServerEntry(await this.hosts.require(params.hostId), params.path, params.name);
+			}
+			case "server.delete": {
+				const params = rawParams as BackendMethods["server.delete"]["params"];
+				return remoteFs.deleteServerEntry(await this.hosts.require(params.hostId), params.path);
+			}
+			case "server.move": {
+				const params = rawParams as BackendMethods["server.move"]["params"];
+				return remoteFs.moveServerEntry(await this.hosts.require(params.hostId), params.path, params.targetDir);
+			}
+			case "server.upload": {
+				const params = rawParams as BackendMethods["server.upload"]["params"];
+				return remoteFs.uploadServerFile(await this.hosts.require(params.hostId), params.dir, params.name, Buffer.from(params.dataBase64, "base64"));
+			}
+			case "server.download": {
+				const params = rawParams as BackendMethods["server.download"]["params"];
+				return remoteFs.downloadServerFile(await this.hosts.require(params.hostId), params.path);
+			}
+			case "server.exportToLocal": {
+				const params = rawParams as BackendMethods["server.exportToLocal"]["params"];
+				const file = await remoteFs.downloadServerFile(await this.hosts.require(params.hostId), params.path);
+				await mkdir(dirname(params.targetPath), { recursive: true });
+				await writeFile(params.targetPath, Buffer.from(file.dataBase64, "base64"));
+				return { size: file.size };
 			}
 			case "hosts.get":
 				return this.hosts.list();
