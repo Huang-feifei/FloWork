@@ -71,7 +71,7 @@ export const api = {
 
 	/** 终端按 cwd 幂等：同一目录重复 open 会复用同一个 shell（远程路径由后端根据项目注册表自动识别） */
 	terminal: {
-		open: (cwd: string, cols: number, rows: number) => call("terminal.open", { cwd, cols, rows }),
+		open: (cwd: string, cols: number, rows: number, hostId?: string) => call("terminal.open", { cwd, cols, rows, hostId }),
 		write: (terminalId: string, data: string) => call("terminal.write", { terminalId, data }),
 		resize: (terminalId: string, cols: number, rows: number) => call("terminal.resize", { terminalId, cols, rows }),
 		close: (terminalId: string) => call("terminal.close", { terminalId }),

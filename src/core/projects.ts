@@ -67,7 +67,8 @@ export class ProjectStore {
 	private snapshot(state: StoredState): ProjectsState {
 		return {
 			groups: state.groups.map((g) => ({ ...g })),
-			projects: state.projects.map((p) => ({ ...p, missing: !existsSync(p.path) })),
+			// 远程项目的路径在服务器上，不能用本地 existsSync 判断（Windows 上 /root 会被当成 E:\root）
+			projects: state.projects.map((p) => ({ ...p, missing: p.hostId ? false : !existsSync(p.path) })),
 		};
 	}
 

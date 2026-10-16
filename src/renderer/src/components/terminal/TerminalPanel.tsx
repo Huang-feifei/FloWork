@@ -93,6 +93,8 @@ interface EntryView {
 
 interface Entry {
 	cwd: string;
+	/** 远程项目所属主机；为空表示本地终端 */
+	hostId?: string;
 	term: Terminal;
 	fit: FitAddon;
 	container: HTMLDivElement;
@@ -141,7 +143,7 @@ function stash(terminalId: string, data: string): void {
 	window.setTimeout(() => orphan.delete(terminalId), ORPHAN_MS);
 }
 
-function createEntry(cwd: string): Entry {
+function createEntry(cwd: string, hostId?: string): Entry {
 	const container = document.createElement("div");
 	container.style.width = "100%";
 	container.style.height = "100%";
@@ -161,6 +163,7 @@ function createEntry(cwd: string): Entry {
 	term.attachCustomKeyEventHandler((event) => !(event.type === "keydown" && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key === "`"));
 	const entry: Entry = {
 		cwd,
+		hostId,
 		term,
 		fit,
 		container,
@@ -201,19 +204,24 @@ function listen(): void {
 	});
 }
 
-function getOrCreate(cwd: string): Entry {
-	const key = normalizedPath(cwd);
+/** 远程终端按「主机 + 路径」区分：不同主机上的 /root 是不同的终端 */
+function entryKey(cwd: string, hostId?: string): string {
+	return hostId ? `${hostId}\0${cwd}` : normalizedPath(cwd);
+}
+
+function getOrCreate(cwd: string, hostId?: string): Entry {
+	const key = entryKey(cwd, hostId);
 	const existing = entries.get(key);
 	if (existing && !existing.disposed) return existing;
-	const entry = createEntry(cwd);
+	const entry = createEntry(cwd, hostId);
 	entries.set(key, entry);
 	listen();
 	return entry;
 }
 
 /** 项目被停止 / 移除时释放；界面上的收起面板、切项目只隐藏不销毁 */
-export function disposeTerminal(cwd: string): void {
-	const key = normalizedPath(cwd);
+export function disposeTerminal(cwd: string, hostId?: string): void {
+	const key = entryKey(cwd, hostId);
 	const entry = entries.get(key);
 	if (!entry) return;
 	entries.delete(key);
@@ -255,7 +263,7 @@ async function openEntry(entry: Entry): Promise<void> {
 	const cols = entry.term.cols;
 	const rows = entry.term.rows;
 	try {
-		const result = await api.terminal.open(entry.cwd, cols, rows);
+		const result = await api.terminal.open(entry.cwd, cols, rows, entry.hostId);
 		if (entry.disposed) {
 			// 打开过程中项目被关掉：把刚起的 shell 收掉
 			void api.terminal.close(result.terminalId).catch(() => undefined);
@@ -336,6 +344,7 @@ function useTerminalView(entry: Entry | null): EntryView {
 
 export function TerminalTab() {
 	const cwd = useApp((s) => s.cwd);
+	const hostId = useApp((s) => s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const resolvedTheme = useApp((s) => s.resolvedTheme);
 	const [entry, setEntry] = useState<Entry | null>(null);
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -343,8 +352,8 @@ export function TerminalTab() {
 
 	// 懒启动：终端页签真正显示（本组件被挂载）时才创建实例
 	useEffect(() => {
-		setEntry(cwd ? getOrCreate(cwd) : null);
-	}, [cwd]);
+		setEntry(cwd ? getOrCreate(cwd, hostId) : null);
+	}, [cwd, hostId]);
 
 	// 主题切换：已创建的终端实例同步换色
 	useEffect(() => {

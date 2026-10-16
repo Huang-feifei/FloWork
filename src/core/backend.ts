@@ -17,6 +17,7 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
+import { OpsPathMap } from "./ops-paths";
 import { HostStore, type SecretCodec } from "./hosts";
 import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
 import { ProjectStore, samePath } from "./projects";
@@ -68,6 +69,10 @@ export class Backend {
 	private readonly listeners = new Set<PushListener>();
 	/** clientId → 该客户端打开的会话，客户端断开时一并关闭 */
 	private readonly clientSessions = new Map<string, Set<string>>();
+	/** 运维会话：本地占位目录 ⇄ 远程路径 */
+	private readonly opsPaths = new OpsPathMap();
+	/** handleId → 运维会话（用于把 worker 返回的状态里的路径换回远程路径） */
+	private readonly opsHandles = new Set<string>();
 
 	constructor(private readonly host: BackendHost) {
 		this.hosts = new HostStore(undefined, host.secrets);
@@ -76,6 +81,25 @@ export class Backend {
 			(push) => this.push(push),
 			(id) => this.hosts.require(id),
 		);
+	}
+
+	/**
+	 * 界面传来的 cwd（远程项目即服务器路径）→ worker 使用的 cwd。
+	 * 远程项目返回本地占位目录与主机；本地项目原样返回。
+	 */
+	private async workerCwd(cwd: string): Promise<{ cwd: string; host?: SshHost }> {
+		const host = await this.hostOf(cwd);
+		if (!host) return { cwd };
+		return { cwd: this.opsPaths.register(host.id, cwd), host };
+	}
+
+	/** worker 返回的结果里如有 SessionState，把占位目录换回远程路径 */
+	private fromWorker(handleId: string, result: unknown): unknown {
+		if (!this.opsHandles.has(handleId) || !result || typeof result !== "object") return result;
+		const r = result as { cwd?: unknown; ops?: unknown; state?: unknown };
+		if (r.ops && typeof r.cwd === "string") return this.opsPaths.state(result as never);
+		if (r.state && typeof r.state === "object") return { ...r, state: this.opsPaths.state(r.state as never) };
+		return result;
 	}
 
 	/** 项目根路径 → 所属 SSH 主机；本地项目返回 undefined */
@@ -262,7 +286,8 @@ export class Backend {
 			case "projects.addRemote": {
 				const params = rawParams as BackendMethods["projects.addRemote"]["params"];
 				await this.hosts.require(params.hostId);
-				const project = await this.projects.addRemote(params.hostId, params.path, params.name);
+				// ProjectStore.mutate 返回 { state, result }，result 才是项目本身
+				const { result: project } = await this.projects.addRemote(params.hostId, params.path, params.name);
 				const state = this.projectsChanged(await this.projects.get());
 				return { state, project };
 			}
@@ -272,6 +297,14 @@ export class Backend {
 					throw new Error("历史会话操作必须通过 sessions.rename/delete 协调");
 				}
 				const service = await this.workers.getService();
+				// 远程项目的会话按本地占位目录归档
+				if (command.type === "list_sessions" && command.cwd) {
+					const { cwd, host } = await this.workerCwd(command.cwd);
+					if (host) {
+						const list = (await service.send({ ...command, cwd })) as SessionSummary[];
+						return this.opsPaths.summaries(list, command.cwd);
+					}
+				}
 				const result = await service.send(command);
 				if (CONFIG_MUTATING_COMMANDS.has(command.type)) {
 					await this.workers.broadcastToSessions({ type: "refresh_config" });
@@ -285,31 +318,42 @@ export class Backend {
 			}
 			case "session.open": {
 				const params = rawParams as BackendMethods["session.open"]["params"];
-				if (await this.hostOf(params.cwd)) throw new Error("远程项目暂不支持 AI 会话（当前支持远程终端与文件编辑）");
-				if (!(await isDirectory(params.cwd))) throw new Error(`工作区不存在或不是文件夹：${params.cwd}`);
-				const opened = await this.workers.openSession(params, {
-					onEvent: (handleId, event) => this.push({ type: "session_event", handleId, event }),
-					onExit: (handleId, code, expected) => {
-						this.clientSessions.get(clientId)?.delete(handleId);
-						this.push({ type: "session_exit", handleId, code, expected });
+				const { cwd, host } = await this.workerCwd(params.cwd);
+				if (host) {
+					// 运维会话：先确认能连上，错误信息比 worker 里冒出来的更直接
+					if (host.auth === "password" && !host.password) throw new Error("该主机的密码未保存或无法解密，请在主机设置里重新填写");
+				} else if (!(await isDirectory(cwd))) throw new Error(`工作区不存在或不是文件夹：${cwd}`);
+				const opened = await this.workers.openSession(
+					{ ...params, cwd, ops: host ? { host, remoteCwd: params.cwd } : undefined },
+					{
+						onEvent: (handleId, event) => {
+							const out = this.opsHandles.has(handleId) && event.type === "session_changed" ? { ...event, state: this.opsPaths.state(event.state) } : event;
+							this.push({ type: "session_event", handleId, event: out });
+						},
+						onExit: (handleId, code, expected) => {
+							this.clientSessions.get(clientId)?.delete(handleId);
+							this.opsHandles.delete(handleId);
+							this.push({ type: "session_exit", handleId, code, expected });
+						},
 					},
-				});
+				);
+				if (host) this.opsHandles.add(opened.handleId);
 				let owned = this.clientSessions.get(clientId);
 				if (!owned) {
 					owned = new Set();
 					this.clientSessions.set(clientId, owned);
 				}
 				owned.add(opened.handleId);
-				return opened;
+				return { handleId: opened.handleId, state: this.opsPaths.state(opened.state) };
 			}
 			case "session.send": {
 				const params = rawParams as BackendMethods["session.send"]["params"];
 				const result = await this.workers.sendToSession(params.handleId, params.command);
 				if (params.command.type === "set_session_name") {
 					const state = await this.workers.sendToSession(params.handleId, { type: "get_state" }) as { cwd: string };
-					this.push({ type: "sessions_changed", cwd: state.cwd });
+					this.push({ type: "sessions_changed", cwd: this.opsPaths.remoteOf(state.cwd) });
 				}
-				return result;
+				return this.fromWorker(params.handleId, result);
 			}
 			case "session.close": {
 				const params = rawParams as BackendMethods["session.close"]["params"];
@@ -319,13 +363,13 @@ export class Backend {
 			}
 			case "sessions.rename": {
 				const params = rawParams as BackendMethods["sessions.rename"]["params"];
-				await this.workers.renameSession(params.cwd, params.path, params.name);
+				await this.workers.renameSession((await this.workerCwd(params.cwd)).cwd, params.path, params.name);
 				this.push({ type: "sessions_changed", cwd: params.cwd });
 				return null;
 			}
 			case "sessions.delete": {
 				const params = rawParams as BackendMethods["sessions.delete"]["params"];
-				await this.workers.deleteSession(params.cwd, params.path);
+				await this.workers.deleteSession((await this.workerCwd(params.cwd)).cwd, params.path);
 				this.push({ type: "sessions_changed", cwd: params.cwd });
 				return null;
 			}

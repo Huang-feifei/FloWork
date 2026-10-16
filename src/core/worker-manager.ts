@@ -257,7 +257,7 @@ export class WorkerManager {
 	}
 
 	openSession(
-		options: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode },
+		options: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode; ops?: WorkerInit["ops"] },
 		callbacks: SessionCallbacks,
 	): Promise<{ handleId: string; state: SessionState }> {
 		return this.coordinate(async () => {
@@ -272,7 +272,7 @@ export class WorkerManager {
 			let owner: SessionOwner | undefined;
 			const earlyEvents: SessionEvent[] = [];
 			const { client, state } = await WorkerClient.start(this.spawn,
-				{ role: "session", cwd: options.cwd, sessionPath, approvalMode: options.approvalMode }, {
+				{ role: "session", cwd: options.cwd, sessionPath, approvalMode: options.approvalMode, ops: options.ops }, {
 					onEvent: (event) => {
 						if (!owner) earlyEvents.push(event);
 						else {

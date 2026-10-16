@@ -25,6 +25,8 @@ const SUITES = [
 	{ name: "sessions", file: "scripts/test-sessions.mjs", needsBuild: true },
 	{ name: "resources", file: "scripts/test-resources.mjs", needsBuild: true },
 	{ name: "ext-ui", file: "scripts/test-ext-ui.mjs", needsBuild: true },
+	// 需要测试主机：未设置 FLOWORK_TEST_SSH 时自动跳过
+	{ name: "ops-session", file: "scripts/test-ops-session.mjs", needsBuild: true },
 ];
 
 function run(label, command, commandArgs) {

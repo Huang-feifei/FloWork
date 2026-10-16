@@ -555,24 +555,6 @@ export const useApp = create<AppState>()((set, get) => {
 					get().pushNotice("error", `文件夹不存在：${target.path}`);
 					return;
 				}
-				if (target.hostId) {
-					// 远程项目没有本地 pi 会话：只切换工作区，主区域展示文件与终端
-					const remotePrevId = get().activeProjectId;
-					const remotePrev = pickSlice(get());
-					const remoteBackground = { ...get().background };
-					if (remotePrevId && remotePrevId !== pid && remotePrev.handleId) remoteBackground[remotePrevId] = remotePrev;
-					delete remoteBackground[pid];
-					set({
-						...emptySlice(target.path),
-						background: remoteBackground,
-						activeProjectId: pid,
-						connecting: false,
-						unread: { ...get().unread, [pid]: false },
-					});
-					localStorage.setItem(LAST_PROJECT_KEY, pid);
-					void api.projects.touch(pid).then((projects) => set({ projects })).catch(() => undefined);
-					return;
-				}
 				// 当前项目移入后台（保留 pi 进程）
 				const prevId = get().activeProjectId;
 				const prev = pickSlice(get());
@@ -619,7 +601,7 @@ export const useApp = create<AppState>()((set, get) => {
 			if (slice?.isRunning && !(await askConfirm({ title: "停止项目", message: "该项目有任务正在运行，停止后任务会中断。继续？", confirmLabel: "停止", danger: true }))) return;
 			// 项目被关闭时连同它的终端一起释放；收起面板、切项目只是隐藏终端实例
 			const target = project(pid);
-			if (target) disposeTerminal(target.path);
+			if (target) disposeTerminal(target.path, target.hostId);
 			const epoch = advanceProject(pid);
 			if (slice?.handleId) {
 				try {
@@ -657,7 +639,7 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async refreshProjectSessions(pid) {
 			const p = project(pid);
-			if (!p || p.missing || p.hostId) return;
+			if (!p || p.missing) return;
 			const request = (historyRequests.get(pid) ?? 0) + 1;
 			historyRequests.set(pid, request);
 			try {
@@ -750,7 +732,6 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async newSessionIn(pid) {
 			await get().openProject(pid);
-			if (project(pid)?.hostId) return;
 			if (get().activeProjectId === pid) await get().newSession();
 			get().toggleExpanded(pid, true);
 		},

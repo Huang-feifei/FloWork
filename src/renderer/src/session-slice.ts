@@ -4,6 +4,7 @@
  * 两者用同一个 reduceEvent 处理事件，保证后台运行时状态照常累积。
  */
 import type {
+	ApprovalRisk,
 	ChatMessage,
 	ContentBlock,
 	ExtUIRequest,
@@ -26,6 +27,8 @@ export interface PendingApproval {
 	toolCallId: string;
 	toolName: string;
 	args: unknown;
+	/** 运维会话：命令风险评估 */
+	risk?: ApprovalRisk;
 }
 
 type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
@@ -185,7 +188,7 @@ export function reduceEvent(s: SessionSlice, event: SessionEvent): Partial<Sessi
 			return {
 				pendingApprovals: [
 					...s.pendingApprovals.filter((p) => p.toolCallId !== event.toolCallId),
-					{ toolCallId: event.toolCallId, toolName: event.toolName, args: event.args },
+					{ toolCallId: event.toolCallId, toolName: event.toolName, args: event.args, risk: event.risk },
 				],
 			};
 		case "approval_resolved":

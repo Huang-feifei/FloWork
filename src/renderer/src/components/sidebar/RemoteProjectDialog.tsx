@@ -237,6 +237,16 @@ export function RemoteProjectDialog() {
 	const hosts = useApp((s) => s.hosts);
 	const sshAvailable = useApp((s) => s.info?.ssh ?? null);
 	const { setRemoteOpen, addRemoteProject } = useApp.getState();
+
+	/** 运维会话：项目路径取主机默认目录，没有时取远程 home */
+	const connectHost = async (host: SshHost) => {
+		try {
+			const path = host.defaultPath || (await api.hosts.listDirs(host.id)).home;
+			await addRemoteProject(host.id, path, hostLabel(host));
+		} catch (e) {
+			useApp.getState().pushNotice("error", `连接主机失败：${errorText(e)}`);
+		}
+	};
 	const [selectedId, setSelectedId] = useState<string | null>(null);
 	const [editing, setEditing] = useState<{ id?: string; input: SshHostInput } | null>(null);
 
@@ -254,7 +264,7 @@ export function RemoteProjectDialog() {
 
 	return (
 		<Modal
-			title="添加远程项目（SSH）"
+			title="远程主机（SSH）"
 			width="w-[820px]"
 			onClose={() => setRemoteOpen(false)}
 			footer={<Button onClick={() => setRemoteOpen(false)}>关闭</Button>}
@@ -354,6 +364,18 @@ export function RemoteProjectDialog() {
 							<div className="mb-2 flex items-center gap-2">
 								<div className="min-w-0 truncate text-[12.5px] font-medium">{hostLabel(selected)}</div>
 								{selected.platform && <Badge tone="accent">{selected.platform}</Badge>}
+								<div className="flex-1" />
+								<Button
+									variant="primary"
+									size="sm"
+									title="以主机为单位打开运维会话：从默认目录（未设置时为登录用户的 home）开始，AI 可以操作整台服务器"
+									onClick={() => void connectHost(selected)}
+								>
+									连接主机（运维）
+								</Button>
+							</div>
+							<div className="mb-2 text-[11.5px] text-muted">
+								「连接主机」直接打开运维会话，AI 在整台服务器上执行命令、修改配置；也可以在下面选一个目录作为项目。
 							</div>
 							<DirBrowser
 								host={selected}

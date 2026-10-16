@@ -36,6 +36,7 @@ function SessionHeader() {
 	return (
 		<div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-5 py-1">
 			<h1 className="min-w-0 truncate text-[13.5px] font-semibold">{state?.sessionName || firstPrompt || "新会话"}</h1>
+			{state?.ops && <OpsBadge />}
 			{waiting > 0 ? (
 				<span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-medium text-warn">
 					<span className="size-1.5 rounded-full bg-warn" />
@@ -79,10 +80,67 @@ function SessionHeader() {
 	);
 }
 
+/** 运维会话：会话头上的主机标记，悬停显示探测到的主机画像 */
+function OpsBadge() {
+	const ops = useApp((s) => s.state?.ops);
+	if (!ops) return null;
+	const facts = ops.profile?.facts ?? {};
+	const title = ops.profile
+		? Object.entries(facts)
+				.map(([k, v]) => `${k}: ${v}`)
+				.join("\n")
+		: (ops.profileError ?? "正在探测主机环境…");
+	return (
+		<span
+			title={title}
+			className="flex min-w-0 shrink items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 font-mono text-[11px] text-accent"
+		>
+			<Icon name="server" className="size-3 shrink-0" />
+			<span className="truncate">{ops.label}</span>
+			{facts.os && <span className="truncate text-accent/70">· {facts.os}</span>}
+			{!ops.profile && !ops.profileError && <span className="text-accent/70">· 探测中…</span>}
+			{ops.profileError && <span className="text-warn">· 探测失败</span>}
+		</span>
+	);
+}
+
+function OpsWelcome() {
+	const ops = useApp((s) => s.state?.ops);
+	const models = useApp((s) => s.models);
+	const setView = useApp((s) => s.setView);
+	if (!ops) return null;
+	const facts = ops.profile?.facts ?? {};
+	return (
+		<div className="mb-2 rounded-md border border-accent/40 px-4 py-3">
+			<div>
+				<span className="text-accent">✻</span> 运维会话 · <span className="font-bold">{ops.label}</span>
+			</div>
+			<div className="mt-1 text-muted">
+				AI 的命令与文件操作都在这台服务器上执行（起始目录 {ops.remoteCwd}）。
+				{facts.os ? ` ${facts.os}，包管理器 ${facts.package_manager ?? "未知"}，${facts.init ?? ""}。` : ""}
+			</div>
+			<div className="mt-1 text-muted">
+				只读命令按审批模式处理；高危命令（删除系统目录、重启、改 SSH / 防火墙 / 账号等）在任何模式下都会先请你确认。修改已有文件前会自动备份为
+				<span className="font-mono"> 原文件.flowork-bak-时间戳</span>。
+			</div>
+			{models.length === 0 && (
+				<div className="mt-2 text-muted">
+					尚未配置可用模型，
+					<button type="button" onClick={() => setView("settings", "providers")} className="text-accent underline">
+						前往设置
+					</button>
+				</div>
+			)}
+		</div>
+	);
+}
+
 function Welcome() {
 	const cwd = useApp((s) => s.cwd);
 	const models = useApp((s) => s.models);
 	const setView = useApp((s) => s.setView);
+	const isOps = useApp((s) => !!s.state?.ops);
+	if (isOps) return <OpsWelcome />;
 	return (
 		<div className="mb-2 rounded-md border border-accent/40 px-4 py-3">
 			<div>
@@ -427,6 +485,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	const models = useApp((s) => s.models);
 	const isRunning = useApp((s) => s.isRunning);
 	const approvalMode = useApp((s) => s.approvalMode);
+	const isOps = useApp((s) => !!s.state?.ops);
 	const { setModel, setThinkingLevel, setApprovalMode, abort } = useApp.getState();
 	const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : "";
 	const selectCls = "h-7 shrink-0 rounded-md bg-transparent px-1.5 text-[12px] outline-none hover:bg-panel-2";
@@ -437,11 +496,21 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 				value={approvalMode}
 				onChange={(e) => void setApprovalMode(e.target.value as ApprovalMode)}
 				className={`${selectCls} ${approvalMode === "auto" ? "text-warn" : "text-muted hover:text-fg"}`}
-				title="工具审批"
+				title={isOps ? "命令审批（高危命令始终需要确认）" : "工具审批"}
 			>
-				<option value="ask_writes">审批：修改与命令</option>
-				<option value="ask_all">审批：全部工具</option>
-				<option value="auto">审批：关闭（自动执行）</option>
+				{isOps ? (
+					<>
+						<option value="ask_writes">审批：只读自动，改动确认</option>
+						<option value="ask_all">审批：每条都确认</option>
+						<option value="auto">审批：全部自动，只拦高危</option>
+					</>
+				) : (
+					<>
+						<option value="ask_writes">审批：修改与命令</option>
+						<option value="ask_all">审批：全部工具</option>
+						<option value="auto">审批：关闭（自动执行）</option>
+					</>
+				)}
 			</select>
 			{state &&
 				(state.availableThinkingLevels.length > 1 ? (

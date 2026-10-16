@@ -13,7 +13,6 @@ import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
 import { RemoteProjectDialog } from "./components/sidebar/RemoteProjectDialog";
-import { RemoteView } from "./components/remote/RemoteView";
 import { StatusBar } from "./components/StatusBar";
 import { BottomPanel } from "./components/terminal/BottomPanel";
 import { TerminalView } from "./components/terminal/TerminalView";
@@ -53,7 +52,6 @@ function EmptyState() {
 export function App() {
 	const view = useApp((s) => s.view);
 	const activeProjectId = useApp((s) => s.activeProjectId);
-	const activeIsRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const sidebarOpen = useApp((s) => s.sidebarOpen);
 	const rightPanel = useApp((s) => s.rightPanel);
 
@@ -87,11 +85,8 @@ export function App() {
 									) : view === "review" ? (
 										<ReviewView />
 									) : activeProjectId ? (
-										activeIsRemote ? (
-											<RemoteView />
-										) : (
-											<TerminalView />
-										)
+										// 远程项目同样是对话区：AI 的工具通过 SSH 在服务器上执行（运维会话）
+										<TerminalView />
 									) : (
 										<div className="flex min-h-0 flex-1">
 											<div className="flex min-w-0 flex-1"><EmptyState /></div>
