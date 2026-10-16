@@ -1,4 +1,4 @@
-/** 最左侧活动栏：切换侧栏视图（会话 / 修改 / 终端 / 远程 SSH），底部为设置 */
+/** 最左侧活动栏：上组切换主视图（会话 / 修改），下组打开工具（项目文件 / 终端 / 远程 SSH），底部为设置 */
 import { Icon } from "./Icon";
 import { useApp, waitingCount } from "../store";
 
@@ -43,17 +43,19 @@ export function ActivityBar() {
 				onClick={() => setView("chat")}
 			/>
 			<ActivityItem
-				icon={hasProject ? "files" : "folder"}
-				label="项目文件"
-				active={inChat && rightPanel === "files"}
-				onClick={() => (inChat && rightPanel === "files" ? setRightPanel(null) : setRightPanel("files"))}
-			/>
-			<ActivityItem
 				icon="git-compare"
 				label="本会话的修改"
 				active={view === "review"}
 				badge={waiting > 0 ? String(waiting) : undefined}
 				onClick={() => setView("review")}
+			/>
+			{/* 上面切换主视图，下面打开工具面板 / 对话框 */}
+			<div className="my-1 h-px w-6 bg-border" />
+			<ActivityItem
+				icon={hasProject ? "files" : "folder"}
+				label="项目文件"
+				active={inChat && rightPanel === "files"}
+				onClick={() => (inChat && rightPanel === "files" ? setRightPanel(null) : setRightPanel("files"))}
 			/>
 			<ActivityItem
 				icon="square-terminal"

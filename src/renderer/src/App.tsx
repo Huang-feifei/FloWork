@@ -22,7 +22,7 @@ import { WelcomeView } from "./components/welcome/WelcomeView";
 import { RightPanel } from "./components/panels/RightPanel";
 
 function EmptyState() {
-	const { importProjects, setView, setDiscoverOpen } = useApp.getState();
+	const { importProjects, setView, setDiscoverOpen, setRemoteOpen } = useApp.getState();
 	const hasProjects = useApp((s) => s.projects.projects.length > 0);
 	return (
 		<div className="flex flex-1 items-center justify-center p-8">
@@ -34,13 +34,14 @@ function EmptyState() {
 						? "在左侧点击项目即可打开；多个项目可以同时运行任务。"
 						: "导入项目文件夹，FloWork 会在其中运行 pi，读写代码、执行命令。可以一次导入多个。"}
 				</p>
-				<div className="flex justify-center gap-2">
+				<div className="flex flex-wrap justify-center gap-2">
 					<Button
 						variant="primary"
 						onClick={() => void importProjects()}
 					>
 						导入文件夹
 					</Button>
+					<Button onClick={() => setRemoteOpen(true)}>添加远程项目</Button>
 					<Button onClick={() => setDiscoverOpen(true)}>从已有会话发现</Button>
 					<Button onClick={() => setView("settings", "providers")}>配置模型</Button>
 				</div>

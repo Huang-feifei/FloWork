@@ -82,6 +82,7 @@ export function TitleBar() {
 			case "文件":
 				return [
 					{ label: "导入项目文件夹…", hint: isMac ? "⌘O" : "Ctrl+O", onClick: () => void s.importProjects() },
+					{ label: "添加远程项目（SSH）…", onClick: () => s.setRemoteOpen(true) },
 					{ label: "从已有会话发现项目…", onClick: () => s.setDiscoverOpen(true) },
 					{ separator: true, label: "" },
 					{ label: "设置", hint: isMac ? "⌘," : "Ctrl+,", onClick: () => s.setView("settings") },
@@ -94,9 +95,8 @@ export function TitleBar() {
 			case "视图":
 				return [
 					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", onClick: () => s.toggleSidebar() },
-					{ label: rightPanel ? "收起右侧面板" : "显示右侧面板", onClick: () => s.setRightPanel(rightPanel ? null : "session") },
+					{ label: rightPanel ? "收起右侧面板" : "显示右侧面板", hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", onClick: () => s.setRightPanel(rightPanel ? null : "session") },
 					{ label: "打开内置浏览器", onClick: () => { s.setView("chat"); s.setRightPanel("browser"); } },
-					{ label: terminalPanel ? "收起终端" : "显示终端", hint: "Ctrl+`", onClick: () => s.setTerminalPanel(!terminalPanel) },
 				];
 			case "会话":
 				return [
@@ -136,7 +136,8 @@ export function TitleBar() {
 		}
 	};
 
-	// 全局快捷键：Ctrl+B 项目栏、Ctrl+K 命令面板、Ctrl+` 终端、Ctrl+N 新会话，Esc 关闭面板
+	// 全局快捷键：Ctrl+B 项目栏、Ctrl+Alt+B 右侧面板、Ctrl+K 命令面板、Ctrl+` 终端、Ctrl+N 新会话、
+	// Ctrl+M 模型设置、Ctrl+Shift+D 审查修改，Esc 关闭面板（与命令面板里展示的快捷键保持一致）
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const s = useApp.getState();
@@ -144,8 +145,24 @@ export function TitleBar() {
 				s.setPalette(false);
 				return;
 			}
-			if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+			if (!(e.ctrlKey || e.metaKey)) return;
 			const key = e.key.toLowerCase();
+			// Ctrl+Shift+D：审查本会话的修改
+			if (e.shiftKey) {
+				if (!e.altKey && e.code === "KeyD" && s.activeProjectId) {
+					e.preventDefault();
+					s.setView("review");
+				}
+				return;
+			}
+			// Ctrl+Alt+B：右侧面板（用 code 判断，避免 Alt 在部分布局下改变 key）
+			if (e.altKey) {
+				if (e.code === "KeyB") {
+					e.preventDefault();
+					s.setRightPanel(s.rightPanel ? null : "session");
+				}
+				return;
+			}
 			if (key === "b") {
 				e.preventDefault();
 				s.toggleSidebar();
@@ -158,6 +175,9 @@ export function TitleBar() {
 			} else if (key === "n") {
 				e.preventDefault();
 				if (s.activeProjectId) void s.newSession();
+			} else if (key === "m") {
+				e.preventDefault();
+				if (s.activeProjectId) s.setView("settings", "providers");
 			} else if (key === "o") {
 				e.preventDefault();
 				void s.importProjects();
@@ -235,7 +255,7 @@ export function TitleBar() {
 				/>
 				<LayoutToggle
 					icon="panel-right"
-					label="右侧面板 Ctrl+Alt+B"
+					label={`右侧面板（${isMac ? "⌘⌥B" : "Ctrl+Alt+B"}）`}
 					on={rightPanel !== null}
 					onClick={() => useApp.getState().setRightPanel(rightPanel ? null : "session")}
 				/>
