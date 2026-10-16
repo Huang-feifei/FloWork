@@ -58,6 +58,7 @@ export const api = {
 		upload: (hostId: string, dir: string, name: string, dataBase64: string) => call("server.upload", { hostId, dir, name, dataBase64 }),
 		download: (hostId: string, path: string) => call("server.download", { hostId, path }),
 		exportToLocal: (hostId: string, path: string, targetPath: string) => call("server.exportToLocal", { hostId, path, targetPath }),
+		monitor: (hostId: string) => call("server.monitor", { hostId }),
 	},
 	pickSavePath: (defaultName?: string) => call("app.pickSavePath", { defaultName }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),

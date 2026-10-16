@@ -50,7 +50,7 @@ export interface Notice {
 }
 
 export type View = "welcome" | "chat" | "review" | "settings";
-export type RightPanel = "files" | "session" | "server" | "browser";
+export type RightPanel = "files" | "session" | "server" | "services" | "browser";
 export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
@@ -208,7 +208,7 @@ const EXPANDED_KEY = "flowork.expandedProjects";
 
 function storedPanel(): RightPanel | null {
 	const v = localStorage.getItem(PANEL_KEY);
-	return v === "files" || v === "session" || v === "server" || v === "browser" ? v : null;
+	return v === "files" || v === "session" || v === "server" || v === "services" || v === "browser" ? v : null;
 }
 
 /** 会话树窄轨默认显示；只有显式关过才隐藏 */

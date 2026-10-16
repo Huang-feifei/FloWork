@@ -17,6 +17,7 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
+import { probeHostMonitor } from "./host-monitor";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { acceptHostKey, inspectHostKey } from "./host-key";
@@ -304,6 +305,10 @@ export class Backend {
 				await mkdir(dirname(params.targetPath), { recursive: true });
 				await writeFile(params.targetPath, Buffer.from(file.dataBase64, "base64"));
 				return { size: file.size };
+			}
+			case "server.monitor": {
+				const params = rawParams as BackendMethods["server.monitor"]["params"];
+				return probeHostMonitor(await this.hosts.require(params.hostId));
 			}
 			case "hosts.get":
 				return this.hosts.list();

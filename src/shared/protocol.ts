@@ -540,6 +540,24 @@ export interface WorkspaceDirListing {
 	entries: WorkspaceEntry[];
 }
 
+/** 服务器状态快照（只读命令，服务状态面板用） */
+export interface HostMonitorSnapshot {
+	probedAt: number;
+	/** 1 / 5 / 15 分钟负载，例如 "0.12 0.08 0.05" */
+	load: string;
+	/** CPU 核数 */
+	cores: number;
+	uptime: string;
+	memory: { totalMb: number; usedMb: number; availableMb: number; percent: number };
+	disks: Array<{ mount: string; size: string; used: string; free: string; percent: string }>;
+	services: Array<{ name: string; load: string; active: string; sub: string; description: string }>;
+	ports: Array<{ proto: string; local: string; process: string }>;
+	/** 处于 failed 状态的单元名 */
+	failed: string[];
+	/** 最近的高级别日志（journalctl -p err） */
+	logs: string[];
+}
+
 /** 服务器目录（自由导航，绝对路径）的列表结果 */
 export interface ServerDirListing {
 	/** 当前目录的绝对路径 */
@@ -770,6 +788,8 @@ export interface BackendMethods {
 	"server.download": { params: { hostId: string; path: string }; result: { name: string; dataBase64: string; size: number } };
 	/** 下载到本地指定路径（桌面版：先弹「保存到」对话框拿 targetPath，再一步写盘，内容不过渲染进程） */
 	"server.exportToLocal": { params: { hostId: string; path: string; targetPath: string }; result: { size: number } };
+	/** 服务器状态快照（只读）：负载 / 内存 / 磁盘 / 服务单元 / 监听端口 / 失败与日志 */
+	"server.monitor": { params: { hostId: string }; result: HostMonitorSnapshot };
 	"service.send": { params: ServiceCommand; result: unknown };
 	"session.open": { params: { cwd: string; sessionPath?: string; approvalMode?: ApprovalMode }; result: { handleId: string; state: SessionState } };
 	"session.send": { params: { handleId: string; command: SessionCommand }; result: unknown };

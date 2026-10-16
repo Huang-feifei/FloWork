@@ -4,11 +4,13 @@ import { type RightPanel as Panel, useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
 import { ProjectFiles } from "./ProjectFiles";
 import { ServerFiles } from "./ServerFiles";
+import { ServerStatus } from "./ServerStatus";
 import { SessionFiles } from "./SessionFiles";
 
 export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteOnly?: boolean }> = [
 	{ id: "files", label: "项目文件", hint: "浏览工作区目录" },
 	{ id: "server", label: "服务器目录", hint: "浏览服务器上的任意目录、上传下载", remoteOnly: true },
+	{ id: "services", label: "服务状态", hint: "远端主机的负载、服务与端口（只读）", remoteOnly: true },
 	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
 	{ id: "browser", label: "浏览器", hint: "在聊天旁浏览网页（桌面版）" },
 ];
@@ -38,7 +40,7 @@ export function RightPanel() {
 	const isRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const tabs = PANEL_TABS.filter((t) => !t.remoteOnly || isRemote);
 	// 本地项目里如果存着「服务器目录」，回退到项目文件
-	const active = panel === "server" && !isRemote ? "files" : panel;
+	const active = (panel === "server" || panel === "services") && !isRemote ? "files" : panel;
 	const changedCount = useChangedCount();
 	const ref = useRef<HTMLElement>(null);
 	const [available, setAvailable] = useState(0);
@@ -101,6 +103,7 @@ export function RightPanel() {
 			</div>
 			{active === "files" && <ProjectFiles />}
 			{active === "server" && isRemote && <ServerFiles />}
+			{active === "services" && isRemote && <ServerStatus />}
 			{active === "session" && <SessionFiles />}
 			{isBrowser && <BrowserPanel />}
 		</aside>
