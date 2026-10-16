@@ -14,8 +14,26 @@ import { Menu, type MenuItem } from "./sidebar/Menu";
 const MENUS = ["文件", "编辑", "视图", "会话", "终端", "帮助"] as const;
 type MenuName = (typeof MENUS)[number];
 
-function TrafficLight({ tone, title, onClick }: { tone: string; title: string; onClick: () => void }) {
-	return <button type="button" title={title} onClick={onClick} className={`size-3 rounded-full ${tone}`} />;
+/**
+ * 交通灯：12px 的圆点视觉，但外面套 20px 的按钮——旧版窗口按钮是 46px 宽，
+ * 而 12px 的点击目标很难命中，偏一点就落到拖拽区变成拖窗口。
+ * 悬停时显示符号（✕ / − / ⤢），与 macOS 行为一致。
+ */
+function TrafficLight({ tone, title, glyph, onClick }: { tone: string; title: string; glyph: string; onClick: () => void }) {
+	return (
+		<button
+			type="button"
+			title={title}
+			onClick={onClick}
+			className="group flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-panel-2"
+		>
+			<span
+				className={`flex size-3 items-center justify-center rounded-full text-[8px] leading-none font-bold text-black/45 ${tone}`}
+			>
+				<span className="opacity-0 group-hover:opacity-100">{glyph}</span>
+			</span>
+		</button>
+	);
 }
 
 function LayoutToggle({ icon, label, on, onClick }: { icon: IconName; label: string; on: boolean; onClick: () => void }) {
@@ -183,10 +201,10 @@ export function TitleBar() {
 	return (
 		<header className="app-drag relative flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 select-none">
 			{isDesktop && !isMac && (
-				<div className="flex items-center gap-2">
-					<TrafficLight tone="bg-traffic-close" title="关闭" onClick={() => void window.floworkWindow?.close()} />
-					<TrafficLight tone="bg-traffic-min" title="最小化" onClick={() => void window.floworkWindow?.minimize()} />
-					<TrafficLight tone="bg-traffic-max" title="最大化" onClick={() => void window.floworkWindow?.toggleMaximize()} />
+				<div className="flex items-center gap-0.5">
+					<TrafficLight tone="bg-traffic-close" title="关闭" glyph="✕" onClick={() => void window.floworkWindow?.close()} />
+					<TrafficLight tone="bg-traffic-min" title="最小化" glyph="−" onClick={() => void window.floworkWindow?.minimize()} />
+					<TrafficLight tone="bg-traffic-max" title="最大化" glyph="⤢" onClick={() => void window.floworkWindow?.toggleMaximize()} />
 				</div>
 			)}
 
