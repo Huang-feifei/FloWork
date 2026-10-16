@@ -21,7 +21,8 @@
     "smoke": "electron-vite build && electron . --smoke",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
-    "typecheck": "npm run typecheck:node && npm run typecheck:web"
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "node scripts/run-tests.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.1.0",

@@ -99,6 +99,7 @@ npm run dist:win      # 构建并打包成 Windows 安装包 release/FloWork-<�
 npm run smoke         # 构建并运行桌面版冒烟测试；加 --screenshot <path.png> 可保存截图
 
 npm run typecheck     # 类型检查（全部代码）
+npm test              # 类型检查 + 构建网页版 + 全部回归脚本（加 -- --no-build 跳过前两步，加关键字只跑部分，如 npm test -- hosts）
 ```
 
 Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:win` / `npm run dist:win`）时下载；网络受限时可以设置镜像：`set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/`（打包时同样读这个环境变量）。
@@ -155,7 +156,8 @@ node scripts/e2e-session.mjs <目录> <provider/model> allow|deny|deny-bash "<�
 node scripts/shoot-ui.mjs <输出目录>                                  # 对 dev:web 页面截图（注入示例会话）
 
 # 回归脚本：各自启动隔离后端（独立 FLOWORK_DATA_DIR / FLOWORK_PI_AGENT_DIR），
-# 不写真实配置目录、不调用模型，断言失败时返回非零退出码。需要先 npm run build:web。
+# 不写真实配置目录、不调用模型，断言失败时返回非零退出码。需要先 npm run build:web（npm test 会自动构建并全部运行）。
+node scripts/test-hosts.mjs       # SSH 主机口令加密与迁移（不需要构建）
 node scripts/test-sessions.mjs    # 会话重命名与删除
 node scripts/test-projects.mjs    # 项目注册表
 node scripts/test-resources.mjs   # 技能 / 扩展 / 提示模板与包管理
