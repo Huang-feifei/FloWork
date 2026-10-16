@@ -107,6 +107,8 @@ interface AppState extends SessionSlice {
 	rightPanel: RightPanel | null;
 	/** 会话树窄轨是否显示（贴会话区右缘） */
 	railVisible: boolean;
+	/** 会话记录里历史轮次的「思考 + 工具调用」是否折叠成一行（运行中的一轮始终展开） */
+	foldProcess: boolean;
 	/** 左侧项目栏是否展开（Ctrl+B） */
 	sidebarOpen: boolean;
 	/** Ctrl+P 快速打开文件弹窗 */
@@ -163,6 +165,8 @@ interface AppState extends SessionSlice {
 	setRightPanel(panel: RightPanel | null): void;
 	/** 显示 / 隐藏会话树窄轨 */
 	toggleRail(): void;
+	/** 折叠 / 展开会话记录里历史轮次的思考与工具调用 */
+	toggleFoldProcess(): void;
 	toggleSidebar(): void;
 	setQuickOpen(open: boolean): void;
 	setPalette(open: boolean, mode?: PaletteMode): void;
@@ -187,6 +191,7 @@ const LEGACY_LAST_CWD_KEY = "flowork.lastCwd";
 const APPROVAL_KEY = "flowork.approvalMode";
 const PANEL_KEY = "flowork.rightPanel";
 const RAIL_KEY = "flowork.sessionRail";
+const FOLD_PROCESS_KEY = "flowork.foldProcess";
 const SIDEBAR_KEY = "flowork.sidebarOpen";
 const EXPANDED_KEY = "flowork.expandedProjects";
 
@@ -198,6 +203,11 @@ function storedPanel(): RightPanel | null {
 /** 会话树窄轨默认显示；只有显式关过才隐藏 */
 function storedRail(): boolean {
 	return localStorage.getItem(RAIL_KEY) !== "0";
+}
+
+/** 历史轮次的思考与工具调用默认折叠，只留结论；显式关过就默认展开 */
+function storedFoldProcess(): boolean {
+	return localStorage.getItem(FOLD_PROCESS_KEY) !== "0";
 }
 
 function storedApprovalMode(): ApprovalMode {
@@ -420,6 +430,7 @@ export const useApp = create<AppState>()((set, get) => {
 		draft: { text: "", seq: 0 },
 		rightPanel: storedPanel(),
 		railVisible: storedRail(),
+		foldProcess: storedFoldProcess(),
 		sidebarOpen: localStorage.getItem(SIDEBAR_KEY) !== "0",
 		quickOpen: false,
 		palette: { open: false, query: "", mode: "all" },
@@ -842,6 +853,12 @@ export const useApp = create<AppState>()((set, get) => {
 			localStorage.setItem(RAIL_KEY, next ? "1" : "0");
 			set({ railVisible: next });
 			if (next) void get().loadTree();
+		},
+
+		toggleFoldProcess() {
+			const next = !get().foldProcess;
+			localStorage.setItem(FOLD_PROCESS_KEY, next ? "1" : "0");
+			set({ foldProcess: next });
 		},
 
 		toggleSidebar() {

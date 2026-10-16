@@ -33,6 +33,7 @@ export function CommandPalette() {
 	const cwd = useApp((s) => s.cwd);
 	const projects = useApp((s) => s.projects.projects);
 	const projectSessions = useApp((s) => s.projectSessions);
+	const foldProcess = useApp((s) => s.foldProcess);
 	const [text, setText] = useState("");
 	const [active, setActive] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -79,6 +80,21 @@ export function CommandPalette() {
 				{ icon: "globe", label: "打开内置浏览器", when: true, run: () => { s.setView("chat"); s.setRightPanel("browser"); } },
 				{ icon: "files", label: "显示项目文件", when: true, run: () => s.setRightPanel("files") },
 				{ icon: "list-tree", label: "切换会话树轨道", when: true, run: () => s.toggleRail() },
+				{
+					icon: foldProcess ? "chevron-down" : "chevron-right",
+					label: foldProcess ? "展开思考与工具调用" : "折叠思考与工具调用",
+					when: s.activeProjectId !== null,
+					run: () => s.toggleFoldProcess(),
+				},
+				{
+					icon: "chevron-up",
+					label: "折叠全部会话",
+					when: projects.length > 0,
+					run: () => {
+						const { toggleExpanded, expanded } = useApp.getState();
+						for (const p of projects) if (expanded[p.id]) toggleExpanded(p.id, false);
+					},
+				},
 			] as Array<Omit<Item, "run"> & { when: boolean; run: () => void }>
 		)
 			.filter((c) => c.when && hit(c.label))
@@ -109,7 +125,7 @@ export function CommandPalette() {
 		if (search !== "commands" && sessions.length > 0) out.push({ title: "会话", items: sessions });
 		if (search !== "commands" && files.length > 0) out.push({ title: "文件", items: files });
 		return out;
-	}, [query, search, projects, projectSessions, result]);
+	}, [query, search, projects, projectSessions, result, foldProcess]);
 
 	const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 	const current = Math.min(active, Math.max(0, flat.length - 1));

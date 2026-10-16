@@ -1,5 +1,6 @@
 /** 侧栏：项目分组树（含会话），等宽小标题，状态用文字标签 */
 import { useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { api, errorText } from "../api/client";
 import { useApp } from "../store";
 import { Icon } from "./Icon";
@@ -11,7 +12,15 @@ export function Sidebar() {
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const canNewSession = useApp((s) => s.handleId !== null && hasProject);
 	const { importProjects, setView, setDiscoverOpen, setRemoteOpen, pushNotice, newSession } = useApp.getState();
+	const projectIds = useApp(useShallow((s) => s.projects.projects.map((p) => p.id)));
+	const expandedCount = useApp((s) => projectIds.filter((id) => s.expanded[id]).length);
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+
+	/** 一键折叠 / 展开所有项目的会话列表 */
+	const setAllExpanded = (open: boolean) => {
+		const { toggleExpanded, expanded } = useApp.getState();
+		for (const id of projectIds) if (!!expanded[id] !== open) toggleExpanded(id, open);
+	};
 
 	return (
 		<aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-sidebar">
@@ -71,6 +80,17 @@ export function Sidebar() {
 						{ label: "导入文件夹…", onClick: () => void importProjects() },
 						{ label: "添加远程项目（SSH）…", onClick: () => setRemoteOpen(true) },
 						{ label: "从已有会话发现项目…", onClick: () => setDiscoverOpen(true) },
+						{ separator: true, label: "" },
+						{
+							label: "折叠全部会话",
+							disabled: expandedCount === 0,
+							onClick: () => setAllExpanded(false),
+						},
+						{
+							label: "展开全部会话",
+							disabled: projectIds.length === 0 || expandedCount >= projectIds.length,
+							onClick: () => setAllExpanded(true),
+						},
 						{ separator: true, label: "" },
 						{
 							label: "新建分组…",

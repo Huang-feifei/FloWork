@@ -103,6 +103,11 @@ export function TitleBar() {
 					{ label: "新建会话", hint: isMac ? "⌘N" : "Ctrl+N", disabled: !hasProject, onClick: () => void s.newSession() },
 					{ separator: true, label: "" },
 					{ label: "审查本会话的修改", disabled: !hasProject, onClick: () => s.setView("review") },
+					{
+						label: s.foldProcess ? "展开思考与工具调用" : "折叠思考与工具调用",
+						disabled: !hasProject,
+						onClick: () => s.toggleFoldProcess(),
+					},
 					{ label: railVisible ? "隐藏会话树轨道" : "显示会话树轨道", disabled: !hasProject, onClick: () => s.toggleRail() },
 				];
 			case "终端":

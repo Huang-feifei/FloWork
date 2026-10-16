@@ -4,8 +4,11 @@
  *   ● 回复文本（Markdown）
  *   ✻ 思考过程（可展开）
  *   ● tool(参数)  ⎿ 结果
+ *
+ * 历史轮次里连续的「思考 + 工具调用」会收成一行摘要（会话头部「展开过程」可关掉），
+ * 正在运行的那一轮始终展开，这样长会话不会满屏都是过程。
  */
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { ChatMessage, ContentBlock, ImageAttachment } from "@shared/protocol";
 import { parseSkillInvocation } from "@shared/skill-text";
 import { useApp } from "../../store";
@@ -15,6 +18,27 @@ import { ToolBlock } from "./ToolBlock";
 
 type ToolResultMap = Map<string, { content: ContentBlock[]; details?: unknown; isError: boolean }>;
 type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
+type ThinkingBlock = Extract<ContentBlock, { type: "thinking" }>;
+type ToolCallBlock = Extract<ContentBlock, { type: "toolCall" }>;
+type ProcessBlock = ThinkingBlock | ToolCallBlock;
+
+/** 一轮回复拆成「正文」和「过程」两类片段，过程片段由连续的思考 / 工具调用组成 */
+type Segment = { kind: "text"; text: string } | { kind: "process"; blocks: ProcessBlock[] };
+
+function segmentsOf(content: ContentBlock[]): Segment[] {
+	const out: Segment[] = [];
+	for (const block of content) {
+		if (block.type === "text") {
+			if (block.text.trim()) out.push({ kind: "text", text: block.text });
+			continue;
+		}
+		if (block.type !== "thinking" && block.type !== "toolCall") continue;
+		const prev = out[out.length - 1];
+		if (prev?.kind === "process") prev.blocks.push(block);
+		else out.push({ kind: "process", blocks: [block] });
+	}
+	return out;
+}
 
 function Gutter({ mark, className = "", children }: { mark: React.ReactNode; className?: string; children: React.ReactNode }) {
 	return (
@@ -92,6 +116,63 @@ function ThinkingLine({ text, live }: { text: string; live: boolean }) {
 }
 
 /**
+ * 一组连续的思考 / 工具调用。
+ * folded 时只留一行摘要（思考字数与工具名），点击再展开；不折叠时保持原来的逐条展示。
+ */
+const ProcessGroup = memo(function ProcessGroup({
+	blocks,
+	toolResults,
+	folded,
+}: {
+	blocks: ProcessBlock[];
+	toolResults: ToolResultMap;
+	folded: boolean;
+}) {
+	const [open, setOpen] = useState(false);
+	// 关掉折叠时清掉逐组的展开状态，避免下次再折叠时残留展开
+	useEffect(() => {
+		if (!folded) setOpen(false);
+	}, [folded]);
+
+	const thinking = blocks.filter((b): b is ThinkingBlock => b.type === "thinking");
+	const calls = blocks.filter((b): b is ToolCallBlock => b.type === "toolCall");
+	const thinkingChars = thinking.reduce((n, b) => n + b.thinking.trim().length, 0);
+	const names = [...new Set(calls.map((c) => c.name))];
+	const parts: string[] = [];
+	if (thinkingChars > 0) parts.push(`思考 ${thinkingChars} 字`);
+	if (calls.length > 0) parts.push(`${calls.length} 个工具调用（${names.join("、")}）`);
+
+	const body = blocks.map((block, i) =>
+		block.type === "thinking" ? (
+			// biome-ignore lint/suspicious/noArrayIndexKey: 内容块按位置稳定，没有独立 id
+			<ThinkingLine key={i} text={block.thinking} live={false} />
+		) : (
+			<ToolBlock key={i} call={block} result={toolResults.get(block.id)} />
+		),
+	);
+
+	if (parts.length === 0) return null;
+	if (!folded) return <>{body}</>;
+
+	return (
+		<>
+			<Gutter mark={calls.length > 0 ? "●" : "✻"} className="text-muted">
+				<button
+					type="button"
+					onClick={() => setOpen(!open)}
+					title={open ? "折叠思考与工具调用" : "展开思考与工具调用"}
+					className="text-muted hover:text-fg"
+				>
+					<span className="mr-1 text-[10px]">{open ? "▾" : "▸"}</span>
+					{parts.join(" · ")}
+				</button>
+			</Gutter>
+			{open && <div className="ml-3 border-l border-border pl-2">{body}</div>}
+		</>
+	);
+});
+
+/**
  * 历史消息用 memo 包住：流式输出时 messages 数组不变，只有正在生成的那条（streaming）重渲染，
  * 不会把整段会话记录重新算一遍。
  */
@@ -99,40 +180,34 @@ const AssistantBlocks = memo(function AssistantBlocks({
 	message,
 	toolResults,
 	live,
+	foldProcess,
 }: {
 	message: AssistantMessage;
 	toolResults: ToolResultMap;
 	live: boolean;
+	foldProcess: boolean;
 }) {
-	const last = message.content.length - 1;
+	const segments = useMemo(() => segmentsOf(message.content), [message.content]);
+	// 流式光标跟在最后一段正文后面
+	let lastText = -1;
+	segments.forEach((seg, i) => {
+		if (seg.kind === "text") lastText = i;
+	});
+	const folded = foldProcess && !live;
 
 	return (
 		<>
-			{message.content.map((block, i) => {
-				const key = `${i}-${block.type}`;
-				switch (block.type) {
-					case "text":
-						if (!block.text.trim()) return null;
-						return (
-							<Gutter key={key} mark="●">
-								<Markdown text={block.text} />
-								{live && i === last && <span className="term-cursor" />}
-							</Gutter>
-						);
-					case "thinking":
-						return <ThinkingLine key={key} text={block.thinking} live={live && i === last} />;
-					case "toolCall":
-						return (
-							<ToolBlock
-								key={key}
-								call={block}
-								result={toolResults.get(block.id)}
-							/>
-						);
-					default:
-						return null;
-				}
-			})}
+			{segments.map((seg, i) =>
+				seg.kind === "text" ? (
+					// biome-ignore lint/suspicious/noArrayIndexKey: 内容块按位置稳定，没有独立 id
+					<Gutter key={i} mark="●">
+						<Markdown text={seg.text} />
+						{live && i === lastText && <span className="term-cursor" />}
+					</Gutter>
+				) : (
+					<ProcessGroup key={i} blocks={seg.blocks} toolResults={toolResults} folded={folded} />
+				),
+			)}
 			{message.stopReason === "error" && (
 				<Gutter mark="✗" className="text-err">
 					<span className="text-err">{message.errorMessage || "请求失败"}</span>
@@ -147,12 +222,20 @@ const AssistantBlocks = memo(function AssistantBlocks({
 	);
 });
 
-const MessageView = memo(function MessageView({ message, toolResults }: { message: ChatMessage; toolResults: ToolResultMap }) {
+const MessageView = memo(function MessageView({
+	message,
+	toolResults,
+	foldProcess,
+}: {
+	message: ChatMessage;
+	toolResults: ToolResultMap;
+	foldProcess: boolean;
+}) {
 	switch (message.role) {
 		case "user":
 			return <UserLine message={message} />;
 		case "assistant":
-			return <AssistantBlocks message={message} toolResults={toolResults} live={false} />;
+			return <AssistantBlocks message={message} toolResults={toolResults} live={false} foldProcess={foldProcess} />;
 		case "toolResult":
 			// 工具结果合并显示在对应的工具调用下方
 			return null;
@@ -171,6 +254,7 @@ const MessageView = memo(function MessageView({ message, toolResults }: { messag
 export function Transcript() {
 	const messages = useApp((s) => s.messages);
 	const streaming = useApp((s) => s.streaming);
+	const foldProcess = useApp((s) => s.foldProcess);
 
 	const toolResults = useMemo(() => {
 		const map: ToolResultMap = new Map();
@@ -188,11 +272,11 @@ export function Transcript() {
 					// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
 					// data-entry-id 让会话树窄轨知道哪条消息在屏幕上
 					<div key={i} data-entry-id={m.entryId}>
-						<MessageView message={m} toolResults={toolResults} />
+						<MessageView message={m} toolResults={toolResults} foldProcess={foldProcess} />
 					</div>
 				),
 			)}
-			{streaming && <AssistantBlocks message={streaming} toolResults={toolResults} live />}
+			{streaming && <AssistantBlocks message={streaming} toolResults={toolResults} live foldProcess={foldProcess} />}
 		</div>
 	);
 }

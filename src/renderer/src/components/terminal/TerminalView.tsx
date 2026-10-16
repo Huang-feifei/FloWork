@@ -26,6 +26,8 @@ function SessionHeader() {
 	const waiting = useApp((s) => waitingCount(s));
 	const rightPanel = useApp((s) => s.rightPanel);
 	const setRightPanel = useApp((s) => s.setRightPanel);
+	const foldProcess = useApp((s) => s.foldProcess);
+	const toggleFoldProcess = useApp((s) => s.toggleFoldProcess);
 	const changedCount = useChangedCount();
 	const firstPrompt = useApp((s) => {
 		const first = s.messages.find((m) => m.role === "user");
@@ -48,6 +50,14 @@ function SessionHeader() {
 				)
 			)}
 			<div className="flex-1" />
+			<button
+				type="button"
+				onClick={toggleFoldProcess}
+				title={foldProcess ? "展开历史轮次的思考与工具调用" : "把历史轮次的思考与工具调用折叠成一行"}
+				className={`shrink-0 rounded-md px-2 py-1 text-[12px] ${foldProcess ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
+			>
+				{foldProcess ? "展开过程" : "折叠过程"}
+			</button>
 			<div className="flex shrink-0 gap-0.5">
 				{PANEL_TABS.map((tab) => (
 					<button

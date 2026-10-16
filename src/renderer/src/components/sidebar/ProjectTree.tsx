@@ -24,7 +24,8 @@ interface Section {
 }
 
 const DRAG_TYPE = "application/x-flowork-project";
-const SESSIONS_PREVIEW = 6;
+/** 项目展开后默认只列这么多条会话，其余折叠在「显示全部」后面，避免侧边栏被长会话列表淹没 */
+const SESSIONS_PREVIEW = 3;
 
 function buildSections(projects: Project[], groups: ProjectGroup[]): Section[] {
 	const byOrder = (a: Project, b: Project) => a.order - b.order || a.addedAt - b.addedAt;
@@ -145,6 +146,7 @@ function SessionList({ project }: { project: Project }) {
 	const [showAll, setShowAll] = useState(false);
 	const list = sessions ?? [];
 	const visible = showAll ? list : list.slice(0, SESSIONS_PREVIEW);
+	const overflow = list.length > SESSIONS_PREVIEW;
 
 	return (
 		<div className="mb-1 ml-[18px] border-l border-border pl-1.5">
@@ -157,20 +159,25 @@ function SessionList({ project }: { project: Project }) {
 				<span className="text-accent">+</span> 新会话
 			</button>
 			{sessions === undefined && <div className="px-2 py-1 text-[11px] text-muted">加载中…</div>}
-			{visible.map((s) => (
-				<SessionRow
-					key={s.path}
-					project={project}
-					session={s}
-					active={activeProjectId === project.id && s.path === activeFile && view === "chat"}
-				/>
-			))}
-			{list.length > SESSIONS_PREVIEW && (
+			{/* 展开全部时限制高度并在列表内部滚动，会话再多也不会把侧边栏撑长 */}
+			<div className={showAll && overflow ? "max-h-[42vh] overflow-y-auto overscroll-contain" : undefined}>
+				{visible.map((s) => (
+					<SessionRow
+						key={s.path}
+						project={project}
+						session={s}
+						active={activeProjectId === project.id && s.path === activeFile && view === "chat"}
+					/>
+				))}
+			</div>
+			{overflow && (
 				<button
 					type="button"
 					onClick={() => setShowAll(!showAll)}
-					className="px-2 py-0.5 text-[11px] text-muted hover:text-fg"
+					title={showAll ? `只显示最近 ${SESSIONS_PREVIEW} 个会话` : `展开全部 ${list.length} 个会话`}
+					className="flex w-full items-center gap-1 rounded-md px-2 py-0.5 text-left text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
 				>
+					<span className="text-[9px]">{showAll ? "▾" : "▸"}</span>
 					{showAll ? "收起" : `显示全部 ${list.length} 个`}
 				</button>
 			)}
@@ -273,7 +280,7 @@ function ProjectRow({
 					type="button"
 					onClick={() => toggleExpanded(project.id)}
 					className="w-4 shrink-0 text-center text-[10px] text-muted hover:text-fg"
-					title={expanded ? "收起会话" : "展开会话"}
+					title={expanded ? "折叠会话" : "展开会话"}
 				>
 					{expanded ? "▾" : "▸"}
 				</button>
