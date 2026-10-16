@@ -11,6 +11,7 @@ import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ReviewView } from "./components/review/ReviewView";
 import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
+import { UpdateDialog } from "./components/UpdateDialog";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
 import { RemoteProjectDialog } from "./components/sidebar/RemoteProjectDialog";
 import { HostKeyDialog } from "./components/sidebar/HostKeyDialog";
@@ -109,6 +110,7 @@ export function App() {
 				<HostKeyDialog />
 				<AuthDialog />
 				<PromptDialog />
+				<UpdateDialog />
 				<ConfirmDialog />
 				<CommandPalette />
 			</div>

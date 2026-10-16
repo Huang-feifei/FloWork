@@ -107,6 +107,8 @@ interface AppState extends SessionSlice {
 	approvalMode: ApprovalMode;
 	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息）；seq 变化时输入框读取 */
 	draft: { text: string; seq: number; append?: boolean };
+	/** 版本更新提示：启动时发现版本变化则置为当前版本号，null 表示不弹 */
+	updatedTo: string | null;
 	/** 右侧面板：项目文件 / 会话文件 / 浏览器；null 表示收起 */
 	rightPanel: RightPanel | null;
 	/** 会话树窄轨是否显示（贴会话区右缘） */
@@ -180,6 +182,8 @@ interface AppState extends SessionSlice {
 	openPreview(path: string | null): void;
 	/** 把文本追加到输入框（例如引用文件路径） */
 	insertIntoPrompt(text: string): void;
+	/** 显示 / 关闭「已更新到」弹窗；传 null 关闭 */
+	setUpdatedTo(version: string | null): void;
 	refreshFiles(): void;
 	loadTree(): Promise<void>;
 	navigateTo(entryId: string): Promise<void>;
@@ -193,6 +197,8 @@ interface AppState extends SessionSlice {
 
 const LAST_PROJECT_KEY = "flowork.lastProject";
 const LEGACY_LAST_CWD_KEY = "flowork.lastCwd";
+/** 上次运行过的版本号：与当前版本不同就弹一次更新说明 */
+const LAST_VERSION_KEY = "flowork.lastVersion";
 const APPROVAL_KEY = "flowork.approvalMode";
 const PANEL_KEY = "flowork.rightPanel";
 const RAIL_KEY = "flowork.sessionRail";
@@ -444,6 +450,7 @@ export const useApp = create<AppState>()((set, get) => {
 		notices: [],
 		approvalMode: storedApprovalMode(),
 		draft: { text: "", seq: 0 },
+		updatedTo: null,
 		rightPanel: storedPanel(),
 		railVisible: storedRail(),
 		foldProcess: storedFoldProcess(),
@@ -473,6 +480,10 @@ export const useApp = create<AppState>()((set, get) => {
 			try {
 				const [info, projects] = await Promise.all([api.info(), api.projects.get()]);
 				set({ info, projects, connection: "open" });
+				// 版本变了才弹更新说明（首次运行只记下版本，不打扰）
+				const lastVersion = localStorage.getItem(LAST_VERSION_KEY);
+				localStorage.setItem(LAST_VERSION_KEY, info.version);
+				if (lastVersion && lastVersion !== info.version) set({ updatedTo: info.version });
 				everOpened = true;
 				void api.hosts.list().then((hosts) => set({ hosts })).catch(() => undefined);
 			} catch (error) {
@@ -561,6 +572,10 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setDiscoverOpen(open) {
 			set({ discoverOpen: open });
+		},
+
+		setUpdatedTo(version) {
+			set({ updatedTo: version });
 		},
 
 		async openProject(pid, sessionPath) {

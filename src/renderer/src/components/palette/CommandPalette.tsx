@@ -81,6 +81,7 @@ export function CommandPalette() {
 				{ icon: "files", label: "显示项目文件", when: true, run: () => s.setRightPanel("files") },
 				{ icon: "panel-right", label: "切换右侧面板", key: "Ctrl+Alt+B", when: true, run: () => s.setRightPanel(s.rightPanel ? null : "session") },
 				{ icon: "list-tree", label: "切换会话树轨道", when: true, run: () => s.toggleRail() },
+				{ icon: "message-square", label: "查看更新内容", when: true, run: () => s.setUpdatedTo(s.info?.version ?? null) },
 				{
 					icon: foldProcess ? "chevron-down" : "chevron-right",
 					label: foldProcess ? "展开思考与工具调用" : "折叠思考与工具调用",

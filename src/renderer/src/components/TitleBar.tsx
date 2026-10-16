@@ -131,6 +131,7 @@ export function TitleBar() {
 			case "帮助":
 				return [
 					{ label: "命令与快捷键…", hint: isMac ? "⌘K" : "Ctrl+K", onClick: () => s.setPalette(true, "commands") },
+					{ label: "查看更新内容", onClick: () => s.setUpdatedTo(s.info?.version ?? null) },
 					{ label: "环境自检与发现项目…", onClick: () => s.setView("welcome") },
 				];
 		}
