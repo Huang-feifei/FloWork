@@ -1,4 +1,4 @@
-/** 最左侧活动栏：切换侧栏视图（会话 / 修改 / 终端），底部为设置 */
+/** 最左侧活动栏：切换侧栏视图（会话 / 修改 / 终端 / 远程 SSH），底部为设置 */
 import { Icon } from "./Icon";
 import { useApp, waitingCount } from "../store";
 
@@ -30,7 +30,8 @@ export function ActivityBar() {
 	const terminalPanel = useApp((s) => s.terminalPanel);
 	const waiting = useApp((s) => waitingCount(s));
 	const rightPanel = useApp((s) => s.rightPanel);
-	const { setView, setRightPanel, setTerminalPanel } = useApp.getState();
+	const remoteOpen = useApp((s) => s.remoteOpen);
+	const { setView, setRightPanel, setTerminalPanel, setRemoteOpen } = useApp.getState();
 	const inChat = view === "chat";
 
 	return (
@@ -59,6 +60,12 @@ export function ActivityBar() {
 				label="终端"
 				active={terminalPanel}
 				onClick={() => setTerminalPanel(!terminalPanel)}
+			/>
+			<ActivityItem
+				icon="server"
+				label="远程主机（SSH）"
+				active={remoteOpen}
+				onClick={() => setRemoteOpen(true)}
 			/>
 			<div className="flex-1" />
 			<ActivityItem
