@@ -1,4 +1,4 @@
-/** 侧栏：项目分组树（含会话），等宽小标题，状态用文字标签 */
+/** 侧栏：项目分组树（含会话），小标题 + 圆形动作按钮，行都是内缩圆角行 */
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { api, errorText } from "../api/client";
@@ -34,8 +34,8 @@ export function Sidebar() {
 				edge="right"
 				label="调整项目栏宽度"
 			/>
-			<div className="flex h-9 shrink-0 items-center gap-0.5 pr-1.5 pl-3">
-				<span className="flex-1 font-mono text-[11px] font-semibold tracking-[0.08em] text-muted">项目</span>
+			<div className="flex h-11 shrink-0 items-center gap-0.5 pr-2.5 pl-4">
+				<span className="flex-1 text-[11.5px] font-semibold text-muted">项目</span>
 				<button
 					type="button"
 					disabled={!canNewSession}
@@ -44,22 +44,22 @@ export function Sidebar() {
 						void newSession();
 					}}
 					title="新会话 Ctrl+N"
-					className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
+					className="flex size-7 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
 				>
 					<Icon
 						name="square-pen"
-						className="size-3.5"
+						className="size-4"
 					/>
 				</button>
 				<button
 					type="button"
 					onClick={() => void importProjects()}
 					title="导入文件夹（可多选）"
-					className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex size-7 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					<Icon
 						name="folder-plus"
-						className="size-3.5"
+						className="size-4"
 					/>
 				</button>
 				<button
@@ -69,16 +69,16 @@ export function Sidebar() {
 						setMenu({ x: rect.left - 120, y: rect.bottom + 4 });
 					}}
 					title="更多"
-					className="flex size-6 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex size-7 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					<Icon
 						name="ellipsis"
-						className="size-3.5"
+						className="size-4"
 					/>
 				</button>
 			</div>
 
-			<nav className="min-h-0 flex-1 overflow-y-auto pb-3">
+			<nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
 				<ProjectTree />
 			</nav>
 

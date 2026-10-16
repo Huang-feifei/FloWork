@@ -7,7 +7,7 @@ import type { ResourceInfo, ResourceKind, ResourcesResult } from "@shared/protoc
 import { api, errorText } from "../../api/client";
 import { projectName, useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
-import { Badge, Button, Input, Select } from "../ui";
+import { Badge, Button, Input, Select, Toggle } from "../ui";
 
 const KIND_LABEL: Record<ResourceKind, string> = { skill: "技能", extension: "扩展", prompt: "提示模板" };
 const KIND_HINT: Record<ResourceKind, string> = {
@@ -44,23 +44,21 @@ function ResourceRow({ r, cwd, onChanged }: { r: ResourceInfo; cwd: string; onCh
 		}
 	};
 	return (
-		<div className={`flex items-start gap-3 border-b border-border px-3 py-2.5 last:border-b-0 ${r.enabled ? "" : "opacity-60"}`}>
-			<label className="mt-0.5 flex shrink-0 cursor-pointer items-center" title={r.enabled ? "已启用，点击禁用" : "已禁用，点击启用"}>
-				<input
-					type="checkbox"
-					checked={r.enabled}
-					disabled={busy}
-					onChange={(e) =>
+		<div className={`flex items-start gap-3 border-b border-border px-5 py-3.5 last:border-b-0 ${r.enabled ? "" : "opacity-60"}`}>
+			<span className={`mt-0.5 flex shrink-0 items-center ${busy ? "pointer-events-none opacity-40" : ""}`} title={r.enabled ? "已启用，点击禁用" : "已禁用，点击启用"}>
+				<Toggle
+					on={r.enabled}
+					onChange={(next) =>
 						void run(
-							() => api.service({ type: "set_resource_enabled", cwd, kind: r.kind, path: r.path, enabled: e.target.checked }),
-							`${e.target.checked ? "已启用" : "已禁用"} ${r.name}`,
+							() => api.service({ type: "set_resource_enabled", cwd, kind: r.kind, path: r.path, enabled: next }),
+							`${next ? "已启用" : "已禁用"} ${r.name}`,
 						)
 					}
 				/>
-			</label>
+			</span>
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-2">
-					<span className="font-medium">{r.name}</span>
+					<span className="text-[13.5px] font-medium text-fg">{r.name}</span>
 					{scopeBadge(r)}
 					{!r.enabled && <Badge>已禁用</Badge>}
 				</div>
@@ -111,7 +109,7 @@ function ImportForm({ kind, cwd, projectTrusted, onDone }: { kind: ResourceKind;
 		}
 	};
 	return (
-		<div className="flex items-center gap-2 border-t border-border bg-panel-2/40 px-3 py-2">
+		<div className="flex items-center gap-2 border-t border-border bg-panel-2/40 px-5 py-3">
 			<Input value={path} onChange={(e) => setPath(e.target.value)} placeholder={IMPORT_HINT[kind]} className="flex-1" />
 			{nativeDialogs && kind !== "prompt" && (
 				<Button size="sm" onClick={() => void api.pickFolder().then((p) => p && setPath(p))}>
@@ -160,7 +158,7 @@ export function ResourcesTab() {
 	}, [load, version]);
 
 	if (!projectId || !cwd) {
-		return <div className="rounded-md border border-border bg-panel px-4 py-6 text-center text-muted">先在左侧打开一个项目。技能与扩展的列表取决于项目（项目可以有自己的 .pi 配置）。</div>;
+		return <div className="fw-card px-6 py-10 text-center text-[13.5px] leading-relaxed text-muted">先在左侧打开一个项目。技能与扩展的列表取决于项目（项目可以有自己的 .pi 配置）。</div>;
 	}
 
 	const setTrust = async (trusted: boolean) => {
@@ -199,7 +197,7 @@ export function ResourcesTab() {
 			</div>
 
 			{trust && trust.state !== "not_needed" && (
-				<div className={`rounded-lg border px-4 py-3 text-[13px] ${projectTrusted ? "border-border bg-panel-2" : "border-warn/50 bg-warn-soft"}`}>
+				<div className={`rounded-2xl px-5 py-4 text-[13.5px] ${projectTrusted ? "bg-panel-2 text-fg" : "bg-warn-soft text-warn"}`}>
 					<div className="flex items-center gap-2">
 						<span className="font-medium">项目信任：{projectTrusted ? "已信任，项目配置已加载" : trust.decided ? "不信任，项目配置未加载" : "尚未决定，项目配置未加载"}</span>
 						<div className="flex-1" />
@@ -217,7 +215,7 @@ export function ResourcesTab() {
 				</div>
 			)}
 
-			{error && <div className="rounded border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">{error}</div>}
+			{error && <div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[13px] text-err">{error}</div>}
 			{!data && !error && <div className="py-8 text-center text-muted">读取中…</div>}
 
 			{data &&
@@ -225,14 +223,14 @@ export function ResourcesTab() {
 					const list = data.resources.filter((r) => r.kind === kind);
 					return (
 						<section key={kind}>
-							<div className="mb-1.5 flex items-baseline gap-2">
-								<h3 className="text-sm font-semibold">{KIND_LABEL[kind]}</h3>
+							<div className="mb-2 flex items-baseline gap-2">
+								<h3 className="text-[15px] font-semibold tracking-tight">{KIND_LABEL[kind]}</h3>
 								<span className="text-[12px] text-muted">{list.length} 个</span>
 							</div>
 							<div className="mb-2 text-[12px] leading-5 text-muted">
 								{KIND_HINT[kind]} 全局目录：<span className="font-mono">{data.dirs.user[kind]}</span>
 							</div>
-							<div className="overflow-hidden rounded-lg border border-border bg-panel">
+							<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
 								{list.length === 0 && <div className="px-3 py-4 text-center text-[12px] text-muted">还没有{KIND_LABEL[kind]}</div>}
 								{list.map((r) => (
 									<ResourceRow key={r.path} r={r} cwd={cwd} onChanged={() => void load()} />
@@ -246,16 +244,16 @@ export function ResourcesTab() {
 			{data && (
 				<section>
 					<div className="mb-1.5 flex items-baseline gap-2">
-						<h3 className="text-sm font-semibold">pi 包</h3>
+						<h3 className="text-[15px] font-semibold tracking-tight">pi 包</h3>
 						<span className="text-[12px] text-muted">{data.packages.length} 个</span>
 					</div>
 					<div className="mb-2 text-[12px] leading-5 text-muted">
 						一个 pi 包可以同时提供技能、扩展和提示模板。来源写法：<span className="font-mono">npm:包名</span>、
 						<span className="font-mono">git:github.com/用户/仓库</span> 或 https 地址。需要本机装有 npm 或 git。
 					</div>
-					<div className="overflow-hidden rounded-lg border border-border bg-panel">
+					<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
 						{data.packages.map((p) => (
-							<div key={`${p.scope}:${p.source}`} className="flex items-center gap-3 border-b border-border px-3 py-2">
+							<div key={`${p.scope}:${p.source}`} className="flex items-center gap-3 border-b border-border px-5 py-3">
 								<span className="min-w-0 flex-1 truncate font-mono text-[12.5px]">{p.source}</span>
 								<Badge>{p.scope === "project" ? "项目" : "全局"}</Badge>
 								<Button
@@ -272,7 +270,7 @@ export function ResourcesTab() {
 								</Button>
 							</div>
 						))}
-						<div className="flex items-center gap-2 bg-panel-2/40 px-3 py-2">
+						<div className="flex items-center gap-2 bg-panel-2/40 px-5 py-3">
 							<Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="npm:@scope/pi-skills" className="flex-1" />
 							<Select value={pkgScope} onChange={(e) => setPkgScope(e.target.value as "user" | "project")} className="w-36">
 								<option value="user">全局（所有项目）</option>

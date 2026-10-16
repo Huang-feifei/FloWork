@@ -1,3 +1,4 @@
+/** 右下角浮层提示（info / warning / error），点 ✕ 关闭 */
 import { useApp } from "../store";
 import { useBrowserOcclusion } from "../lib/browser";
 
@@ -17,11 +18,15 @@ export function Notices() {
 			{notices.map((n) => (
 				<div
 					key={n.id}
-					className="fw-float pointer-events-auto flex items-start gap-2.5 rounded-lg border border-border-strong px-3.5 py-2.5 text-[13px]"
+					className="fw-float pointer-events-auto flex items-start gap-3 rounded-2xl px-4 py-3 text-[13.5px]"
 				>
 					<span className={`mt-1.5 size-1.5 shrink-0 rounded-full ${LEVEL[n.level].dot}`} />
-					<div className={`min-w-0 flex-1 break-words whitespace-pre-wrap ${LEVEL[n.level].text}`}>{n.text}</div>
-					<button type="button" onClick={() => dismiss(n.id)} className="text-muted hover:text-fg">
+					<div className={`min-w-0 flex-1 break-words whitespace-pre-wrap leading-relaxed ${LEVEL[n.level].text}`}>{n.text}</div>
+					<button
+						type="button"
+						onClick={() => dismiss(n.id)}
+						className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
+					>
 						✕
 					</button>
 				</div>

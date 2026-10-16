@@ -203,19 +203,19 @@ export function SessionRail({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
 				<div
 					onMouseEnter={cancelClose}
 					onMouseLeave={scheduleClose}
-					className="fw-float absolute z-30 rounded-lg border border-border-strong p-3 text-[12px]"
+					className="fw-float absolute z-30 rounded-2xl p-4 text-[12.5px]"
 					style={{ top: hover.top, right: RAIL_W + 4, width: CARD_W }}
 				>
 					<div className="mb-1 flex items-center gap-1.5 text-muted">
-						<span className={hoveredCurrent ? "text-accent" : ""}>{markerOf(hovered.node)}</span>
+						<span className={hoveredCurrent ? "text-primary" : ""}>{markerOf(hovered.node)}</span>
 						<span>{roleLabel(hovered.node)}</span>
-						{hovered.node.label && <span className="rounded bg-info/10 px-1 text-info">{hovered.node.label}</span>}
+						{hovered.node.label && <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">{hovered.node.label}</span>}
 						<div className="flex-1" />
 						<span className="text-[11px] text-faint">{timeOf(hovered.node)}</span>
 					</div>
-					<div className="max-h-24 overflow-y-auto whitespace-pre-wrap text-fg/90">{hovered.node.preview || "（空）"}</div>
-					{hoveredCurrent && <div className="mt-1 text-[11px] text-accent">← 当前位置</div>}
-					<div className="mt-2 flex flex-wrap items-center gap-1 border-t border-border pt-2">
+					<div className="max-h-24 overflow-y-auto text-[13px] leading-relaxed whitespace-pre-wrap text-fg">{hovered.node.preview || "（空）"}</div>
+					{hoveredCurrent && <div className="mt-1.5 text-[11px] text-primary">← 当前位置</div>}
+					<div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-border pt-3">
 						{!hoveredCurrent && (
 							<button
 								type="button"
@@ -225,7 +225,7 @@ export function SessionRail({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
 									void navigateTo(hovered.node.id);
 								}}
 								title={hoveredUser ? "回到这条消息之前，原文填回输入框，可修改后重新发送" : "从这条回复之后继续对话"}
-								className="rounded px-1.5 py-0.5 text-accent hover:bg-accent-soft disabled:opacity-40"
+								className="rounded-full px-2.5 py-1 font-medium text-primary hover:bg-primary-soft disabled:opacity-40"
 							>
 								{hoveredUser ? "重新编辑" : "回到这里"}
 							</button>
@@ -239,7 +239,7 @@ export function SessionRail({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
 									void forkFrom(hovered.node.id, "before");
 								}}
 								title="复制这条消息之前的历史到一个新会话"
-								className="rounded px-1.5 py-0.5 text-muted hover:bg-panel hover:text-fg disabled:opacity-40"
+								className="rounded-full px-2.5 py-1 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
 							>
 								分叉
 							</button>
@@ -255,7 +255,7 @@ export function SessionRail({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
 								});
 								if (label !== null) void setLabel(hovered.node.id, label.trim());
 							}}
-							className="rounded px-1.5 py-0.5 text-muted hover:bg-panel hover:text-fg"
+							className="rounded-full px-2.5 py-1 text-muted hover:bg-panel-2 hover:text-fg"
 						>
 							标签
 						</button>

@@ -10,12 +10,14 @@ import { api, errorText } from "../../api/client";
 import { collectSessionFiles } from "../../lib/session-files";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
+import { Icon } from "../Icon";
+import { Segmented } from "../ui";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
 
 function DiffBlock({ diff }: { diff: string }) {
 	return (
-		<div className="overflow-x-auto rounded border border-border bg-panel">
+		<div className="overflow-x-auto rounded-xl border border-border bg-panel-2">
 			{diff.split("\n").map((line, i) => (
 				<div
 					// biome-ignore lint/suspicious/noArrayIndexKey: diff 行没有稳定 id
@@ -145,34 +147,30 @@ export function FilePreview() {
 	const lineCount = file && !file.binary ? normalizeEol(file.text).split("\n").length : 0;
 
 	return (
-		<div className="absolute inset-x-0 top-9 bottom-0 z-20 flex flex-col bg-term">
-			<div className="flex h-9 shrink-0 items-center gap-2 border-b border-border bg-term-bar px-3 text-xs whitespace-nowrap [&>button]:shrink-0">
+		<div className="absolute inset-x-0 top-11 bottom-0 z-20 flex flex-col bg-term">
+			<div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-term-bar px-4 text-[12.5px] whitespace-nowrap [&>button]:shrink-0">
 				<span className="min-w-0 truncate font-mono font-medium" title={file?.absolutePath ?? path}>
-					{dirty && <span className="mr-1 text-accent">●</span>}
+					{dirty && <span className="mr-1 text-primary">●</span>}
 					{path}
 				</span>
 				{file && (
-					<span className="shrink-0 text-muted">
+					<span className="shrink-0 text-[11.5px] text-muted">
 						{lineCount} 行 · {(file.size / 1024).toFixed(1)} KB
 					</span>
 				)}
 				<div className="flex-1" />
 				{changes.length > 0 && (
-					<div className="flex shrink-0 rounded border border-border">
-						{(["content", "changes"] as const).map((t) => (
-							<button
-								type="button"
-								key={t}
-								onClick={() => setTab(t)}
-								className={`px-2 py-0.5 ${tab === t ? "bg-panel font-medium text-fg" : "text-muted hover:text-fg"}`}
-							>
-								{t === "content" ? "内容" : `本会话的修改（${changes.length}）`}
-							</button>
-						))}
-					</div>
+					<Segmented
+						items={[
+							{ id: "content", label: "内容" },
+							{ id: "changes", label: `本会话的修改 ${changes.length}` },
+						]}
+						active={tab}
+						onChange={(id) => setTab(id as "content" | "changes")}
+					/>
 				)}
 				{editable && tab === "content" && !editing && (
-					<button type="button" onClick={() => setEditing(true)} className="rounded border border-border px-2 py-0.5 hover:bg-panel">
+					<button type="button" onClick={() => setEditing(true)} className="flex h-8 items-center rounded-full bg-panel-2 px-3.5 hover:bg-highlight">
 						编辑
 					</button>
 				)}
@@ -186,7 +184,7 @@ export function FilePreview() {
 								setDraft(normalizeEol(file?.text ?? ""));
 								setRevision((r) => r + 1);
 							}}
-							className="rounded px-2 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+							className="flex h-8 items-center rounded-full px-3.5 text-muted hover:bg-panel-2 hover:text-fg"
 						>
 							{dirty ? "放弃修改" : "退出编辑"}
 						</button>
@@ -194,14 +192,14 @@ export function FilePreview() {
 							type="button"
 							disabled={!dirty || saving}
 							onClick={() => void save()}
-							className="rounded bg-accent px-2 py-0.5 font-medium text-accent-foreground disabled:opacity-40"
+							className="flex h-8 items-center rounded-full bg-primary px-3.5 font-medium text-primary-foreground hover:bg-primary-strong disabled:opacity-40"
 							title="Ctrl+S"
 						>
 							{saving ? "保存中…" : "保存"}
 						</button>
 					</>
 				)}
-				<button type="button" onClick={() => insertIntoPrompt(path)} className="rounded px-1.5 text-accent hover:bg-accent-soft">
+				<button type="button" onClick={() => insertIntoPrompt(path)} className="flex h-8 items-center rounded-full px-3 text-primary hover:bg-primary-soft">
 					引用
 				</button>
 				<button
@@ -209,12 +207,12 @@ export function FilePreview() {
 					onClick={() =>
 						void navigator.clipboard.writeText(file?.absolutePath ?? path).then(() => pushNotice("info", "已复制路径"))
 					}
-					className="rounded px-1.5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex h-8 items-center rounded-full px-3 text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					复制路径
 				</button>
-				<button type="button" onClick={() => void close()} title="关闭（Esc）" className="px-1 text-muted hover:text-fg">
-					✕
+				<button type="button" onClick={() => void close()} title="关闭（Esc）" className="flex size-7 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg">
+					<Icon name="x" className="size-3.5" />
 				</button>
 			</div>
 

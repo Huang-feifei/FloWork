@@ -28,8 +28,8 @@ export function TrustBanner() {
 	};
 
 	return (
-		<div className="rounded-md border border-warn/50 bg-warn-soft px-4 py-3 font-sans text-[13px] leading-5">
-			<div className="font-medium">这个项目包含 pi 的项目级配置，目前没有加载</div>
+		<div className="rounded-2xl bg-warn-soft px-5 py-4 text-[13.5px] leading-relaxed">
+			<div className="flex items-center gap-2 text-[15px] font-semibold tracking-tight text-warn">这个项目包含 pi 的项目级配置，目前没有加载</div>
 			<div className="mt-1 text-muted">
 				发现：<span className="font-mono text-[12px] text-fg">{trust.items.join("、")}</span>。其中的扩展是会在本机执行的代码，技能和设置会影响
 				AI 的行为。请确认项目来源可靠后再信任。
@@ -39,7 +39,7 @@ export function TrustBanner() {
 					type="button"
 					disabled={busy || isRunning}
 					onClick={() => void decide(true)}
-					className="rounded-md bg-accent px-3 py-1 text-[12px] font-medium text-accent-foreground disabled:opacity-40"
+					className="rounded-full bg-primary px-4 py-1.5 text-[12.5px] font-medium text-primary-foreground hover:bg-primary-strong disabled:opacity-40"
 				>
 					信任并加载
 				</button>
@@ -47,11 +47,11 @@ export function TrustBanner() {
 					type="button"
 					disabled={busy || isRunning}
 					onClick={() => void decide(false)}
-					className="rounded-md border border-border-strong px-3 py-1 text-[12px] hover:bg-panel-2 disabled:opacity-40"
+					className="rounded-full bg-surface-raised px-4 py-1.5 text-[12.5px] text-fg hover:bg-highlight disabled:opacity-40"
 				>
 					不加载
 				</button>
-				<button type="button" onClick={() => setView("settings", "resources")} className="ml-auto text-[12px] text-muted underline hover:text-fg">
+				<button type="button" onClick={() => setView("settings", "resources")} className="ml-auto text-[12.5px] font-medium text-primary hover:underline">
 					查看这些配置
 				</button>
 			</div>

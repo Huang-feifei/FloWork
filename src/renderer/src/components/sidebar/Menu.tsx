@@ -1,4 +1,4 @@
-/** 轻量弹出菜单：点击外部或按 Esc 关闭 */
+/** 轻量弹出菜单：点击外部或按 Esc 关闭。Apple 体系下是白色圆角浮层 + 内缩圆角项。 */
 import { type ReactNode, useEffect, useRef } from "react";
 import { useBrowserOcclusion } from "../../lib/browser";
 
@@ -41,18 +41,18 @@ export function Menu({
 	}, [onClose]);
 
 	// 避免超出窗口底部
-	const top = Math.min(position.y, window.innerHeight - 24 - items.length * 30);
+	const top = Math.min(position.y, window.innerHeight - 24 - items.length * 36);
 
 	return (
 		<div
 			ref={ref}
-			className="fw-float fixed z-50 min-w-44 rounded-lg border border-border-strong py-1 text-[13px]"
+			className="fw-float fixed z-50 min-w-44 rounded-2xl border border-border py-1.5 text-[13.5px]"
 			style={{ left: position.x, top: Math.max(8, top) }}
 		>
 			{items.map((item, i) =>
 				item.separator ? (
 					// biome-ignore lint/suspicious/noArrayIndexKey: 分隔线没有 id
-					<div key={i} className="my-1 border-t border-border" />
+					<div key={i} className="my-1.5 border-t border-border" />
 				) : (
 					<button
 						type="button"
@@ -63,12 +63,12 @@ export function Menu({
 							onClose();
 							item.onClick?.();
 						}}
-						className={`flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-panel-2 disabled:opacity-40 ${
+						className={`mx-1.5 flex w-[calc(100%-12px)] items-center gap-2 rounded-[10px] px-2.5 py-2 text-left hover:bg-panel-2 disabled:opacity-40 ${
 							item.danger ? "text-err" : ""
 						}`}
 					>
 						<span className="flex-1">{item.label}</span>
-						{item.hint && <span className="text-[11px] text-muted">{item.hint}</span>}
+						{item.hint && <span className="text-[11.5px] text-faint">{item.hint}</span>}
 					</button>
 				),
 			)}

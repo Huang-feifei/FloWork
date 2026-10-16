@@ -22,6 +22,11 @@ export const Markdown = memo(function Markdown({ text }: { text: string }) {
 							{children}
 						</a>
 					),
+					code: ({ children }) => (
+						<code className="rounded-md bg-inline-code-bg px-[0.35em] py-[0.05em] font-mono text-[12.5px] text-inline-code-fg">
+							{children}
+						</code>
+					),
 					pre: ({ children }) => {
 						const code = Array.isArray(children) ? children[0] : children;
 						const className = isValidElement<{ className?: string }>(code) ? (code.props.className ?? "") : "";

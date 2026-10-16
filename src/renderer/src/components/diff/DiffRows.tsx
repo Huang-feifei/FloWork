@@ -53,7 +53,7 @@ export function DiffRows({ diff, twoColumns }: { diff: string; twoColumns?: bool
 					<div
 						// biome-ignore lint/suspicious/noArrayIndexKey: diff 行没有稳定 id
 						key={i}
-						className="bg-panel-2 px-4 py-0.5 text-info/80"
+						className="bg-panel-2 px-4 py-0.5 font-mono text-[12.5px] leading-[1.7] text-muted"
 					>
 						{r.s}
 					</div>
@@ -61,8 +61,8 @@ export function DiffRows({ diff, twoColumns }: { diff: string; twoColumns?: bool
 					<div
 						// biome-ignore lint/suspicious/noArrayIndexKey: diff 行没有稳定 id
 						key={i}
-						className={`grid ${cols} ${
-							r.t === "add" ? "bg-diff-add text-diff-add-fg" : r.t === "del" ? "bg-diff-del text-diff-del-fg" : "text-fg/75"
+						className={`grid ${cols} font-mono text-[12.5px] leading-[1.7] ${
+							r.t === "add" ? "bg-diff-add text-diff-add-fg" : r.t === "del" ? "bg-diff-del text-diff-del-fg" : "text-fg/80"
 						}`}
 					>
 						<span className="pr-3 text-right text-faint tabular-nums">{twoColumns ? (r.o ?? "") : (r.n ?? r.o ?? "")}</span>

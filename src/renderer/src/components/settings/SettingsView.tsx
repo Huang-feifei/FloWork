@@ -1,6 +1,6 @@
 /**
  * 设置页：左侧导航 + 右侧内容。顶部一行显示配置目录与“打开配置文件”。
- * 与原型（设置 · 模型供应商）一致：内容区是等宽小标题 + 表格式列表。
+ * Apple 体系：28px 页面标题、白卡片内容区、左侧导航是内缩圆角行，选中态用蓝色软底。
  */
 import { type SettingsTab, useApp } from "../../store";
 import { Icon, type IconName } from "../Icon";
@@ -29,71 +29,59 @@ export function SettingsView() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-5">
-				<span className="font-mono text-[11.5px] font-semibold tracking-[0.06em] text-faint">设置</span>
-				<span className="text-faint">|</span>
-				<span className="text-[13px] text-fg">{current?.label}</span>
+			<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-chrome px-6">
+				<span className="text-[13px] text-muted">设置</span>
+				<span className="text-faint">/</span>
+				<span className="text-[13px] font-medium text-fg">{current?.label}</span>
 				<div className="flex-1" />
 				<span className="truncate font-mono text-[11.5px] text-faint">{info?.agentDir}</span>
 				<button
 					type="button"
 					onClick={() => setView("settings", "raw")}
-					className="flex h-7 shrink-0 items-center gap-1.5 rounded border border-border px-2.5 font-mono text-[11.5px] text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-panel-2 px-3.5 text-[12.5px] text-muted hover:text-fg"
 				>
-					<Icon
-						name="file-json"
-						className="size-3.5"
-					/>
+					<Icon name="file-json" className="size-3.5" />
 					打开配置文件
 				</button>
 			</div>
 
 			<div className="flex min-h-0 flex-1">
-				<nav className="w-[220px] shrink-0 overflow-y-auto border-r border-border bg-sidebar py-2">
+				<nav className="w-[240px] shrink-0 space-y-0.5 overflow-y-auto border-r border-border bg-sidebar p-3">
 					{TABS.map((t) => (
 						<button
 							type="button"
 							key={t.id}
 							onClick={() => setView("settings", t.id)}
-							className={`relative flex h-8 w-full items-center gap-2 px-4 text-left text-[13px] ${
-								t.id === tab ? "bg-accent-soft text-fg" : "text-muted hover:bg-panel-2 hover:text-fg"
+							className={`flex h-9 w-full items-center gap-2.5 rounded-[10px] px-3 text-left text-[13.5px] ${
+								t.id === tab ? "bg-primary-soft font-medium text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"
 							}`}
 						>
-							{t.id === tab && <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" />}
-							<Icon
-								name={t.icon}
-								className="size-3.5 shrink-0"
-							/>
+							<Icon name={t.icon} className="size-4 shrink-0" />
 							<span className="truncate">{t.label}</span>
 						</button>
 					))}
-					<div className="mt-2 border-t border-border px-4 pt-3">
+					<div className="mt-3 border-t border-border px-3 pt-3">
 						<button
 							type="button"
 							onClick={() => setView(hasProject ? "chat" : "welcome")}
-							className="flex items-center gap-1.5 text-[12px] text-muted hover:text-fg"
+							className="flex items-center gap-1.5 text-[12.5px] text-muted hover:text-fg"
 						>
-							<Icon
-								name="arrow-left"
-								className="size-3.5"
-							/>
+							<Icon name="arrow-left" className="size-3.5" />
 							返回工作台
 						</button>
 					</div>
 				</nav>
 
-				<div className="min-w-0 flex-1 overflow-y-auto bg-bg px-8 pt-6 pb-10">
-					<div className="max-w-[960px]">
-						<h1 className="text-[17px] font-semibold">{current?.label}</h1>
-						<p className="mt-1 text-[13px] leading-relaxed text-muted">{current?.desc}</p>
-						<div className="mt-5">
-							{tab === "providers" && <ProvidersTab />}
-							{tab === "custom" && <CustomProvidersTab />}
-							{tab === "resources" && <ResourcesTab />}
-							{tab === "preferences" && <PreferencesTab />}
-							{tab === "appearance" && <AppearanceTab />}
-							{tab === "raw" && <RawConfigTab />}
-						</div>
+				<div className="min-w-0 flex-1 overflow-y-auto bg-bg px-8 py-6">
+					<div className="max-w-[980px]">
+						<h1 className="text-[28px] font-semibold tracking-tight">{current?.label}</h1>
+						<p className="mt-2 mb-6 text-[15px] leading-relaxed text-muted">{current?.desc}</p>
+						{tab === "providers" && <ProvidersTab />}
+						{tab === "custom" && <CustomProvidersTab />}
+						{tab === "resources" && <ResourcesTab />}
+						{tab === "preferences" && <PreferencesTab />}
+						{tab === "appearance" && <AppearanceTab />}
+						{tab === "raw" && <RawConfigTab />}
 					</div>
 				</div>
 			</div>

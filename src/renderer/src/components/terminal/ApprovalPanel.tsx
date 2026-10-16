@@ -91,8 +91,8 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: 键盘快捷键作用于内部按钮
 		<div
-			className={`grid grid-cols-[2ch_1fr] gap-x-1 rounded-md border px-3 py-2 ${
-				danger ? (active ? "border-err/70 bg-err-soft" : "border-err/40 opacity-70") : active ? "border-warn/60 bg-warn-soft" : "border-border opacity-70"
+			className={`fw-card grid grid-cols-[2ch_1fr] gap-x-2 px-4 py-3.5 ${
+				danger ? (active ? "ring-1 ring-err/40" : "opacity-70") : active ? "ring-1 ring-warn/40" : "opacity-70"
 			}`}
 			onKeyDown={(e) => {
 				const key = e.key.toLowerCase();
@@ -106,26 +106,26 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 		>
 			<span className={danger ? "text-err" : "text-warn"}>{danger ? "▲" : "◆"}</span>
 			<div className="min-w-0">
-				<div>
-					{danger && <span className="mr-1 font-bold text-err">高危操作</span>}
-					允许{host ? <>在 <span className="font-mono">{host}</span> 上</> : null}执行 <span className="font-bold">{approval.toolName}</span>？
+				<div className="text-[14px] leading-relaxed">
+					{danger && <span className="mr-1 font-medium text-err">高危操作</span>}
+					允许{host ? <>在 <span className="font-mono">{host}</span> 上</> : null}执行 <span className="font-medium text-fg">{approval.toolName}</span>？
 				</div>
 				{danger && approval.risk?.reasons.length ? (
-					<ul className="mt-1 list-disc pl-4 text-err">
+					<ul className="mt-1.5 list-disc pl-4 text-[12.5px] leading-relaxed text-err">
 						{approval.risk.reasons.map((r) => (
 							<li key={r}>{r}</li>
 						))}
 					</ul>
 				) : null}
-				<div className={`my-1 max-h-72 overflow-y-auto border-l-2 pl-3 ${danger ? "border-err/50" : "border-warn/40"}`}>
+				<div className="my-2.5 max-h-72 overflow-y-auto rounded-xl bg-panel-2 px-3.5 py-2.5 font-mono text-[12.5px] leading-[1.7]">
 					<Preview approval={approval} />
 				</div>
-				<div className="flex flex-wrap gap-2 pt-1">
+				<div className="flex flex-wrap items-center gap-2 pt-2.5">
 					<button
 						ref={allowRef}
 						type="button"
 						onClick={() => decide("allow")}
-						className="rounded border border-ok/50 bg-ok-soft px-2 text-ok outline-none hover:bg-ok/20 focus:ring-2 focus:ring-ok/30"
+						className="rounded-full bg-primary px-3.5 py-1.5 text-[12.5px] font-medium text-primary-foreground outline-none hover:bg-primary-strong focus:ring-4 focus:ring-primary/20"
 					>
 						[y] 允许
 					</button>
@@ -134,7 +134,7 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 						<button
 							type="button"
 							onClick={() => decide("allow_session")}
-							className="rounded border border-border-strong px-2 outline-none hover:bg-panel-2 focus:ring-2 focus:ring-accent/20"
+						className="rounded-full bg-panel-2 px-3.5 py-1.5 text-[12.5px] text-fg outline-none hover:bg-highlight focus:ring-4 focus:ring-primary/10"
 						>
 							[a] 本会话始终允许 {approval.toolName}
 						</button>
@@ -142,7 +142,7 @@ function ApprovalItem({ approval, active }: { approval: PendingApproval; active:
 					<button
 						type="button"
 						onClick={() => decide("deny")}
-						className="rounded border border-err/40 px-2 text-err outline-none hover:bg-err-soft focus:ring-2 focus:ring-err/20"
+						className="rounded-full bg-panel-2 px-3.5 py-1.5 text-[12.5px] text-fg outline-none hover:bg-highlight focus:ring-4 focus:ring-primary/10"
 					>
 						[n] 拒绝
 					</button>

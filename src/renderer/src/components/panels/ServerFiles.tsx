@@ -8,6 +8,7 @@ import type { ServerDirListing, WorkspaceEntry } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
+import { Icon } from "../Icon";
 import { askText } from "../PromptDialog";
 import { Menu, type MenuItem } from "../sidebar/Menu";
 
@@ -216,7 +217,7 @@ export function ServerFiles() {
 	};
 
 	if (!hostId) {
-		return <div className="p-3 text-[12px] text-muted">当前项目不是远程项目，没有服务器目录。</div>;
+		return <div className="px-3 py-3 text-[12.5px] text-muted">当前项目不是远程项目，没有服务器目录。</div>;
 	}
 
 	const menuItems: MenuItem[] = (() => {
@@ -249,17 +250,17 @@ export function ServerFiles() {
 					title="返回上一级"
 					disabled={!listing?.parent}
 					onClick={() => listing?.parent && void load(listing.parent)}
-					className="rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30"
 				>
-					↑
+					<Icon name="arrow-up" className="size-4" />
 				</button>
 				<button
 					type="button"
 					title="回到 home"
 					onClick={() => void goHome()}
-					className="rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
 				>
-					⌂
+					<Icon name="server" className="size-4" />
 				</button>
 				<input
 					value={draft}
@@ -269,24 +270,24 @@ export function ServerFiles() {
 						if (e.key === "Escape") setDraft(current);
 					}}
 					spellCheck={false}
-					className="term min-w-0 flex-1 rounded border border-border bg-panel px-2 py-1 text-[11.5px] outline-none focus:border-accent"
+					className="term min-w-0 flex-1 rounded-full bg-panel-2 px-3 py-1.5 text-[11.5px] outline-none focus:ring-4 focus:ring-primary/10"
 				/>
 				<button
 					type="button"
 					title="刷新"
 					onClick={() => void load(current)}
-					className="rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
 				>
-					⟳
+					<Icon name="refresh" className="size-4" />
 				</button>
 			</div>
 
 			{/* 主机与上传状态 */}
-			<div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1 text-[11px] text-muted">
+			<div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-1.5 text-[11.5px] text-muted">
 				<span className="truncate">{host ? host.name || `${host.user ? `${host.user}@` : ""}${host.host}` : "远程主机"}</span>
 				<div className="flex-1" />
 				{uploading ? (
-					<span className="truncate text-accent">上传中：{uploading}</span>
+					<span className="truncate text-primary">上传中：{uploading}</span>
 				) : busy ? (
 					<span>读取中…</span>
 				) : (
@@ -312,7 +313,7 @@ export function ServerFiles() {
 						setMenu({ x: e.clientX, y: e.clientY, entry: null });
 					}
 				}}
-				className={`term min-h-0 flex-1 overflow-y-auto py-1 text-[12px] leading-5 ${dragOver ? "bg-accent-soft" : ""}`}
+				className={`min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 text-[12.5px] leading-6 ${dragOver ? "bg-primary-soft" : ""}`}
 			>
 				{error && <div className="px-3 py-2 text-err">{error}</div>}
 				{!error && listing && listing.entries.length === 0 && <div className="px-3 py-2 text-muted">这个目录是空的</div>}
@@ -326,17 +327,20 @@ export function ServerFiles() {
 							setMenu({ x: e.clientX, y: e.clientY, entry });
 						}}
 						title={entry.path}
-						className={`group flex cursor-default items-center gap-1.5 px-2 py-[3px] hover:bg-panel-2 ${entry.ignored ? "text-muted/70" : ""}`}
+						className={`group flex h-8 cursor-default items-center gap-2 rounded-[10px] px-2 hover:bg-panel-2 ${entry.ignored ? "text-muted/70" : "text-fg/85"}`}
 					>
-						<span className={`shrink-0 ${entry.type === "dir" ? "text-accent" : "text-faint"}`}>{entry.type === "dir" ? "▸" : "·"}</span>
+						<Icon
+							name={entry.type === "dir" ? "folder" : "file-code"}
+							className={`size-4 shrink-0 ${entry.type === "dir" ? "text-muted" : "text-faint"}`}
+						/>
 						<span className="min-w-0 flex-1 truncate">{entry.name}</span>
-						{entry.type === "file" && <span className="shrink-0 text-[10.5px] text-faint">{formatSize(entry.size)}</span>}
+						{entry.type === "file" && <span className="shrink-0 text-[11px] text-faint">{formatSize(entry.size)}</span>}
 					</div>
 				))}
 			</div>
 
 			{/* 底部操作条 */}
-			<div className="flex shrink-0 items-center gap-1 border-t border-border px-2 py-1.5 text-[11.5px]">
+			<div className="flex shrink-0 items-center gap-2 border-t border-border px-3 py-2.5 text-[12.5px]">
 				<input
 					ref={fileInput}
 					type="file"
@@ -350,19 +354,19 @@ export function ServerFiles() {
 				<button
 					type="button"
 					onClick={() => fileInput.current?.click()}
-					className="rounded px-2 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex h-8 items-center rounded-full bg-panel-2 px-3.5 hover:bg-highlight"
 				>
 					上传文件
 				</button>
 				<button
 					type="button"
 					onClick={() => void createEntry("dir")}
-					className="rounded px-2 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex h-8 items-center rounded-full px-3.5 text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					新建文件夹
 				</button>
 				<div className="flex-1" />
-				<span className="truncate text-faint">双击打开 · 右键更多 · 可拖入文件</span>
+				<span className="truncate text-[11.5px] text-faint">双击打开 · 右键更多 · 可拖入文件</span>
 			</div>
 
 			{menu && <Menu items={menuItems} position={{ x: menu.x, y: menu.y }} onClose={() => setMenu(null)} />}

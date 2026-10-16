@@ -42,7 +42,7 @@ function segmentsOf(content: ContentBlock[]): Segment[] {
 
 function Gutter({ mark, className = "", children }: { mark: React.ReactNode; className?: string; children: React.ReactNode }) {
 	return (
-		<div className="grid grid-cols-[2ch_1fr] gap-x-1">
+		<div className="grid grid-cols-[2ch_1fr] gap-x-2">
 			<div className={className}>{mark}</div>
 			<div className="min-w-0">{children}</div>
 		</div>
@@ -59,9 +59,9 @@ function UserLine({ message }: { message: Extract<ChatMessage, { role: "user" }>
 	const images = imagesOf(message.content);
 	const skill = parseSkillInvocation(text);
 	return (
-		<div className="-mx-3 rounded-md bg-term-prompt px-3 py-1.5">
-			<Gutter mark="❯" className="font-bold text-accent">
-				{skill ? <SkillInvocation skill={skill} /> : <div className="whitespace-pre-wrap">{text}</div>}
+		<div className="-mx-2 rounded-2xl bg-panel-2 px-4 py-3">
+			<Gutter mark="❯" className="font-semibold text-primary">
+				{skill ? <SkillInvocation skill={skill} /> : <div className="text-[14.5px] leading-relaxed whitespace-pre-wrap">{text}</div>}
 				{images.length > 0 && (
 					<div className="mt-1 flex flex-wrap gap-2">
 						{images.map((image, i) => (
@@ -84,13 +84,13 @@ function SkillInvocation({ skill }: { skill: { skill: string; args: string; body
 				type="button"
 				onClick={() => setOpen(!open)}
 				title="查看技能内容"
-				className="mr-2 rounded bg-accent-soft px-1.5 font-bold text-accent hover:bg-accent/15"
+				className="mr-2 rounded-full bg-primary-soft px-2 py-0.5 font-medium text-primary hover:bg-primary/15"
 			>
 				/skill:{skill.skill} {open ? "▾" : "▸"}
 			</button>
 			<span className="whitespace-pre-wrap">{skill.args}</span>
 			{open && (
-				<div className="mt-1 max-h-72 overflow-y-auto border-l-2 border-accent/30 pl-3 whitespace-pre-wrap text-muted">{skill.body}</div>
+				<div className="mt-1.5 max-h-72 overflow-y-auto border-l-2 border-border pl-3 whitespace-pre-wrap text-muted">{skill.body}</div>
 			)}
 		</div>
 	);
@@ -103,11 +103,11 @@ function ThinkingLine({ text, live }: { text: string; live: boolean }) {
 	const tail = lines.slice(-3).join("\n");
 	return (
 		<Gutter mark="✻" className="text-muted">
-			<button type="button" onClick={() => setOpen(!open)} className="text-muted italic hover:text-fg">
+			<button type="button" onClick={() => setOpen(!open)} className="text-[12.5px] text-muted hover:text-fg">
 				{live ? "思考中…" : `思考过程（${text.length} 字）`} {open ? "▾" : "▸"}
 			</button>
 			{(open || live) && (
-				<div className="max-h-72 overflow-y-auto border-l border-border-strong pl-3 whitespace-pre-wrap text-muted italic">
+				<div className="mt-1.5 max-h-72 overflow-y-auto border-l-2 border-border pl-3 font-mono text-[12.5px] leading-[1.7] whitespace-pre-wrap text-muted">
 					{open ? text : tail}
 				</div>
 			)}
@@ -161,13 +161,13 @@ const ProcessGroup = memo(function ProcessGroup({
 					type="button"
 					onClick={() => setOpen(!open)}
 					title={open ? "折叠思考与工具调用" : "展开思考与工具调用"}
-					className="text-muted hover:text-fg"
+					className="inline-flex items-center gap-1.5 rounded-full bg-panel-2 px-3 py-1 text-[12.5px] text-muted hover:text-fg"
 				>
-					<span className="mr-1 text-[10px]">{open ? "▾" : "▸"}</span>
+					<span className="text-[10px]">{open ? "▾" : "▸"}</span>
 					{parts.join(" · ")}
 				</button>
 			</Gutter>
-			{open && <div className="ml-3 border-l border-border pl-2">{body}</div>}
+			{open && <div className="mt-2 ml-3 space-y-3 border-l-2 border-border pl-3">{body}</div>}
 		</>
 	);
 });
@@ -201,7 +201,9 @@ const AssistantBlocks = memo(function AssistantBlocks({
 				seg.kind === "text" ? (
 					// biome-ignore lint/suspicious/noArrayIndexKey: 内容块按位置稳定，没有独立 id
 					<Gutter key={i} mark="●">
-						<Markdown text={seg.text} />
+						<div className="text-[14.5px] leading-relaxed">
+							<Markdown text={seg.text} />
+						</div>
 						{live && i === lastText && <span className="term-cursor" />}
 					</Gutter>
 				) : (
@@ -242,7 +244,7 @@ const MessageView = memo(function MessageView({
 		case "note":
 			return (
 				<Gutter mark="※" className="text-muted">
-					<div className="whitespace-pre-wrap text-muted">
+					<div className="text-[13px] leading-relaxed whitespace-pre-wrap text-muted">
 						<span className="mr-2">[{message.kind}]</span>
 						{message.text}
 					</div>
@@ -296,9 +298,9 @@ function LoadEarlier({ hidden, onMore, onAll }: { hidden: number; onMore: () => 
 		return () => observer.disconnect();
 	}, [onMore]);
 	return (
-		<div ref={ref} className="flex items-center justify-center gap-3 py-1 text-[12px] text-muted">
+		<div ref={ref} className="flex items-center justify-center gap-3 rounded-full bg-panel-2 py-1.5 text-[12.5px] text-muted">
 			<span>更早还有 {hidden} 条消息未显示</span>
-			<button type="button" onClick={onMore} className="text-accent hover:underline">
+			<button type="button" onClick={onMore} className="font-medium text-primary hover:underline">
 				再显示 {Math.min(MORE_ROWS, hidden)} 条
 			</button>
 			<button type="button" onClick={onAll} className="text-muted hover:text-fg hover:underline">
@@ -333,7 +335,7 @@ export function Transcript() {
 	}, [messages]);
 
 	return (
-		<div className="flex flex-col gap-3">
+		<div className="flex flex-col gap-4">
 			{hidden > 0 && <LoadEarlier hidden={hidden} onMore={showMore} onAll={showAll} />}
 			{messages.map((m, i) =>
 				// 窗口之前的消息不挂载；工具结果不单独成行，不需要 data-entry-id

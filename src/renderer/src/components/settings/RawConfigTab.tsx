@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import type { ConfigFileName } from "@shared/protocol";
 import { errorText } from "../../api/client";
 import { useApp } from "../../store";
-import { Button, TextArea } from "../ui";
+import { Badge, Button, TextArea } from "../ui";
 import { isMtimeConflict, useConfigFile } from "./useConfigFile";
 
+/** 单个配置文件编辑器：白卡片 + 等宽编辑区 + 状态胶囊 + pill 动作 */
 function FileEditor({ name, title, hint }: { name: ConfigFileName; title: string; hint: string }) {
 	const { file, error, conflict, reload, save } = useConfigFile(name);
 	const pushNotice = useApp((s) => s.pushNotice);
@@ -39,18 +40,21 @@ function FileEditor({ name, title, hint }: { name: ConfigFileName; title: string
 	const dirty = file !== null && text !== (file.text || "{\n}\n");
 
 	return (
-		<section className="space-y-2">
-			<div className="flex items-center gap-2">
-				<h3 className="text-sm font-semibold">{title}</h3>
-				<span className="truncate font-mono text-[11px] text-muted">{file?.path}</span>
-				{file && !file.exists && <span className="text-[11px] text-warn">（尚未创建）</span>}
+		<div className="fw-card p-6">
+			<div className="flex items-center gap-3">
+				<h3 className="shrink-0 text-[15px] font-semibold tracking-tight">{title}</h3>
+				{file && !file.exists && <Badge tone="warn">尚未创建</Badge>}
+				<span className="min-w-0 flex-1 truncate text-right font-mono text-[11.5px] text-faint">{file?.path}</span>
 			</div>
-			<div className="text-[11px] text-muted">{hint}</div>
-			{error && <div className="text-xs text-err">{error}</div>}
+			<p className="mt-1 text-[12.5px] leading-relaxed text-muted">{hint}</p>
+
+			{error && <div className="mt-3 rounded-xl bg-err-soft px-3.5 py-2 text-[12.5px] text-err">{error}</div>}
 			{conflict && (
-				<div className="rounded border border-warn/40 bg-warn-soft px-2 py-1.5 text-xs text-warn">
-					<div>{title} 在你打开之后被其他程序改过，磁盘上的版本已经和下面显示的不一样了；直接保存会被拒绝，以免覆盖对方的改动。</div>
-					<div className="mt-1.5 flex flex-wrap gap-2">
+				<div className="mt-3 rounded-xl bg-warn-soft p-3.5 text-[12.5px] leading-relaxed text-warn">
+					<div>
+						{title} 在你打开之后被其他程序改过，磁盘上的版本已经和下面显示的不一样了；直接保存会被拒绝，以免覆盖对方的改动。
+					</div>
+					<div className="mt-3 flex flex-wrap gap-2">
 						<Button size="sm" onClick={() => void reload()}>
 							重新加载磁盘版本（放弃我的修改）
 						</Button>
@@ -60,6 +64,7 @@ function FileEditor({ name, title, hint }: { name: ConfigFileName; title: string
 					</div>
 				</div>
 			)}
+
 			<TextArea
 				rows={16}
 				spellCheck={false}
@@ -68,9 +73,15 @@ function FileEditor({ name, title, hint }: { name: ConfigFileName; title: string
 					setText(e.target.value);
 					validate(e.target.value);
 				}}
+				className="mt-3"
 			/>
-			<div className="flex items-center gap-2">
-				{parseError ? <span className="text-xs text-err">JSON 错误：{parseError}</span> : <span className="text-xs text-muted">JSON 格式正确</span>}
+
+			<div className="mt-3 flex items-center gap-2">
+				{parseError ? (
+					<Badge tone="err">JSON 错误：{parseError}</Badge>
+				) : (
+					<Badge tone="ok">✓ JSON 格式正确</Badge>
+				)}
 				<div className="flex-1" />
 				<Button
 					size="sm"
@@ -86,13 +97,13 @@ function FileEditor({ name, title, hint }: { name: ConfigFileName; title: string
 					保存
 				</Button>
 			</div>
-		</section>
+		</div>
 	);
 }
 
 export function RawConfigTab() {
 	return (
-		<div className="space-y-8">
+		<div className="space-y-6">
 			<FileEditor
 				name="settings"
 				title="settings.json"
@@ -103,7 +114,9 @@ export function RawConfigTab() {
 				title="models.json"
 				hint="自定义供应商与模型覆盖（providers / modelOverrides）。字段说明见 pi 文档 docs/models.md。"
 			/>
-			<div className="text-[11px] text-muted">auth.json 含密钥，不在页面中显示；请通过“模型供应商”页登录或登出。</div>
+			<div className="text-[12px] leading-5 text-faint">
+				auth.json 含密钥，不在页面中显示；请通过“模型供应商”页登录或登出。
+			</div>
 		</div>
 	);
 }

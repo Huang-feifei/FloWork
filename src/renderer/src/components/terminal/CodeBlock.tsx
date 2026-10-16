@@ -64,8 +64,8 @@ export function CodeBlock({ code, lang }: { code: string; lang?: string }) {
 			<pre>
 				<code>{nodes ?? code}</code>
 			</pre>
-			<div className="absolute top-1.5 right-2 flex items-center gap-2 text-[11px] text-muted">
-				{lang && <span className="group-hover:hidden">{lang}</span>}
+			<div className="absolute top-2 right-2.5 flex items-center gap-2 text-[11.5px] text-faint">
+				{lang && <span className="font-mono group-hover:hidden">{lang}</span>}
 				<button
 					type="button"
 					onClick={() =>
@@ -74,7 +74,7 @@ export function CodeBlock({ code, lang }: { code: string; lang?: string }) {
 							setTimeout(() => setCopied(false), 1500);
 						})
 					}
-					className="hidden rounded border border-border bg-panel px-1.5 hover:text-fg group-hover:block"
+					className="hidden rounded-full bg-surface-raised px-2.5 py-0.5 text-muted shadow-sm hover:text-fg group-hover:block"
 				>
 					{copied ? "已复制" : "复制"}
 				</button>

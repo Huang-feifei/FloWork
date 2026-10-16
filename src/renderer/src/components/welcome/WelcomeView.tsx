@@ -1,12 +1,14 @@
 /**
  * 首次启动 · 欢迎：左侧是环境自检与快捷键，右侧从已有的 pi 会话中发现项目。
  * 自检项都来自真实状态：Node 版本、Git Bash、已配置的模型、项目数量。
+ * 外观按 Apple 体系：正文用系统字 + 大字号，自检收进白卡片，按钮是 pill。
  */
 import { useEffect, useMemo, useState } from "react";
 import type { DiscoveredProject, ModelEntry, ShellInfo } from "@shared/protocol";
 import { api } from "../../api/client";
 import { useApp } from "../../store";
 import { Icon } from "../Icon";
+import { Button } from "../ui";
 
 const KEYS: Array<[string, string]> = [
 	["Ctrl+K", "命令面板"],
@@ -22,7 +24,7 @@ type CheckState = "ok" | "bad" | "note";
 function CheckRow({ state, children }: { state: CheckState; children: React.ReactNode }) {
 	return (
 		<div className="grid grid-cols-[3ch_1fr]">
-			<span className={state === "ok" ? "text-ok" : state === "bad" ? "text-warn" : "text-faint"}>
+			<span className={state === "ok" ? "text-accent-strong" : state === "bad" ? "text-warn" : "text-faint"}>
 				{state === "ok" ? "✓" : state === "bad" ? "!" : "·"}
 			</span>
 			<span className={state === "ok" ? "text-fg/85" : state === "bad" ? "text-warn" : "text-muted"}>{children}</span>
@@ -97,96 +99,86 @@ export function WelcomeView() {
 
 	return (
 		<div className="grid h-full grid-cols-[1fr_540px]">
-			<section className="flex min-h-0 flex-col justify-center overflow-y-auto px-24 py-10 font-mono">
-				<div className="flex items-baseline gap-3">
-					<span className="text-[40px] leading-none text-accent">✻</span>
-					<span className="text-[28px] font-semibold tracking-tight text-fg">flowork</span>
-					<span className="text-[12px] text-faint">
+			<section className="flex min-h-0 flex-col justify-center overflow-y-auto px-24 py-12">
+				<div className="flex items-baseline gap-4">
+					<span className="text-[52px] leading-none text-primary">✻</span>
+					<span className="text-[40px] font-semibold tracking-tight text-fg">flowork</span>
+					<span className="rounded-full bg-primary-soft px-3 py-1 text-[12.5px] font-medium text-primary">
 						v{info?.version ?? "…"} · {info?.shell === "web" ? "网页版" : "桌面版"}
 					</span>
 				</div>
-				<p className="mt-3 max-w-[560px] font-sans text-[14px] leading-relaxed text-muted">
+				<p className="mt-4 max-w-[600px] text-[17px] leading-relaxed text-muted">
 					以 pi coding agent 为内核的开发者工作台。把任务交给 pi，在这里审批命令、审查改动；多个项目可以在后台并行跑。
 				</p>
 
-				<div className="mt-9 text-[12.5px] leading-[1.9]">
-					<CheckRow state="note">$ flowork doctor</CheckRow>
-					<CheckRow state={nodeOk ? "ok" : "bad"}>
-						Node {node ?? "（未知）"}
-						{info?.shell === "electron" ? "（Electron 内置）" : ""}
-					</CheckRow>
-					<CheckRow state={shellOk ? "ok" : "bad"}>
-						{shell?.resolved ? (
-							<>
-								{shell.resolved === shell.gitBash && !shell.shellPathSetting ? "Git Bash" : "bash"} {shell.resolved}
-							</>
+				<div className="fw-card mt-9 max-w-[600px] p-5">
+					<div className="term text-[12.5px] leading-[1.9]">
+						<CheckRow state="note">$ flowork doctor</CheckRow>
+						<CheckRow state={nodeOk ? "ok" : "bad"}>
+							Node {node ?? "（未知）"}
+							{info?.shell === "electron" ? "（Electron 内置）" : ""}
+						</CheckRow>
+						<CheckRow state={shellOk ? "ok" : "bad"}>
+							{shell?.resolved ? (
+								<>
+									{shell.resolved === shell.gitBash && !shell.shellPathSetting ? "Git Bash" : "bash"} {shell.resolved}
+								</>
+							) : (
+								"未找到可用的 bash（Windows 上建议安装 Git for Windows）"
+							)}
+						</CheckRow>
+						{providerSummary.length > 0 ? (
+							<CheckRow state="ok">模型：{providerSummary.map(([provider, count]) => `${provider} ${count}`).join("、")}</CheckRow>
 						) : (
-							"未找到可用的 bash（Windows 上建议安装 Git for Windows）"
+							<CheckRow state="bad">还没有配置可用的模型</CheckRow>
 						)}
-					</CheckRow>
-					{providerSummary.length > 0 ? (
-						<CheckRow state="ok">模型：{providerSummary.map(([provider, count]) => `${provider} ${count}`).join("、")}</CheckRow>
-					) : (
-						<CheckRow state="bad">还没有配置可用的模型</CheckRow>
-					)}
-					<CheckRow state={projects.length > 0 ? "ok" : "bad"}>
-						{projects.length > 0 ? `${projects.length} 个项目` : "还没有项目"}
-					</CheckRow>
+						<CheckRow state={projects.length > 0 ? "ok" : "bad"}>
+							{projects.length > 0 ? `${projects.length} 个项目` : "还没有项目"}
+						</CheckRow>
+					</div>
 				</div>
 
-				<div className="mt-6 flex items-center gap-2">
-					<button
-						type="button"
-						onClick={() => void useApp.getState().importProjects()}
-						className="flex h-8 items-center gap-2 rounded bg-accent px-3 text-[12.5px] font-semibold text-accent-foreground hover:bg-accent-strong"
-					>
-						<Icon
-							name="folder-plus"
-							className="size-4"
-						/>
+				<div className="mt-8 flex flex-wrap items-center gap-3">
+					<Button variant="primary" size="lg" onClick={() => void useApp.getState().importProjects()}>
+						<Icon name="folder-plus" className="size-4" />
 						导入项目文件夹
-						<span className="font-normal opacity-60">Ctrl+O</span>
-					</button>
-					<button
-						type="button"
-						onClick={() => setView("settings", "providers")}
-						className="flex h-8 items-center rounded border border-border-strong px-3 text-[12.5px] text-fg hover:bg-panel-2"
-					>
+						<span className="font-normal opacity-70">Ctrl+O</span>
+					</Button>
+					<Button size="lg" onClick={() => setView("settings", "providers")}>
 						配置模型
-					</button>
+					</Button>
 					{projects.length > 0 && (
-						<button
-							type="button"
-							onClick={() => setView("chat")}
-							className="flex h-8 items-center rounded px-3 text-[12.5px] text-muted hover:text-fg"
-						>
-							进入工作台 →
-						</button>
+						<Button variant="link" onClick={() => setView("chat")}>
+							进入工作台
+							<Icon name="chevron-right" className="size-4" />
+						</Button>
 					)}
 				</div>
 
-				<div className="mt-11 grid max-w-[560px] grid-cols-[110px_1fr] gap-y-1.5 text-[12px]">
-					{KEYS.map(([k, v]) => (
-						<div
-							key={k}
-							className="contents"
-						>
-							<span className="text-fg/85">{k}</span>
-							<span className="font-sans text-muted">{v}</span>
-						</div>
-					))}
+				<div className="mt-11 max-w-[600px]">
+					<div className="mb-3 text-[12px] font-semibold text-faint">常用快捷键</div>
+					<div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+						{KEYS.map(([k, v]) => (
+							<div key={k} className="flex items-center gap-2.5 text-[12.5px]">
+								<span className="rounded-md bg-panel-2 px-2 py-1 font-mono text-[11px] text-muted">{k}</span>
+								<span className="truncate text-muted">{v}</span>
+							</div>
+						))}
+					</div>
 				</div>
 			</section>
 
-			<aside className="flex min-h-0 flex-col overflow-y-auto border-l border-border bg-sidebar px-8 py-9">
-				<div className="font-mono text-[10.5px] font-semibold tracking-[0.06em] text-faint">发现已有的项目</div>
-				<div className="mt-1.5 text-[12.5px] leading-relaxed text-muted">
+			<aside className="flex min-h-0 flex-col overflow-y-auto border-l border-border bg-surface-raised px-8 py-12">
+				<div className="text-[21px] font-semibold tracking-tight">发现已有的项目</div>
+				<div className="mt-2 text-[13.5px] leading-relaxed text-muted">
 					来自 pi 的会话记录。勾选后导入为项目，会话历史原样保留，不会复制文件。
 				</div>
 
-				<div className="mt-5 font-mono text-[12.5px]">
-					{found === null && <div className="px-2 text-muted">读取中…</div>}
-					{found?.length === 0 && <div className="px-2 leading-relaxed text-muted">没有发现尚未导入的项目。可以从左侧导入任何文件夹。</div>}
+				<div className="mt-5 space-y-0.5">
+					{found === null && <div className="px-3 py-2 text-[13px] text-muted">读取中…</div>}
+					{found?.length === 0 && (
+						<div className="px-3 py-2 text-[13px] leading-relaxed text-muted">没有发现尚未导入的项目。可以从左侧导入任何文件夹。</div>
+					)}
 					{found?.map((p) => {
 						const on = checked.has(p.path);
 						const imported = projects.some((x) => x.path.toLowerCase() === p.path.toLowerCase());
@@ -197,16 +189,22 @@ export function WelcomeView() {
 								key={p.path}
 								disabled={disabled}
 								onClick={() => toggle(p.path)}
-								className={`grid h-[46px] w-full grid-cols-[4ch_1fr_auto] items-center gap-x-1 rounded px-2 text-left ${
-									on || imported ? "bg-panel" : "hover:bg-panel"
-								} ${disabled ? "opacity-60" : ""}`}
+								className={`flex h-12 w-full items-center gap-3 rounded-[10px] px-3 text-left hover:bg-panel-2 ${
+									disabled ? "opacity-60" : ""
+								}`}
 							>
-								<span className={on || imported ? "text-accent" : "text-faint"}>{on || imported ? "[x]" : "[ ]"}</span>
-								<span className="min-w-0">
-									<span className="block truncate text-fg">{pathName(p.path)}</span>
-									<span className="block truncate text-[11px] text-faint">{p.path}</span>
+								<span
+									className={`flex size-4 shrink-0 items-center justify-center rounded-[5px] border ${
+										on || imported ? "border-primary bg-primary text-primary-foreground" : "border-border-strong"
+									}`}
+								>
+									{(on || imported) && <span className="text-[10px] leading-none">✓</span>}
 								</span>
-								<span className="text-[11.5px] text-muted tabular-nums">
+								<span className="min-w-0 flex-1">
+									<span className="block truncate text-[13.5px] text-fg">{pathName(p.path)}</span>
+									<span className="block truncate font-mono text-[11px] text-faint">{p.path}</span>
+								</span>
+								<span className="shrink-0 text-[11.5px] tabular-nums text-muted">
 									{imported ? "已导入" : !p.exists ? "文件夹不存在" : `${p.sessionCount} sessions`}
 								</span>
 							</button>
@@ -216,21 +214,12 @@ export function WelcomeView() {
 
 				{found && found.length > 0 && (
 					<div className="mt-5 flex items-center gap-3">
-						<button
-							type="button"
-							disabled={busy || pending.length === 0}
-							onClick={() => void importSelected()}
-							className="flex h-8 items-center rounded border border-accent/60 px-3 font-mono text-[12.5px] text-accent hover:bg-accent-soft disabled:opacity-40"
-						>
+						<Button disabled={busy || pending.length === 0} onClick={() => void importSelected()}>
 							{busy ? "导入中…" : `导入选中的 ${pending.length} 个项目`}
-						</button>
-						<button
-							type="button"
-							onClick={() => setView("chat")}
-							className="font-mono text-[12.5px] text-faint hover:text-fg"
-						>
+						</Button>
+						<Button variant="ghost" onClick={() => setView("chat")}>
 							跳过
-						</button>
+						</Button>
 					</div>
 				)}
 

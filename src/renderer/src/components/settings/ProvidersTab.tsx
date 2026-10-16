@@ -3,7 +3,7 @@ import type { ModelEntry, ProviderInfo, TestResult } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useAuth } from "../../authStore";
 import { useApp } from "../../store";
-import { Badge, Button, Input, Select } from "../ui";
+import { Badge, Button, Input, Segmented, Select } from "../ui";
 
 /** 国内可直接使用的内置供应商 */
 const DOMESTIC = new Set([
@@ -101,14 +101,14 @@ function ProviderRow({ provider, models }: { provider: ProviderInfo; models: Mod
 
 	return (
 		<div className="border-b border-border last:border-b-0">
-			<div className="flex items-center gap-3 px-3 py-2.5">
+			<div className="flex items-center gap-3 px-5 py-3.5">
 				<button type="button" onClick={() => setExpanded(!expanded)} className="min-w-0 flex-1 text-left">
 					<div className="flex items-center gap-2">
-						<span className="font-medium">{provider.name}</span>
-						<span className="font-mono text-[11px] text-muted">{provider.id}</span>
+						<span className="text-[13.5px] font-medium text-fg">{provider.name}</span>
+						<span className="font-mono text-[11.5px] text-muted">{provider.id}</span>
 						{provider.custom && <Badge tone="accent">自定义</Badge>}
 					</div>
-					<div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted">
+					<div className="mt-1 flex flex-wrap items-center gap-1.5 text-[12px] text-muted">
 						{provider.configured ? (
 							<Badge tone="ok">
 								已配置
@@ -141,9 +141,9 @@ function ProviderRow({ provider, models }: { provider: ProviderInfo; models: Mod
 				</div>
 			</div>
 			{expanded && (
-				<div className="space-y-2 bg-panel-2/60 px-3 pt-1 pb-3">
+				<div className="space-y-3 bg-panel-2/60 px-5 pt-2 pb-4">
 					{providerModels.length === 0 ? (
-						<div className="text-xs text-muted">配置凭据后可在此测试连接。</div>
+						<div className="text-[12.5px] text-muted">配置凭据后可在此测试连接。</div>
 					) : (
 						<div className="flex items-center gap-2">
 							<Select value={selectedModel} onChange={(e) => setTestModel(e.target.value)} className="max-w-md">
@@ -160,8 +160,8 @@ function ProviderRow({ provider, models }: { provider: ProviderInfo; models: Mod
 					)}
 					{result && (
 						<div
-							className={`rounded border px-2 py-1.5 text-xs ${
-								result.ok ? "border-ok/40 bg-ok/10 text-ok" : "border-err/40 bg-err/10 text-err"
+							className={`rounded-xl px-3.5 py-2.5 text-[12.5px] ${
+								result.ok ? "bg-ok-soft text-accent-strong" : "bg-err-soft text-err"
 							}`}
 						>
 							{result.ok ? `连接成功，耗时 ${result.latencyMs} ms，回复：${result.text || "（空）"}` : `失败：${result.error}`}
@@ -230,41 +230,39 @@ export function ProvidersTab() {
 
 	return (
 		<div>
-			<div className="mb-3 flex items-center gap-2">
-				{(
-					[
-						["common", "常用"],
-						["all", "全部"],
-						["configured", "已配置"],
-						["domestic", "国内"],
-					] as const
-				).map(([id, label]) => (
-					<Button key={id} size="sm" variant={filter === id ? "primary" : "default"} onClick={() => setFilter(id)}>
-						{label} {counts[id]}
-					</Button>
-				))}
+			<div className="mb-4 flex items-center gap-3">
+				<Segmented
+					items={[
+						{ id: "common", label: `常用 ${counts.common}` },
+						{ id: "all", label: `全部 ${counts.all}` },
+						{ id: "configured", label: `已配置 ${counts.configured}` },
+						{ id: "domestic", label: `国内 ${counts.domestic}` },
+					]}
+					active={filter}
+					onChange={(id) => setFilter(id as Filter)}
+				/>
 				<div className="flex-1" />
 				<Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索供应商" className="max-w-56" />
 			</div>
 
 			{filter === "common" && counts.all > counts.common && (
-				<div className="mb-3 text-[11px] text-muted">已隐藏 {counts.all - counts.common} 个不常用供应商，点「全部」查看。</div>
+				<div className="mb-4 text-[12px] text-muted">已隐藏 {counts.all - counts.common} 个不常用供应商，点「全部」查看。</div>
 			)}
 
-			<div className="mb-3 rounded-md border border-border bg-panel px-3 py-2 text-[11px] leading-5 text-muted">
+			<div className="mb-4 rounded-xl bg-panel-2 px-4 py-3 text-[12px] leading-relaxed text-muted">
 				凭据优先级：auth.json（这里登录保存的）&gt; models.json 中的 apiKey &gt; 环境变量。API Key 以明文保存在
 				配置目录的 auth.json 中（桌面版计划改为系统加密存储）。
 			</div>
 
-			{error && <div className="mb-3 rounded border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">{error}</div>}
+			{error && <div className="mb-4 rounded-xl bg-err-soft px-3.5 py-2.5 text-[13px] text-err">{error}</div>}
 			{loading && providers.length === 0 ? (
 				<div className="py-10 text-center text-muted">正在读取供应商…</div>
 			) : (
-				<div className="overflow-hidden rounded-md border border-border bg-panel">
+				<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
 					{visible.map((p) => (
 						<ProviderRow key={p.id} provider={p} models={models} />
 					))}
-					{visible.length === 0 && <div className="px-3 py-6 text-center text-sm text-muted">没有匹配的供应商</div>}
+					{visible.length === 0 && <div className="px-5 py-8 text-center text-[13px] text-muted">没有匹配的供应商</div>}
 				</div>
 			)}
 		</div>

@@ -1,6 +1,8 @@
 /**
- * 自绘窗口标题栏（桌面版 titleBarStyle: hidden）：
- * 品牌、应用菜单、命令搜索、布局开关，Windows / Linux 上还有自绘的窗口按钮。整条栏为拖拽区。
+ * 自绘窗口标题栏（桌面版 titleBarStyle: hidden），外观按 Apple 体系重设：
+ * 左侧交通灯 + 应用菜单按钮（文件 / 编辑 / 视图 / 会话 / 终端 / 帮助 六个菜单都收在这个按钮里，
+ * 不再在窗口里排成一排 Windows 式菜单条），中间是窗口标题（当前项目 / 会话），
+ * 右侧是搜索入口与布局开关。整条栏为拖拽区。
  */
 import { useEffect, useState } from "react";
 import { displayUserText } from "@shared/skill-text";
@@ -12,34 +14,21 @@ import { Menu, type MenuItem } from "./sidebar/Menu";
 const MENUS = ["文件", "编辑", "视图", "会话", "终端", "帮助"] as const;
 type MenuName = (typeof MENUS)[number];
 
+function TrafficLight({ tone, title, onClick }: { tone: string; title: string; onClick: () => void }) {
+	return <button type="button" title={title} onClick={onClick} className={`size-3 rounded-full ${tone}`} />;
+}
+
 function LayoutToggle({ icon, label, on, onClick }: { icon: IconName; label: string; on: boolean; onClick: () => void }) {
 	return (
 		<button
 			type="button"
 			title={label}
 			onClick={onClick}
-			className={`flex size-6 items-center justify-center rounded hover:bg-panel-2 ${on ? "text-fg" : "text-faint hover:text-fg"}`}
+			className={`flex size-7 items-center justify-center rounded-full hover:bg-panel-2 ${
+				on ? "text-fg" : "text-faint hover:text-fg"
+			}`}
 		>
-			<Icon
-				name={icon}
-				className="size-3.5"
-			/>
-		</button>
-	);
-}
-
-function WindowButton({ icon, title, close, onClick }: { icon: IconName; title: string; close?: boolean; onClick: () => void }) {
-	return (
-		<button
-			type="button"
-			title={title}
-			onClick={onClick}
-			className={`flex w-[46px] items-center justify-center text-muted hover:text-fg ${close ? "hover:bg-win-close hover:text-white" : "hover:bg-panel-2"}`}
-		>
-			<Icon
-				name={icon}
-				className={icon === "square" ? "size-3" : "size-4"}
-			/>
+			<Icon name={icon} className="size-4" />
 		</button>
 	);
 }
@@ -56,14 +45,14 @@ function Location() {
 		return first?.role === "user" ? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 60) : "";
 	});
 
-	if (view === "settings") return <span className="truncate text-muted">设置</span>;
-	if (view === "review") return <span className="truncate text-muted">审查本会话的修改</span>;
-	if (!projectTitle) return null;
+	if (view === "settings") return <span className="truncate text-[13px] font-medium text-fg">设置</span>;
+	if (view === "review") return <span className="truncate text-[13px] font-medium text-fg">审查本会话的修改</span>;
+	if (!projectTitle) return <span className="truncate text-[13px] font-medium text-fg">FloWork</span>;
 	return (
-		<span className="flex min-w-0 items-center gap-1.5 text-muted">
-			<span className="shrink-0 text-fg/80">{projectTitle}</span>
+		<span className="flex min-w-0 items-center gap-1.5">
+			<span className="shrink-0 text-[13px] font-medium text-fg">{projectTitle}</span>
 			<span className="text-faint">/</span>
-			<span className="truncate">{sessionTitle || "新会话"}</span>
+			<span className="truncate text-[13px] text-muted">{sessionTitle || "新会话"}</span>
 		</span>
 	);
 }
@@ -74,7 +63,7 @@ export function TitleBar() {
 	const railVisible = useApp((s) => s.railVisible);
 	const terminalPanel = useApp((s) => s.terminalPanel);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
-	const [open, setOpen] = useState<{ name: MenuName; x: number; y: number } | null>(null);
+	const [open, setOpen] = useState<{ name: MenuName | "root"; x: number; y: number } | null>(null);
 
 	const menuItems = (name: MenuName): MenuItem[] => {
 		const s = useApp.getState();
@@ -192,50 +181,56 @@ export function TitleBar() {
 	}, []);
 
 	return (
-		<header className="app-drag relative flex h-9 shrink-0 items-center border-b border-border bg-chrome pl-3 font-mono text-[12px] select-none">
+		<header className="app-drag relative flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 select-none">
+			{isDesktop && !isMac && (
+				<div className="flex items-center gap-2">
+					<TrafficLight tone="bg-traffic-close" title="关闭" onClick={() => void window.floworkWindow?.close()} />
+					<TrafficLight tone="bg-traffic-min" title="最小化" onClick={() => void window.floworkWindow?.minimize()} />
+					<TrafficLight tone="bg-traffic-max" title="最大化" onClick={() => void window.floworkWindow?.toggleMaximize()} />
+				</div>
+			)}
+
 			<button
 				type="button"
-				onClick={() => useApp.getState().setView(useApp.getState().projects.projects.length === 0 ? "welcome" : "chat")}
-				title="工作台"
-				className="flex items-center gap-1.5 pr-4"
+				title={`应用菜单：${MENUS.join(" / ")}`}
+				onClick={(e) => {
+					const rect = e.currentTarget.getBoundingClientRect();
+					setOpen(open?.name === "root" ? null : { name: "root", x: rect.left, y: rect.bottom });
+				}}
+				className={`flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-panel-2 hover:text-fg ${
+					open?.name === "root" ? "bg-panel-2 text-fg" : "text-muted"
+				}`}
 			>
-				<span className="text-[15px] leading-none text-accent">✻</span>
-				<span className="font-semibold text-fg">flowork</span>
+				<Icon name="menu" className="size-4" />
 			</button>
 
-			<nav className="flex items-center">
-				{MENUS.map((m) => (
-					<button
-						type="button"
-						key={m}
-						onClick={(e) => {
-							const rect = e.currentTarget.getBoundingClientRect();
-							setOpen(open?.name === m ? null : { name: m, x: rect.left, y: rect.bottom });
-						}}
-						className={`rounded px-2 py-0.5 font-sans text-[12.5px] hover:bg-panel-2 hover:text-fg ${open?.name === m ? "bg-panel-2 text-fg" : "text-muted"}`}
-					>
-						{m}
-					</button>
-				))}
-			</nav>
-
-			<div className="flex flex-1 justify-center px-6">
+			{/* 窗口标题：真正居中 */}
+			<div className="pointer-events-none absolute inset-x-0 flex justify-center">
 				<button
 					type="button"
-					onClick={() => useApp.getState().setPalette(true)}
-					title="搜索文件、会话、命令"
-					className="flex h-6 w-[min(460px,40vw)] items-center gap-2 rounded border border-border bg-panel px-2 text-muted hover:border-border-strong"
+					title="工作台"
+					onClick={() => useApp.getState().setView(useApp.getState().projects.projects.length === 0 ? "welcome" : "chat")}
+					className="pointer-events-auto flex max-w-[420px] min-w-0 items-center gap-1.5"
 				>
-					<Icon
-						name="search"
-						className="size-3.5 text-faint"
-					/>
-					<span className="flex-1 truncate text-left">FloWork — 搜索文件、会话、命令</span>
-					<span className="text-[11px] text-faint">{isMac ? "⌘K" : "Ctrl+K"}</span>
+					<span className="shrink-0 text-[13px] leading-none text-primary">✻</span>
+					<Location />
 				</button>
 			</div>
 
-			<div className="flex items-center gap-0.5 pr-2">
+			<div className="flex flex-1" />
+
+			<button
+				type="button"
+				onClick={() => useApp.getState().setPalette(true)}
+				title="搜索文件、会话、命令"
+				className="flex h-8 shrink-0 items-center gap-2 rounded-full bg-panel-2 px-3.5 text-muted hover:text-fg"
+			>
+				<Icon name="search" className="size-3.5 text-faint" />
+				<span className="text-[13px]">搜索</span>
+				<span className="text-[11.5px] text-faint">{isMac ? "⌘K" : "Ctrl+K"}</span>
+			</button>
+
+			<div className="flex items-center gap-0.5">
 				<LayoutToggle
 					icon="panel-left"
 					label={`项目栏（${isMac ? "⌘B" : "Ctrl+B"}）`}
@@ -262,34 +257,16 @@ export function TitleBar() {
 				/>
 			</div>
 
-			{isDesktop && !isMac && (
-				<div className="flex h-full items-stretch">
-					<WindowButton
-						icon="minus"
-						title="最小化"
-						onClick={() => void window.floworkWindow?.minimize()}
+			{open &&
+				(open.name === "root" ? (
+					<Menu
+						items={MENUS.map((m) => ({ label: m, onClick: () => setOpen({ name: m, x: open.x, y: open.y }) }))}
+						position={{ x: open.x, y: open.y }}
+						onClose={() => setOpen(null)}
 					/>
-					<WindowButton
-						icon="square"
-						title="最大化"
-						onClick={() => void window.floworkWindow?.toggleMaximize()}
-					/>
-					<WindowButton
-						icon="x"
-						title="关闭"
-						close
-						onClick={() => void window.floworkWindow?.close()}
-					/>
-				</div>
-			)}
-
-			{open && (
-				<Menu
-					items={menuItems(open.name)}
-					position={{ x: open.x, y: open.y }}
-					onClose={() => setOpen(null)}
-				/>
-			)}
+				) : (
+					<Menu items={menuItems(open.name)} position={{ x: open.x, y: open.y }} onClose={() => setOpen(null)} />
+				))}
 		</header>
 	);
 }

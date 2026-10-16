@@ -73,7 +73,7 @@ export function ConfirmDialog() {
 				</>
 			}
 		>
-			<p className="text-sm leading-relaxed whitespace-pre-wrap">{request.message}</p>
+			<p className="text-[14px] leading-relaxed whitespace-pre-wrap text-fg">{request.message}</p>
 		</Modal>
 	);
 }

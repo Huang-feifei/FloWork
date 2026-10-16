@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { type ModelEntry, type ShellInfo, THINKING_LEVELS } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
-import { Button, Field, Input, Select, TextArea } from "../ui";
+import { Button, Field, Input, Select, TextArea, Toggle } from "../ui";
 import { isMtimeConflict, parseObject, useConfigFile } from "./useConfigFile";
 
 const BUILTIN_TOOLS = [
@@ -38,7 +38,7 @@ function ShellStatus({ shell, onUse }: { shell: ShellInfo; onUse: (path: string)
 	const bad = shell.resolved === null || shell.isWsl;
 	return (
 		<div
-			className={`rounded-lg border px-3 py-2 text-[12px] leading-5 ${bad ? "border-err/40 bg-err/5" : "border-border bg-panel"}`}
+			className={`rounded-xl px-3.5 py-2.5 text-[12px] leading-5 ${bad ? "bg-err-soft text-err" : "bg-panel-2 text-fg"}`}
 		>
 			<div>
 				bash 工具当前使用：
@@ -100,10 +100,10 @@ export function PreferencesTab() {
 			.catch(() => undefined);
 	}, [configVersion]);
 
-	if (error) return <div className="rounded border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">{error}</div>;
+	if (error) return <div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[13px] text-err">{error}</div>;
 	if (file && !base)
-		return <div className="rounded border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">settings.json 解析失败，请在“配置文件”页修复。</div>;
-	if (!draft) return <div className="py-10 text-center text-muted">读取中…</div>;
+		return <div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[13px] text-err">settings.json 解析失败，请在“配置文件”页修复。</div>;
+	if (!draft) return <div className="py-10 text-center text-[13.5px] text-muted">读取中…</div>;
 
 	const set = (key: string, value: unknown) =>
 		setDraft((prev) => {
@@ -142,8 +142,8 @@ export function PreferencesTab() {
 
 	return (
 		<div className="space-y-6">
-			<section className="space-y-3">
-				<h3 className="text-sm font-semibold">模型</h3>
+			<section className="fw-card space-y-4 p-6">
+				<h3 className="text-[15px] font-semibold tracking-tight">模型</h3>
 				<div className="grid grid-cols-2 gap-4">
 					<Field label="新会话默认模型" hint="只列出凭据可用的模型；留空由 pi 自动选择">
 						<Select
@@ -182,40 +182,37 @@ export function PreferencesTab() {
 				</div>
 			</section>
 
-			<section className="space-y-3">
-				<h3 className="text-sm font-semibold">工具</h3>
+			<section className="fw-card space-y-4 p-6">
+				<h3 className="text-[15px] font-semibold tracking-tight">工具</h3>
 				{toolsAreModifiers ? (
-					<div className="text-xs text-warn">
+					<div className="text-[12.5px] leading-relaxed text-warn">
 						defaultTools 使用了 +/- 增减语法（{tools?.join(", ")}），请在“配置文件”页编辑。
 					</div>
 				) : (
 					<>
-						<div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+						<div className="grid grid-cols-2 gap-x-6 gap-y-3">
 							{BUILTIN_TOOLS.map((t) => (
-								<label key={t.id} className="flex items-center gap-2 text-sm">
-									<input
-										type="checkbox"
-										checked={effectiveTools.includes(t.id)}
-										onChange={(e) => {
-											const next = e.target.checked
-												? [...effectiveTools, t.id]
-												: effectiveTools.filter((x) => x !== t.id);
-											const same = next.length === DEFAULT_TOOLS.length && DEFAULT_TOOLS.every((x) => next.includes(x));
-											set("defaultTools", same ? undefined : next);
+								<div key={t.id} className="flex items-center gap-2.5 text-[13.5px]">
+									<Toggle
+										on={effectiveTools.includes(t.id)}
+										onChange={(next) => {
+											const list = next ? [...effectiveTools, t.id] : effectiveTools.filter((x) => x !== t.id);
+											const same = list.length === DEFAULT_TOOLS.length && DEFAULT_TOOLS.every((x) => list.includes(x));
+											set("defaultTools", same ? undefined : list);
 										}}
 									/>
 									<span className="font-mono">{t.id}</span>
 									<span className="text-xs text-muted">{t.desc}</span>
-								</label>
+								</div>
 							))}
 						</div>
-						<div className="text-[11px] text-muted">默认启用 read / bash / edit / write。修改对新会话生效。</div>
+						<div className="text-[12px] text-muted">默认启用 read / bash / edit / write。修改对新会话生效。</div>
 					</>
 				)}
 			</section>
 
-			<section className="space-y-3">
-				<h3 className="text-sm font-semibold">Shell 与网络</h3>
+			<section className="fw-card space-y-4 p-6">
+				<h3 className="text-[15px] font-semibold tracking-tight">Shell 与网络</h3>
 				{shell && <ShellStatus shell={shell} onUse={(path) => set("shellPath", path)} />}
 				<div className="grid grid-cols-2 gap-4">
 					<Field label="Bash 路径（shellPath）" hint="留空时自动使用识别到的 Git Bash；Windows 上请勿使用 WSL 的 bash.exe">
@@ -238,8 +235,8 @@ export function PreferencesTab() {
 				</div>
 			</section>
 
-			<section className="space-y-3">
-				<h3 className="text-sm font-semibold">会话行为</h3>
+			<section className="fw-card space-y-4 p-6">
+				<h3 className="text-[15px] font-semibold tracking-tight">会话行为</h3>
 				<div className="grid grid-cols-2 gap-4">
 					<Field label="运行中插话（steeringMode）">
 						<Select value={str(draft.steeringMode)} onChange={(e) => set("steeringMode", e.target.value)}>
@@ -256,36 +253,33 @@ export function PreferencesTab() {
 						</Select>
 					</Field>
 				</div>
-				<div className="flex flex-wrap gap-6 text-sm">
-					<label className="flex items-center gap-2">
-						<input
-							type="checkbox"
-							checked={nested(draft, "compaction").enabled !== false}
-							onChange={(e) => setNested("compaction", "enabled", e.target.checked ? undefined : false)}
+				<div className="flex flex-wrap gap-6 text-[13.5px]">
+					<div className="flex items-center gap-2.5">
+						<Toggle
+							on={nested(draft, "compaction").enabled !== false}
+							onChange={(next) => setNested("compaction", "enabled", next ? undefined : false)}
 						/>
 						自动压缩上下文
-					</label>
-					<label className="flex items-center gap-2">
-						<input
-							type="checkbox"
-							checked={nested(draft, "retry").enabled !== false}
-							onChange={(e) => setNested("retry", "enabled", e.target.checked ? undefined : false)}
+					</div>
+					<div className="flex items-center gap-2.5">
+						<Toggle
+							on={nested(draft, "retry").enabled !== false}
+							onChange={(next) => setNested("retry", "enabled", next ? undefined : false)}
 						/>
 						请求失败自动重试
-					</label>
-					<label className="flex items-center gap-2">
-						<input
-							type="checkbox"
-							checked={draft.enableSkillCommands !== false}
-							onChange={(e) => set("enableSkillCommands", e.target.checked ? undefined : false)}
+					</div>
+					<div className="flex items-center gap-2.5">
+						<Toggle
+							on={draft.enableSkillCommands !== false}
+							onChange={(next) => set("enableSkillCommands", next ? undefined : false)}
 						/>
 						技能注册为 /skill:名称 命令
-					</label>
+					</div>
 				</div>
 			</section>
 
-			<section className="space-y-3">
-				<h3 className="text-sm font-semibold">资源路径</h3>
+			<section className="fw-card space-y-4 p-6">
+				<h3 className="text-[15px] font-semibold tracking-tight">资源路径</h3>
 				<Field
 					label="额外的 Skills 目录（每行一个）"
 					hint="配置目录下的 skills/、~/.agents/skills/ 与项目内 .agents/skills/ 会自动发现，这里只需填写额外位置"
@@ -302,7 +296,7 @@ export function PreferencesTab() {
 			</section>
 
 			{conflict && (
-				<div className="rounded border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">
+				<div className="rounded-xl bg-warn-soft px-3.5 py-3 text-[12.5px] text-warn">
 					<div>settings.json 在你打开之后被其他程序改过；直接保存会被拒绝，以免覆盖对方的改动。你改的内容还在这里。</div>
 					<div className="mt-1.5 flex flex-wrap gap-2">
 						<Button size="sm" disabled={saving} onClick={() => void reload()}>
@@ -314,8 +308,8 @@ export function PreferencesTab() {
 					</div>
 				</div>
 			)}
-			<div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-bg/95 py-3">
-				{dirty && <span className="text-xs text-warn">有未保存的修改</span>}
+			<div className="sticky bottom-0 flex items-center justify-end gap-3 border-t border-border bg-surface py-3">
+				{dirty && <span className="rounded-full bg-warn-soft px-2.5 py-0.5 text-[11.5px] font-medium text-warn">有未保存的修改</span>}
 				<Button disabled={!dirty} onClick={() => base && setDraft(structuredClone(base))}>
 					撤销修改
 				</Button>

@@ -172,7 +172,7 @@ function validateModels(models: ModelDraft[]): string | undefined {
 }
 
 const MODEL_INPUT =
-	"rounded border border-border bg-bg px-1.5 py-1 font-mono text-[11px] outline-none placeholder:text-muted/50 focus:border-accent";
+	"rounded-[8px] border border-border bg-surface-raised px-2 py-1 font-mono text-[11.5px] text-fg outline-none placeholder:text-muted/60 focus:border-primary/40";
 
 /** 表格里一行一个模型；展开后编辑价格与其余字段 */
 function ModelRow({
@@ -187,10 +187,10 @@ function ModelRow({
 	onRemove: (index: number) => void;
 }) {
 	const chip = (on: boolean) =>
-		`shrink-0 rounded px-1.5 py-1 text-[11px] ${on ? "bg-accent text-accent-foreground" : "bg-panel-2 text-muted hover:text-fg"}`;
+		`shrink-0 rounded-full px-2.5 py-1 text-[11.5px] font-medium ${on ? "bg-primary text-primary-foreground" : "bg-panel-2 text-muted hover:text-fg"}`;
 	return (
-		<div className="rounded border border-border bg-bg/60">
-			<div className="flex items-center gap-1.5 p-1.5">
+		<div className="rounded-xl border border-border bg-panel-2/50">
+			<div className="flex items-center gap-2 p-2">
 				<input
 					value={model.id}
 					onChange={(e) => onPatch(index, { id: e.target.value })}
@@ -238,7 +238,7 @@ function ModelRow({
 					type="button"
 					onClick={() => onPatch(index, { open: !model.open })}
 					title="价格与其余字段"
-					className="shrink-0 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
+					className="shrink-0 rounded-full px-2.5 py-1 text-[11.5px] text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					{model.open ? "▾ 收起" : "▸ 更多"}
 				</button>
@@ -246,13 +246,13 @@ function ModelRow({
 					type="button"
 					onClick={() => onRemove(index)}
 					title="移除这个模型"
-					className="shrink-0 rounded px-1.5 py-1 text-[11px] text-muted hover:bg-panel-2 hover:text-err"
+					className="shrink-0 rounded-full px-2.5 py-1 text-[11.5px] text-muted hover:bg-panel-2 hover:text-err"
 				>
 					✕
 				</button>
 			</div>
 			{model.open && (
-				<div className="space-y-2 border-t border-border px-2 py-2">
+				<div className="space-y-3 border-t border-border px-3 py-3">
 					<div>
 						<div className="mb-1 text-[11px] text-muted">价格（美元 / 百万 token；填任意一项即视为自定义价格，未填的按 0 写入）</div>
 						<div className="grid grid-cols-4 gap-1.5">
@@ -285,7 +285,7 @@ function ModelRow({
 								onClick={() =>
 									onPatch(index, { thinking: { ...model.thinking, xhigh: "xhigh", max: "max" } })
 								}
-								className="shrink-0 rounded bg-panel-2 px-1.5 py-0.5 text-[11px] text-muted hover:text-fg"
+								className="shrink-0 rounded-full bg-panel-2 px-2 py-0.5 text-[11.5px] text-muted hover:text-fg"
 							>
 								极高/最大填同名值
 							</button>
@@ -312,7 +312,7 @@ function ModelRow({
 							onChange={(e) => onPatch(index, { advanced: e.target.value })}
 							rows={4}
 							placeholder={'{\n  "thinkingLevelMap": { "off": null, "high": "high" }\n}'}
-							className="w-full rounded border border-border bg-bg px-2 py-1 font-mono text-[11px] outline-none focus:border-accent"
+							className="w-full rounded-[10px] border border-border bg-surface-raised px-2.5 py-2 font-mono text-[11.5px] outline-none focus:border-primary/40"
 						/>
 					</div>
 				</div>
@@ -384,7 +384,7 @@ function Editor({
 	const visibleFetched = (fetched ?? []).filter((id) => id.toLowerCase().includes(fetchFilter.toLowerCase()));
 
 	return (
-		<div className="space-y-3 rounded-md border border-accent/40 bg-panel p-4">
+		<div className="fw-card space-y-4 p-6">
 			<div className="grid grid-cols-2 gap-3">
 				<Field
 					label="供应商 ID"
@@ -450,7 +450,7 @@ function Editor({
 				</div>
 
 				{d.models.length === 0 && (
-					<div className="rounded border border-border bg-bg px-3 py-4 text-center text-xs text-muted">
+					<div className="rounded-xl bg-panel-2 px-4 py-6 text-center text-[12.5px] text-muted">
 						还没有模型。用「从接口拉取」调用 GET {"{Base URL}"}/models，或点「+ 空白模型」手动添加。
 					</div>
 				)}
@@ -466,7 +466,7 @@ function Editor({
 				))}
 
 				{fetched && (
-					<div className="rounded-md border border-border bg-bg p-2">
+					<div className="rounded-xl border border-border bg-panel-2 p-3">
 						<div className="mb-2 flex items-center gap-2">
 							<Input value={fetchFilter} onChange={(e) => setFetchFilter(e.target.value)} placeholder={`筛选（共 ${fetched.length} 个）`} />
 							<Button size="sm" onClick={() => addModels(visibleFetched)}>
@@ -479,8 +479,8 @@ function Editor({
 									type="button"
 									key={id}
 									onClick={() => addModels([id])}
-									className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${
-										selected.includes(id) ? "bg-accent text-accent-foreground" : "bg-panel-2 text-muted hover:text-fg"
+									className={`rounded-full px-2.5 py-1 font-mono text-[11.5px] ${
+										selected.includes(id) ? "bg-primary text-primary-foreground" : "bg-panel-2 text-muted hover:text-fg"
 									}`}
 								>
 									{id}
@@ -492,7 +492,7 @@ function Editor({
 			</div>
 
 			{conflict && (
-				<div className="rounded border border-warn/40 bg-warn-soft px-2 py-1.5 text-xs text-warn">
+				<div className="rounded-xl bg-warn-soft px-3.5 py-3 text-[12.5px] text-warn">
 					<div>models.json 在你打开之后被其他程序改过；直接保存会被拒绝，以免覆盖对方的改动。你填的内容还在这里。</div>
 					<div className="mt-1.5 flex flex-wrap gap-2">
 						<Button size="sm" disabled={busy} onClick={() => void onReload()}>
@@ -505,7 +505,7 @@ function Editor({
 				</div>
 			)}
 			{(error || invalid) && (
-				<div className="rounded border border-err/40 bg-err/10 px-2 py-1 text-xs text-err">{error ?? invalid}</div>
+				<div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[12.5px] text-err">{error ?? invalid}</div>
 			)}
 			<div className="flex justify-end gap-2">
 				<Button onClick={onCancel}>取消</Button>
@@ -596,13 +596,13 @@ export function CustomProvidersTab() {
 	};
 
 	if (error || parseError) {
-		return <div className="rounded border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">{error ?? `models.json 解析失败：${parseError}`}</div>;
+		return <div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[13px] text-err">{error ?? `models.json 解析失败：${parseError}`}</div>;
 	}
 
 	return (
 		<div className="space-y-4">
 			{conflict && !draft && (
-				<div className="flex items-center gap-2 rounded border border-warn/40 bg-warn-soft px-3 py-2 text-xs text-warn">
+				<div className="flex items-center gap-3 rounded-xl bg-warn-soft px-3.5 py-3 text-[12.5px] text-warn">
 					<span className="flex-1">models.json 已被其他程序改过，下面显示的列表是打开页面时的旧内容；直接保存会被拒绝，以免覆盖对方的改动。</span>
 					<Button size="sm" onClick={() => void reload()}>
 						重新加载磁盘版本
@@ -610,7 +610,7 @@ export function CustomProvidersTab() {
 				</div>
 			)}
 			<div>
-				<div className="mb-2 text-xs text-muted">新建：</div>
+				<div className="mb-2 text-[12.5px] text-muted">新建：</div>
 				<div className="flex flex-wrap gap-1.5">
 					{PRESETS.map((p) => (
 						<Button
@@ -640,21 +640,21 @@ export function CustomProvidersTab() {
 				/>
 			)}
 
-			<div className="overflow-hidden rounded-md border border-border bg-panel">
+			<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
 				{Object.keys(providers).length === 0 && (
-					<div className="px-3 py-6 text-center text-sm text-muted">还没有自定义供应商。{file && !file.exists ? "（models.json 尚未创建）" : ""}</div>
+					<div className="px-5 py-8 text-center text-[13px] text-muted">还没有自定义供应商。{file && !file.exists ? "（models.json 尚未创建）" : ""}</div>
 				)}
 				{Object.entries(providers).map(([key, c]) => (
-					<div key={key} className="flex items-center gap-3 border-b border-border px-3 py-2.5 last:border-b-0">
+					<div key={key} className="flex items-center gap-3 border-b border-border px-5 py-3.5 last:border-b-0">
 						<div className="min-w-0 flex-1">
 							<div className="flex items-center gap-2">
-								<span className="font-medium">{key}</span>
+								<span className="text-[13.5px] font-medium text-fg">{key}</span>
 								{builtinIds.has(key) && <Badge tone="warn">覆盖内置</Badge>}
 								<Badge>{String(c.api ?? "（继承）")}</Badge>
 								{c.apiKey ? <Badge tone="ok">已填 Key</Badge> : <Badge>无 Key</Badge>}
 							</div>
-							<div className="truncate font-mono text-[11px] text-muted">{String(c.baseUrl ?? "")}</div>
-							<div className="truncate text-[11px] text-muted">模型：{modelIds(c).join("、") || "（无）"}</div>
+							<div className="truncate font-mono text-[11.5px] text-muted">{String(c.baseUrl ?? "")}</div>
+							<div className="truncate text-[11.5px] text-muted">模型：{modelIds(c).join("、") || "（无）"}</div>
 						</div>
 						<Button size="sm" onClick={() => edit(key)}>
 							编辑
@@ -665,7 +665,7 @@ export function CustomProvidersTab() {
 					</div>
 				))}
 			</div>
-			<div className="text-[11px] text-muted">
+			<div className="text-[12px] leading-5 text-faint">
 				保存后可到“模型供应商”页展开该供应商测试连接。更复杂的配置（headers、compat、modelOverrides、思考参数等）请在“配置文件”页直接编辑。
 			</div>
 		</div>

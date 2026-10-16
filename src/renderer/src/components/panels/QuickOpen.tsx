@@ -54,7 +54,7 @@ export function QuickOpen() {
 		<div className="fixed inset-0 z-50 flex justify-center bg-scrim pt-[12vh]" onMouseDown={() => setOpen(false)}>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: 阻止冒泡到遮罩 */}
 			<div
-				className="fw-float flex h-fit max-h-[60vh] w-[640px] max-w-[90vw] flex-col overflow-hidden rounded-xl border border-border-strong"
+				className="fw-float flex h-fit max-h-[60vh] w-[640px] max-w-[90vw] flex-col overflow-hidden rounded-[22px]"
 				onMouseDown={(e) => e.stopPropagation()}
 			>
 				<input
@@ -77,7 +77,7 @@ export function QuickOpen() {
 						}
 					}}
 					placeholder="搜索项目文件（模糊匹配，例如 sesshost → session-host.ts）"
-					className="border-b border-border px-4 py-3 text-[14px] outline-none placeholder:text-muted/70"
+					className="h-12 border-b border-border px-4 text-[15px] outline-none placeholder:text-muted/70"
 				/>
 				<div className="term min-h-0 flex-1 overflow-y-auto py-1 text-[12.5px] leading-6">
 					{!query.trim() && <div className="px-4 py-2 text-muted">输入文件名的一部分</div>}
@@ -88,13 +88,13 @@ export function QuickOpen() {
 							key={m.path}
 							onMouseEnter={() => setActive(i)}
 							onClick={() => choose(m.path, false)}
-							className={`flex w-full items-center px-4 text-left ${i === active ? "bg-accent-soft" : ""}`}
+							className={`flex h-9 w-full items-center rounded-[10px] px-4 text-left ${i === active ? "bg-primary-soft" : ""}`}
 						>
 							<SearchResultLabel path={m.path} query={query} />
 						</button>
 					))}
 				</div>
-				<div className="flex gap-4 border-t border-border px-4 py-1.5 text-[11px] text-muted">
+				<div className="flex h-8 items-center gap-4 border-t border-border px-4 text-[11.5px] text-muted">
 					<span>↑↓ 选择</span>
 					<span>Enter 打开</span>
 					<span>Alt+Enter 引用到输入框</span>

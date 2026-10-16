@@ -71,8 +71,8 @@ export function SlashMenu({ menu, onPick }: { menu: SlashMenuState; onPick: (c: 
 	useBrowserOcclusion(menu.open);
 	if (!menu.open) return null;
 	return (
-		<div className="fw-float absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-lg border border-border-strong">
-			<div className="border-b border-border px-3 py-1 text-[11px] text-muted">斜杠命令 · ↑↓ 选择 · Tab / Enter 补全 · Esc 关闭</div>
+		<div className="fw-float absolute right-0 bottom-full left-0 z-30 mb-2 overflow-hidden rounded-2xl">
+			<div className="border-b border-border px-4 py-2 text-[11.5px] text-muted">斜杠命令 · ↑↓ 选择 · Tab / Enter 补全 · Esc 关闭</div>
 			<div className="term max-h-72 overflow-y-auto py-1 text-[12.5px]">
 				{menu.matches.map((c, i) => (
 					<button
@@ -83,11 +83,11 @@ export function SlashMenu({ menu, onPick }: { menu: SlashMenuState; onPick: (c: 
 							e.preventDefault();
 							onPick(c);
 						}}
-						className={`flex w-full items-baseline gap-3 px-3 py-1 text-left ${i === menu.active ? "bg-accent-soft" : ""}`}
+						className={`flex w-full items-baseline gap-3 px-4 py-1.5 text-left ${i === menu.active ? "bg-primary-soft" : ""}`}
 					>
-						<span className="shrink-0 font-bold text-accent">/{c.name}</span>
+						<span className="shrink-0 font-medium text-primary">/{c.name}</span>
 						<span className="min-w-0 flex-1 truncate text-muted">{c.description}</span>
-						<span className="shrink-0 text-[10.5px] text-muted">{SOURCE_LABEL[c.source]}</span>
+						<span className="shrink-0 text-[10.5px] text-faint">{SOURCE_LABEL[c.source]}</span>
 					</button>
 				))}
 			</div>

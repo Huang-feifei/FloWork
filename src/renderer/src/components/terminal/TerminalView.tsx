@@ -36,18 +36,18 @@ function SessionHeader() {
 		return first?.role === "user" ? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 80) : "";
 	});
 	return (
-		<div className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-5 py-1">
-			<h1 className="min-w-0 truncate text-[13.5px] font-semibold">{state?.sessionName || firstPrompt || "新会话"}</h1>
+		<div className="flex h-12 shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-border px-6 py-1">
+			<h1 className="min-w-0 truncate text-[15px] font-semibold tracking-tight">{state?.sessionName || firstPrompt || "新会话"}</h1>
 			{state?.ops && <OpsBadge />}
 			{waiting > 0 ? (
-				<span className="flex shrink-0 items-center gap-1 rounded-full bg-warn/15 px-2 py-0.5 text-[11px] font-medium text-warn">
+				<span className="flex shrink-0 items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-1 text-[11.5px] font-medium text-warn">
 					<span className="size-1.5 rounded-full bg-warn" />
 					等待确认
 				</span>
 			) : (
 				isRunning && (
-					<span className="flex shrink-0 items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-medium text-accent">
-						<span className="size-1.5 rounded-full bg-accent" />
+					<span className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11.5px] font-medium text-primary">
+						<span className="size-1.5 rounded-full bg-primary" />
 					运行中
 					</span>
 				)
@@ -58,9 +58,9 @@ function SessionHeader() {
 				onClick={toggleFoldProcess}
 				aria-pressed={foldProcess}
 				title={foldProcess ? "已折叠：历史轮次的思考与工具调用收成一行（点击全部展开）" : "未折叠：点击把历史轮次的思考与工具调用折叠成一行"}
-				className={`flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[12px] ${foldProcess ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
+				className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] ${foldProcess ? "bg-primary-soft text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
 			>
-				<span className={`size-1.5 rounded-full ${foldProcess ? "bg-accent" : "border border-current"}`} />
+				<span className={`size-1.5 rounded-full ${foldProcess ? "bg-primary" : "border border-current"}`} />
 				折叠过程
 			</button>
 			{/* 右侧面板打开时它自己有标签栏，这里不再重复显示 */}
@@ -71,7 +71,7 @@ function SessionHeader() {
 						key={tab.id}
 						onClick={() => setRightPanel(rightPanel === tab.id ? null : tab.id)}
 						title={tab.hint}
-						className={`rounded-md px-2 py-1 text-[12px] ${rightPanel === tab.id ? "bg-accent-soft text-accent" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
+						className={`rounded-full px-2.5 py-1 text-[12.5px] ${rightPanel === tab.id ? "bg-primary-soft text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
 					>
 						{tab.label}
 						{tab.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}
@@ -95,12 +95,12 @@ function OpsBadge() {
 	return (
 		<span
 			title={title}
-			className="flex min-w-0 shrink items-center gap-1.5 rounded-full border border-accent/40 bg-accent-soft px-2 py-0.5 font-mono text-[11px] text-accent"
+			className="flex min-w-0 shrink items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 font-mono text-[11px] text-primary"
 		>
 			<Icon name="server" className="size-3 shrink-0" />
 			<span className="truncate">{ops.label}</span>
-			{facts.os && <span className="truncate text-accent/70">· {facts.os}</span>}
-			{!ops.profile && !ops.profileError && <span className="text-accent/70">· 探测中…</span>}
+			{facts.os && <span className="truncate text-primary/70">· {facts.os}</span>}
+			{!ops.profile && !ops.profileError && <span className="text-primary/70">· 探测中…</span>}
 			{ops.profileError && <span className="text-warn">· 探测失败</span>}
 		</span>
 	);
@@ -284,8 +284,8 @@ function QueueList() {
 							: ""
 				}`}
 			>
-				<span className={`shrink-0 ${kind === "steering" ? "text-accent" : "text-muted"}`}>{kind === "steering" ? "插话" : "排队"}</span>
-				<span className="min-w-0 flex-1 truncate text-fg/90">{text}</span>
+				<span className={`shrink-0 ${kind === "steering" ? "text-primary" : "text-muted"}`}>{kind === "steering" ? "插话" : "排队"}</span>
+				<span className="min-w-0 flex-1 truncate text-fg">{text}</span>
 				<span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
 					<button
 						type="button"
@@ -411,10 +411,10 @@ function PromptInput() {
 	};
 
 	return (
-		<div className="fw-float relative rounded-xl border border-border-strong focus-within:border-accent/70">
+		<div className="fw-float relative rounded-[22px] focus-within:ring-2 focus-within:ring-primary/20">
 			<SlashMenu menu={menu} onPick={(c) => pickCommand(c.name)} />
-			<div className="grid grid-cols-[2ch_1fr] gap-x-1 px-3.5 pt-3 pb-1">
-				<span className="term font-bold text-accent">❯</span>
+			<div className="grid grid-cols-[2ch_1fr] gap-x-2 px-5 pt-4 pb-1">
+				<span className="text-[14px] leading-[1.6] font-semibold text-primary">❯</span>
 				<textarea
 					ref={ref}
 					value={text}
@@ -453,11 +453,11 @@ function PromptInput() {
 						}
 					}}
 					placeholder={ready ? (isRunning ? "运行中：Enter 排队，Ctrl+Enter 插话" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
-					className="term min-h-[1.65em] w-full resize-none bg-transparent outline-none placeholder:text-muted/70"
+					className="min-h-[1.6em] w-full resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-muted/70"
 				/>
 			</div>
 			{images.length > 0 && (
-				<div className="flex flex-wrap gap-2 px-3.5 pb-1.5">
+				<div className="flex flex-wrap gap-2 px-5 pb-1.5">
 					{images.map((image, i) => (
 						<div key={i} className="relative">
 							<ImageThumb image={image} alt={`待发送图片 ${i + 1}`} thumbClassName="h-16 max-w-[160px]" />
@@ -490,10 +490,10 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	const isOps = useApp((s) => !!s.state?.ops);
 	const { setModel, setThinkingLevel, setApprovalMode, abort } = useApp.getState();
 	const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : "";
-	const selectCls = "h-7 shrink-0 rounded-md bg-transparent px-1.5 text-[12px] outline-none hover:bg-panel-2";
+	const selectCls = "h-8 shrink-0 rounded-full bg-transparent px-3 text-[12.5px] outline-none hover:bg-panel-2";
 
 	return (
-		<div className="flex items-center gap-1 px-2 pb-2 whitespace-nowrap">
+		<div className="flex items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
 			<select
 				value={approvalMode}
 				onChange={(e) => void setApprovalMode(e.target.value as ApprovalMode)}
@@ -569,7 +569,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					type="button"
 					onClick={() => void abort()}
 					title="中断当前任务"
-					className="ml-1 flex h-8 items-center gap-1.5 rounded-lg bg-panel-2 px-3 text-[12.5px] font-medium text-fg hover:bg-highlight"
+					className="ml-1 flex h-9 items-center gap-2 rounded-full bg-panel-2 px-4 text-[13px] font-medium text-fg hover:bg-highlight"
 				>
 					<Icon
 						name="stop"
@@ -584,7 +584,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					disabled={!canSend}
 					onClick={onSend}
 					title={isRunning ? "加入队列（Enter）· Ctrl+Enter 插话" : "发送（Enter）"}
-					className="ml-1 flex size-8 items-center justify-center rounded-lg bg-accent text-accent-foreground hover:bg-accent-strong disabled:bg-panel-2 disabled:text-faint"
+					className="ml-1 flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary-strong disabled:bg-panel-2 disabled:text-faint"
 				>
 					<Icon name="arrow-up" />
 				</button>
@@ -673,11 +673,11 @@ export function TerminalView() {
 					<div
 						ref={scrollRef}
 						onScroll={onScroll}
-						className="term h-full overflow-y-auto px-6 py-4"
+						className="h-full overflow-y-auto px-6 py-5 text-[14px]"
 					>
 						<div
 							ref={contentRef}
-							className="mx-auto flex max-w-4xl flex-col gap-3"
+							className="mx-auto flex max-w-4xl flex-col gap-5"
 						>
 							<Welcome />
 							<TrustBanner />
@@ -698,7 +698,7 @@ export function TerminalView() {
 							type="button"
 							onClick={scrollToBottom}
 							title="回到最新输出"
-							className="fw-float absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full border border-border-strong px-3 py-1.5 text-[12px] text-muted hover:text-fg"
+							className="fw-float absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] text-muted hover:text-fg"
 						>
 							<Icon
 								name="arrow-down"

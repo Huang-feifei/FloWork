@@ -26,13 +26,13 @@ export function UpdateDialog() {
 				</Button>
 			}
 		>
-			<div className="text-[13px] leading-relaxed">
-				<div className="mb-2 text-muted">
+			<div className="text-[14px] leading-relaxed">
+				<div className="mb-3 text-muted">
 					FloWork 已更新到 v{version}
 					{entry?.date ? `（${entry.date}）` : ""}。本次更新内容：
 				</div>
 				{entry && entry.items.length > 0 ? (
-					<ul className="list-disc space-y-1 pl-5">
+					<ul className="list-disc space-y-1.5 pl-5 marker:text-faint">
 						{entry.items.map((item, i) => (
 							// biome-ignore lint/suspicious/noArrayIndexKey: 更新条目按顺序展示，顺序稳定
 							<li key={i}>{item}</li>
@@ -41,7 +41,7 @@ export function UpdateDialog() {
 				) : (
 					<div className="text-muted">这个版本的更新说明还没有写进 CHANGELOG.md。</div>
 				)}
-				<div className="mt-3 text-[11.5px] text-muted">之后可以在「帮助 → 查看更新内容」里再看。</div>
+				<div className="mt-4 text-[12px] text-faint">之后可以在 ☰ 菜单的「帮助 → 查看更新内容」里再看。</div>
 			</div>
 		</Modal>
 	);

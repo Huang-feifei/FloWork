@@ -2,10 +2,12 @@
  * 底部面板：终端 / 输出 / pi 日志三个页签。
  *
  * 终端页签是真正的交互式 shell（见 TerminalPanel.tsx），另外两个页签只读会话状态。
+ * 外观按 Apple 体系：页签改分段控件，头部更宽松，状态点用绿色（空闲）/ 蓝色（执行中）。
  */
 import { useMemo, useRef } from "react";
 import { type BottomTab, useApp } from "../../store";
 import { Icon } from "../Icon";
+import { Segmented } from "../ui";
 import { TerminalTab } from "./TerminalPanel";
 
 const TABS: Array<{ id: BottomTab; label: string }> = [
@@ -39,11 +41,11 @@ function OutputTab() {
 	clearHint.current = runs.length === 0;
 
 	return (
-		<div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
+		<div className="term min-h-0 flex-1 overflow-y-auto px-4 py-3 text-[12.5px] leading-[1.8]">
 			{runs.length === 0 && <div className="text-faint">本会话还没有执行过工具。pi 运行命令与读写文件时会显示在这里。</div>}
 			{runs.map(([id, run]) => (
 				<div key={id} className="grid grid-cols-[1.2rem_1fr_auto] gap-x-2">
-					<span className={run.status === "error" ? "text-err" : run.status === "running" ? "text-warn" : "text-ok"}>
+					<span className={run.status === "error" ? "text-err" : run.status === "running" ? "text-warn" : "text-accent-strong"}>
 						{run.status === "error" ? "✗" : run.status === "running" ? "●" : "✓"}
 					</span>
 					<span className="min-w-0 truncate">
@@ -82,7 +84,7 @@ function LogsTab() {
 	];
 
 	return (
-		<div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
+		<div className="term min-h-0 flex-1 overflow-y-auto px-4 py-3 text-[12.5px] leading-[1.8]">
 			{rows.map(([k, v]) => (
 				<div
 					key={k}
@@ -94,7 +96,7 @@ function LogsTab() {
 			))}
 			{notices.length > 0 && (
 				<>
-					<div className="mt-2 text-faint">最近提示</div>
+					<div className="mt-3 text-faint">最近提示</div>
 					{notices.map((n) => (
 						<div
 							key={n.id}
@@ -121,34 +123,21 @@ export function BottomPanel() {
 	const activeTab = tab;
 
 	return (
-		<section className="flex h-[250px] shrink-0 flex-col border-t border-border bg-bg">
-			<div className="flex h-8 shrink-0 items-stretch gap-1 border-b border-border px-2 font-mono text-[11px]">
-				{tabs.map((t) => (
-					<button
-						type="button"
-						key={t.id}
-						onClick={() => setPanelTab(t.id)}
-						className={`relative flex items-center px-2 tracking-[0.04em] ${t.id === activeTab ? "text-fg" : "text-faint hover:text-muted"}`}
-					>
-						{t.label}
-						{t.id === activeTab && <span className="absolute inset-x-2 bottom-0 h-px bg-accent" />}
-					</button>
-				))}
+		<section className="flex h-[280px] shrink-0 flex-col border-t border-border bg-bg">
+			<div className="flex h-10 shrink-0 items-center gap-3 border-b border-border bg-chrome px-3">
+				<Segmented items={tabs.map((t) => ({ id: t.id, label: t.label }))} active={activeTab} onChange={(id) => setPanelTab(id as BottomTab)} />
 				<div className="flex-1" />
-				<span className="flex items-center gap-1.5 px-2 text-muted">
-					<span className={`size-1.5 rounded-full ${running ? "bg-accent" : "bg-ok"}`} />
+				<span className="flex items-center gap-2 px-1 text-[12.5px] text-muted">
+					<span className={`size-1.5 rounded-full ${running ? "bg-primary" : "bg-accent"}`} />
 					{running ? "工具执行中" : "空闲"}
 				</span>
 				<button
 					type="button"
 					title="收起（Ctrl+`）"
 					onClick={() => setTerminalPanel(false)}
-					className="flex w-6 items-center justify-center text-muted hover:text-fg"
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
 				>
-					<Icon
-						name="chevron-down"
-						className="size-3.5"
-					/>
+					<Icon name="chevron-down" className="size-4" />
 				</button>
 			</div>
 

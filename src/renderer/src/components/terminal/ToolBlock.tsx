@@ -72,14 +72,14 @@ function getDiff(details: unknown): string | undefined {
 function DiffView({ diff }: { diff: string }) {
 	const lines = diff.split("\n");
 	return (
-		<div className="mt-0.5 overflow-x-auto rounded border border-border bg-panel">
+		<div className="mt-2 overflow-x-auto rounded-xl border border-border bg-pre-bg py-1">
 			{lines.map((line, i) => {
 				const kind = line[0];
 				const cls =
 					kind === "+" ? "bg-diff-add text-diff-add-fg" : kind === "-" ? "bg-diff-del text-diff-del-fg" : "text-muted";
 				return (
 					// biome-ignore lint/suspicious/noArrayIndexKey: diff 行没有稳定 id
-					<div key={i} className={`px-2 whitespace-pre ${cls}`}>
+					<div key={i} className={`px-3 font-mono text-[12.5px] leading-[1.7] whitespace-pre ${cls}`}>
 						{line || " "}
 					</div>
 				);
@@ -151,20 +151,18 @@ export const ToolBlock = memo(function ToolBlock({ call, result }: Props) {
 		);
 
 	return (
-		<div className="grid grid-cols-[2ch_1fr] gap-x-1">
+		<div className="grid grid-cols-[2ch_1fr] gap-x-2">
 			<div>{bullet}</div>
 			<div className="min-w-0">
-				<div className="truncate" title={summary}>
-					<span className="font-bold">{call.name}</span>
-					<span className="text-muted">(</span>
-					<span>{summary}</span>
-					<span className="text-muted">)</span>
+				<div className="truncate font-mono text-[12.5px]" title={summary}>
+					<span className="font-medium text-fg">{call.name}</span>
+					<span className="text-muted">({summary})</span>
 					{run?.durationMs !== undefined && run.durationMs > 1000 && (
-						<span className="ml-2 text-muted">{(run.durationMs / 1000).toFixed(1)}s</span>
+						<span className="ml-2 tabular-nums text-faint">{(run.durationMs / 1000).toFixed(1)}s</span>
 					)}
 				</div>
 				<div className="grid grid-cols-[3ch_1fr]">
-					<span className="text-muted">⎿</span>
+					<span className="text-faint">⎿</span>
 					<div className="min-w-0">
 						{resultLine}
 						{images.length > 0 && (
@@ -178,7 +176,7 @@ export const ToolBlock = memo(function ToolBlock({ call, result }: Props) {
 						{diff && <DiffView diff={diff} />}
 						{!diff && output && !(call.name === "read" && !expanded) && (
 							<pre
-								className={`overflow-x-auto font-mono whitespace-pre-wrap break-all ${
+								className={`mt-1 overflow-x-auto font-mono text-[12.5px] leading-[1.7] whitespace-pre-wrap break-all ${
 									status === "error" ? "text-err" : "text-fg/80"
 								}`}
 							>
@@ -189,7 +187,7 @@ export const ToolBlock = memo(function ToolBlock({ call, result }: Props) {
 							<button
 								type="button"
 								onClick={() => setExpanded(!expanded)}
-								className={`text-muted underline decoration-dotted underline-offset-2 hover:text-accent ${call.name === "read" && !expanded ? "ml-3" : "block"}`}
+								className={`text-[12.5px] text-primary hover:underline ${call.name === "read" && !expanded ? "ml-3" : "block"}`}
 							>
 								{expanded
 									? "收起"

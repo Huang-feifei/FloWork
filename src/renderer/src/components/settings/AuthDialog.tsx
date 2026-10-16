@@ -1,3 +1,5 @@
+/** 供应商登录 / 配置 API Key 的对话框：OAuth 设备码、授权链接、手动输入。
+ *  Apple 体系：说明与设备码都放进浅灰圆角块（去掉自绘边框），主按钮是唯一的蓝色 pill。 */
 import { useEffect, useRef, useState } from "react";
 import type { AuthNotice } from "@shared/protocol";
 import { useAuth } from "../../authStore";
@@ -7,20 +9,20 @@ function NoticeView({ notice }: { notice: AuthNotice }) {
 	switch (notice.type) {
 		case "info":
 			return (
-				<div className="text-sm">
+				<div className="text-[13.5px] leading-relaxed">
 					{notice.message}
 					{notice.links?.map((l) => (
-						<a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="ml-2 text-accent underline">
+						<a key={l.url} href={l.url} target="_blank" rel="noreferrer" className="ml-2 text-primary underline underline-offset-2">
 							{l.label ?? l.url}
 						</a>
 					))}
 				</div>
 			);
 		case "progress":
-			return <div className="text-xs text-muted">{notice.message}</div>;
+			return <div className="text-[12.5px] text-muted">{notice.message}</div>;
 		case "auth_url":
 			return (
-				<div className="space-y-2 rounded-md border border-accent/40 bg-accent/10 p-3 text-sm">
+				<div className="space-y-3 rounded-xl bg-panel-2 p-4 text-[13.5px]">
 					<div>{notice.instructions ?? "请在浏览器中完成授权："}</div>
 					<div className="flex items-center gap-2">
 						<Button variant="primary" size="sm" onClick={() => window.open(notice.url, "_blank")}>
@@ -30,16 +32,16 @@ function NoticeView({ notice }: { notice: AuthNotice }) {
 							复制链接
 						</Button>
 					</div>
-					<div className="truncate font-mono text-[11px] text-muted" title={notice.url}>
+					<div className="truncate font-mono text-[11.5px] text-muted" title={notice.url}>
 						{notice.url}
 					</div>
 				</div>
 			);
 		case "device_code":
 			return (
-				<div className="space-y-2 rounded-md border border-accent/40 bg-accent/10 p-3 text-sm">
+				<div className="space-y-3 rounded-xl bg-panel-2 p-4 text-[13.5px]">
 					<div>在授权页面输入以下代码：</div>
-					<div className="font-mono text-2xl tracking-widest">{notice.userCode}</div>
+					<div className="font-mono text-[26px] font-semibold tracking-widest text-fg">{notice.userCode}</div>
 					<div className="flex gap-2">
 						<Button variant="primary" size="sm" onClick={() => window.open(notice.verificationUri, "_blank")}>
 							打开 {notice.verificationUri}
@@ -91,24 +93,24 @@ export function AuthDialog() {
 
 				{prompt && (
 					<form
-						className="space-y-2"
+						className="space-y-2.5"
 						onSubmit={(e) => {
 							e.preventDefault();
 							if (prompt.type !== "select" && value.trim()) void answer(value.trim());
 						}}
 					>
-						<div className="text-sm">{prompt.message}</div>
+						<div className="text-[13.5px]">{prompt.message}</div>
 						{prompt.type === "select" ? (
-							<div className="space-y-1.5">
+							<div className="space-y-2">
 								{prompt.options.map((o) => (
 									<button
 										type="button"
 										key={o.id}
 										onClick={() => void answer(o.id)}
-										className="block w-full rounded-md border border-border bg-panel-2 px-3 py-2 text-left hover:border-accent"
+										className="block w-full rounded-xl bg-panel-2 px-3.5 py-2.5 text-left hover:bg-highlight"
 									>
-										<div className="text-sm">{o.label}</div>
-										{o.description && <div className="text-xs text-muted">{o.description}</div>}
+										<div className="text-[13.5px] text-fg">{o.label}</div>
+										{o.description && <div className="mt-0.5 text-[12px] text-muted">{o.description}</div>}
 									</button>
 								))}
 							</div>
@@ -130,14 +132,16 @@ export function AuthDialog() {
 					</form>
 				)}
 
-				{flow.status === "running" && !prompt && <div className="text-sm text-muted animate-pulse">等待中…</div>}
+				{flow.status === "running" && !prompt && (
+					<div className="text-[13.5px] text-muted animate-pulse">等待中…</div>
+				)}
 				{flow.status === "done" && (
-					<div className="rounded-md border border-ok/40 bg-ok/10 px-3 py-2 text-sm text-ok">
+					<div className="rounded-xl bg-ok-soft px-3.5 py-2.5 text-[13.5px] text-accent-strong">
 						已保存。可以在供应商列表中展开该项测试连接。
 					</div>
 				)}
 				{flow.status === "error" && (
-					<div className="rounded-md border border-err/40 bg-err/10 px-3 py-2 text-sm text-err">{flow.error}</div>
+					<div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[13.5px] text-err">{flow.error}</div>
 				)}
 			</div>
 		</Modal>

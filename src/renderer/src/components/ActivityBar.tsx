@@ -1,4 +1,5 @@
-/** 最左侧活动栏：上组切换主视图（会话 / 修改），下组打开工具（项目文件 / 终端 / 远程 SSH），底部为设置 */
+/** 最左侧活动栏：上组切换主视图（会话 / 修改），下组打开工具（项目文件 / 终端 / 远程 SSH），底部为设置。
+ *  Apple 体系：选中态是圆角软底 + 唯一的蓝色图标，不再用左侧竖条；待确认角标用琥珀色。 */
 import { Icon } from "./Icon";
 import { useApp, waitingCount } from "../store";
 
@@ -8,15 +9,13 @@ function ActivityItem({ icon, label, active, badge, onClick }: { icon: Parameter
 			type="button"
 			title={label}
 			onClick={onClick}
-			className={`relative flex h-11 w-full items-center justify-center ${active ? "text-fg" : "text-faint hover:text-muted"}`}
+			className={`relative flex size-9 items-center justify-center rounded-[10px] ${
+				active ? "bg-panel-2 text-primary" : "text-faint hover:bg-highlight hover:text-muted"
+			}`}
 		>
-			{active && <span className="absolute inset-y-2 left-0 w-0.5 rounded-r bg-accent" />}
-			<Icon
-				name={icon}
-				className="size-5"
-			/>
+			<Icon name={icon} className="size-[18px]" />
 			{badge && (
-				<span className="absolute top-1.5 right-2 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-1 font-mono text-[9.5px] font-bold text-accent-foreground">
+				<span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warn px-1 text-[10px] font-semibold text-warn-foreground">
 					{badge}
 				</span>
 			)}
@@ -35,7 +34,7 @@ export function ActivityBar() {
 	const inChat = view === "chat";
 
 	return (
-		<nav className="flex w-12 shrink-0 flex-col items-center border-r border-border bg-chrome">
+		<nav className="flex w-[52px] shrink-0 flex-col items-center gap-1 border-r border-border bg-chrome py-2">
 			<ActivityItem
 				icon="messages"
 				label="会话"
@@ -50,7 +49,7 @@ export function ActivityBar() {
 				onClick={() => setView("review")}
 			/>
 			{/* 上面切换主视图，下面打开工具面板 / 对话框 */}
-			<div className="my-1 h-px w-6 bg-border" />
+			<div className="my-1.5 h-px w-6 bg-border" />
 			<ActivityItem
 				icon={hasProject ? "files" : "folder"}
 				label="项目文件"

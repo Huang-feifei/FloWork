@@ -2,6 +2,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { collectSessionFiles } from "../../lib/session-files";
 import { type RightPanel as Panel, useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
+import { Icon } from "../Icon";
+import { Segmented } from "../ui";
 import { ProjectFiles } from "./ProjectFiles";
 import { ServerFiles } from "./ServerFiles";
 import { ServerStatus } from "./ServerStatus";
@@ -14,6 +16,15 @@ export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteO
 	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
 	{ id: "browser", label: "浏览器", hint: "在聊天旁浏览网页（桌面版）" },
 ];
+
+/** 300px 宽的面板里放不下完整页签名，分段控件用短名，完整名字放 title */
+const SHORT: Record<string, string> = {
+	files: "项目",
+	server: "目录",
+	services: "服务",
+	session: "会话",
+	browser: "浏览",
+};
 
 export function useChangedCount(): number {
 	const messages = useApp((s) => s.messages);
@@ -66,7 +77,7 @@ export function RightPanel() {
 			style={{ width: isBrowser ? (available ? width : "48%") : 300 }}>
 			{isBrowser && <div role="separator" aria-label="调整浏览器宽度" aria-orientation="vertical" tabIndex={0}
 				aria-valuemin={Math.round(Math.min(360, available * 0.45))} aria-valuemax={Math.round(Math.max(0, available - 380))} aria-valuenow={width}
-				className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-accent/40 focus:bg-accent/40 focus:outline-none"
+				className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-primary/40 focus:bg-primary/40 focus:outline-none"
 				onPointerDown={(event) => {
 					drag.current = { x: event.clientX, width, available };
 					event.currentTarget.setPointerCapture(event.pointerId);
@@ -90,16 +101,25 @@ export function RightPanel() {
 					setRatio(next);
 					localStorage.setItem(WIDTH_KEY, String(next));
 				}} />}
-			<div className="flex h-9 shrink-0 items-stretch gap-0.5 border-b border-border px-1 pl-2">
-				{tabs.map((t) => (
-					<button type="button" key={t.id} onClick={() => setRightPanel(t.id)} title={t.hint}
-						className={`relative min-w-0 truncate rounded-md px-2 py-1 text-xs ${t.id === active ? "bg-panel-2 font-medium text-fg" : "text-muted hover:text-fg"}`}>
-						{t.label}
-						{t.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}
-					</button>
-				))}
+			<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+				<Segmented
+					items={tabs.map((t) => ({
+						id: t.id,
+						label: t.id === "session" && changedCount > 0 ? `${SHORT[t.id] ?? t.label} ${changedCount}` : (SHORT[t.id] ?? t.label),
+						title: t.hint,
+					}))}
+					active={active ?? ""}
+					onChange={(id) => setRightPanel(id as Panel)}
+				/>
 				<div className="flex-1" />
-				<button type="button" onClick={() => setRightPanel(null)} title="收起" className="shrink-0 px-1.5 text-muted hover:text-fg">✕</button>
+				<button
+					type="button"
+					onClick={() => setRightPanel(null)}
+					title="收起"
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
+				>
+					<Icon name="x" className="size-3.5" />
+				</button>
 			</div>
 			{active === "files" && <ProjectFiles />}
 			{active === "server" && isRemote && <ServerFiles />}

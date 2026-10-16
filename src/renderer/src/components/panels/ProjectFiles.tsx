@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { WorkspaceEntry } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
+import { Icon } from "../Icon";
 import { collectSessionFiles } from "../../lib/session-files";
 import { useFileSearch } from "../../lib/useFileSearch";
 import { SearchResultLabel } from "./SearchResultRow";
@@ -181,7 +182,7 @@ export function ProjectFiles() {
 							e.preventDefault();
 							setMenu({ x: e.clientX, y: e.clientY, entry });
 						}}
-						className={`group flex items-center gap-1 py-[3px] pr-2 ${active ? "bg-accent-soft" : "hover:bg-panel-2"} ${
+						className={`group flex h-8 items-center gap-2 rounded-[10px] pr-2 ${active ? "bg-primary-soft" : "hover:bg-panel-2"} ${
 							entry.ignored ? "text-muted/70" : ""
 						}`}
 						style={{ paddingLeft: 8 + depth * 14 }}
@@ -192,25 +193,28 @@ export function ProjectFiles() {
 							className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
 							title={entry.path}
 						>
-							<span className="w-3 shrink-0 text-center text-[10px] text-muted">
-								{entry.type === "dir" ? (isOpen ? "▾" : "▸") : ""}
+							<span className="flex w-3 shrink-0 items-center justify-center text-faint">
+								{entry.type === "dir" && <Icon name={isOpen ? "chevron-down" : "chevron-right"} className="size-3" />}
 							</span>
-							<span className="shrink-0 text-[12px]">{entry.type === "dir" ? (isOpen ? "📂" : "📁") : "📄"}</span>
-							<span className={`truncate ${mark ? (mark === "created" ? "text-ok" : "text-warn") : ""}`}>{entry.name}</span>
+							<Icon
+								name={entry.type === "dir" ? (isOpen ? "folder-open" : "folder") : "file-code"}
+								className={`size-4 shrink-0 ${entry.type === "dir" ? "text-muted" : "text-faint"}`}
+							/>
+							<span className={`truncate ${mark ? (mark === "created" ? "text-accent-strong" : "text-warn") : "text-fg/85"}`}>{entry.name}</span>
 							{mark && (
-								<span className={`shrink-0 text-[10px] font-bold ${mark === "created" ? "text-ok" : "text-warn"}`}>
+								<span className={`shrink-0 text-[11px] font-medium ${mark === "created" ? "text-accent-strong" : "text-warn"}`}>
 									{mark === "created" ? "A" : "M"}
 								</span>
 							)}
 						</button>
-						<span className="shrink-0 text-[10px] text-muted group-hover:hidden">
+						<span className="shrink-0 text-[11px] text-faint group-hover:hidden">
 							{entry.type === "file" ? formatSize(entry.size) : ""}
 						</span>
 						<button
 							type="button"
 							onClick={() => insertIntoPrompt(entry.path)}
 							title="把路径引用到输入框"
-							className="hidden shrink-0 rounded px-1 text-[11px] text-accent hover:bg-accent-soft group-hover:block"
+							className="hidden shrink-0 rounded-full px-2 py-0.5 text-[11.5px] text-primary hover:bg-primary-soft group-hover:block"
 						>
 							引用
 						</button>
@@ -259,7 +263,7 @@ export function ProjectFiles() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+			<div className="flex items-center gap-2 px-3 py-2.5">
 				<input
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
@@ -268,18 +272,18 @@ export function ProjectFiles() {
 						if (e.key === "Escape") setFilter("");
 						if (e.key === "Enter" && search.result?.matches[0]) openPreview(search.result.matches[0].path);
 					}}
-					className="min-w-0 flex-1 rounded border border-border bg-panel px-2 py-0.5 text-[12px] outline-none focus:border-accent"
+					className="min-w-0 flex-1 rounded-full bg-panel-2 px-3 py-1.5 text-[12.5px] outline-none placeholder:text-muted/70 focus:ring-4 focus:ring-primary/10"
 				/>
 				<button
 					type="button"
 					onClick={() => setShowIgnored(!showIgnored)}
 					title="显示被 .gitignore 忽略的文件"
-					className={`rounded px-1.5 text-[11px] ${showIgnored ? "bg-accent-soft text-accent" : "text-muted hover:text-fg"}`}
+					className={`rounded-full px-2.5 py-1 text-[11.5px] ${showIgnored ? "bg-primary-soft font-medium text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
 				>
 					忽略项
 				</button>
-				<button type="button" onClick={refreshFiles} title="刷新" className="text-muted hover:text-fg">
-					↻
+				<button type="button" onClick={refreshFiles} title="刷新" className="flex size-7 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg">
+					<Icon name="refresh" className="size-4" />
 				</button>
 			</div>
 			<div
@@ -290,7 +294,7 @@ export function ProjectFiles() {
 						setMenu({ x: e.clientX, y: e.clientY, entry: null });
 					}
 				}}
-				className="term min-h-0 flex-1 overflow-y-auto py-1 text-[12px] leading-5"
+				className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5 text-[12.5px] leading-6"
 			>
 				{error && <div className="px-3 py-1 text-err">{error}</div>}
 				{filter.trim() ? (
@@ -301,7 +305,7 @@ export function ProjectFiles() {
 							return (
 								<div
 									key={m.path}
-									className={`group flex items-center gap-1 py-[3px] pr-2 pl-3 ${preview === m.path ? "bg-accent-soft" : "hover:bg-panel-2"}`}
+									className={`group flex h-8 items-center gap-2 rounded-[10px] pr-2 pl-3 ${preview === m.path ? "bg-primary-soft" : "hover:bg-panel-2"}`}
 								>
 									<button
 										type="button"
@@ -309,10 +313,10 @@ export function ProjectFiles() {
 										className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
 										title={m.path}
 									>
-										<span className="shrink-0 text-[12px]">📄</span>
+										<Icon name="file-code" className="size-4 shrink-0 text-faint" />
 										<SearchResultLabel path={m.path} query={filter} />
 										{mark && (
-											<span className={`shrink-0 text-[10px] font-bold ${mark === "created" ? "text-ok" : "text-warn"}`}>
+											<span className={`shrink-0 text-[11px] font-medium ${mark === "created" ? "text-accent-strong" : "text-warn"}`}>
 												{mark === "created" ? "A" : "M"}
 											</span>
 										)}
@@ -321,7 +325,7 @@ export function ProjectFiles() {
 										type="button"
 										onClick={() => insertIntoPrompt(m.path)}
 										title="把路径引用到输入框"
-										className="hidden shrink-0 rounded px-1 text-[11px] text-accent hover:bg-accent-soft group-hover:block"
+										className="hidden shrink-0 rounded-full px-2 py-0.5 text-[11.5px] text-primary hover:bg-primary-soft group-hover:block"
 									>
 										引用
 									</button>

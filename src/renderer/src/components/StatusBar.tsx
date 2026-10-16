@@ -1,4 +1,5 @@
-/** 窗口底部状态栏：连接状态、当前目录、分支、后台任务与 token 用量 */
+/** 窗口底部状态栏：连接状态、当前目录、分支、后台任务与 token 用量。
+ *  Apple 体系：安静的一行小字，版本是灰色胶囊、健康点用绿、待确认用琥珀。 */
 import { useMemo } from "react";
 import { formatTokens } from "../lib/format";
 import { projectName, useApp, waitingCount } from "../store";
@@ -30,7 +31,7 @@ function Usage() {
 		<>
 			{totals.input + totals.output > 0 && (
 				<span
-					className="tabular-nums"
+					className="px-2.5 tabular-nums"
 					title="累计输入 / 输出 token 与费用"
 				>
 					↑{formatTokens(totals.input)} ↓{formatTokens(totals.output)}
@@ -39,13 +40,13 @@ function Usage() {
 			)}
 			{contextPct !== null && (
 				<span
-					className="flex items-center gap-1.5"
+					className="flex items-center gap-1.5 px-2.5"
 					title="最近一次请求占用的上下文窗口"
 				>
 					ctx
-					<span className="h-1 w-12 overflow-hidden rounded-full bg-panel-2">
+					<span className="h-1.5 w-14 overflow-hidden rounded-full bg-panel-2">
 						<span
-							className={`block h-full ${contextPct >= 80 ? "bg-warn" : "bg-accent"}`}
+							className={`block h-full rounded-full ${contextPct >= 80 ? "bg-warn" : "bg-primary"}`}
 							style={{ width: `${contextPct}%` }}
 						/>
 					</span>
@@ -73,18 +74,19 @@ export function StatusBar() {
 	const waiting = pending + backgroundWaiting;
 
 	return (
-		<footer className="flex h-[22px] shrink-0 items-center border-t border-border bg-chrome font-mono text-[11px] text-muted select-none">
-			<span className="flex h-full items-center gap-1 bg-accent px-2.5 font-semibold text-accent-foreground">
-				✻ <span className="tabular-nums">{connection === "open" ? `v${info?.version ?? "…"}` : "离线"}</span>
+		<footer className="flex h-7 shrink-0 items-center gap-0.5 border-t border-border bg-chrome px-3 text-[11.5px] text-muted select-none">
+			<span className="flex items-center gap-1.5 rounded-full bg-panel-2 px-2.5 py-0.5 font-medium text-fg">
+				<span className="text-primary">✻</span>
+				<span className="tabular-nums">{connection === "open" ? `v${info?.version ?? "…"}` : "离线"}</span>
 			</span>
 			{project && (
 				<span
-					className="flex items-center gap-1 px-2.5"
+					className="flex items-center gap-1.5 px-2.5"
 					title={project.path}
 				>
 					<Icon
 						name="folder"
-						className="size-3"
+						className="size-3.5"
 					/>
 					{projectName(project)}
 				</span>
@@ -97,10 +99,10 @@ export function StatusBar() {
 				{workers} workers
 			</span>
 			{waiting > 0 && (
-				<span className="flex items-center gap-1 px-2.5 text-warn">
+				<span className="flex items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-0.5 font-medium text-warn">
 					<Icon
 						name="shield-alert"
-						className="size-3"
+						className="size-3.5"
 					/>
 					{waiting} 待确认
 				</span>
@@ -110,15 +112,15 @@ export function StatusBar() {
 				Object.entries(extStatus).map(([key, text]) => (
 					<span
 						key={key}
-						className="max-w-64 truncate px-2.5"
+						className="max-w-64 truncate px-2.5 text-faint"
 						title={`扩展状态 · ${key}：${text}`}
 					>
 						{text}
 					</span>
 				))}
 			{view === "chat" && <Usage />}
-			{node && <span className="px-2.5">node {node}</span>}
-			<span className="px-2.5">{info?.shell === "web" ? "网页版" : "桌面版"}</span>
+			{node && <span className="px-2.5 text-faint">node {node}</span>}
+			<span className="px-2.5 text-faint">{info?.shell === "web" ? "网页版" : "桌面版"}</span>
 		</footer>
 	);
 }

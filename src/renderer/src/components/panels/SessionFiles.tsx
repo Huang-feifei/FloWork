@@ -25,7 +25,7 @@ export function SessionFiles() {
 		return (
 			<div
 				key={f.path}
-				className={`group flex items-center gap-2 px-3 py-1 ${preview === f.path ? "bg-accent-soft" : "hover:bg-panel-2"}`}
+				className={`group flex h-8 items-center gap-2 rounded-[10px] pr-2 pl-2 ${preview === f.path ? "bg-primary-soft" : "hover:bg-panel-2"}`}
 			>
 				<button
 					type="button"
@@ -36,20 +36,20 @@ export function SessionFiles() {
 				>
 					<span
 						className={`w-3 shrink-0 text-center text-[10px] font-bold ${
-							!changed ? "text-muted" : f.created ? "text-ok" : "text-warn"
+							!changed ? "text-faint" : f.created ? "text-accent-strong" : "text-warn"
 						}`}
 					>
 						{!changed ? "R" : f.created ? "A" : "M"}
 					</span>
 					<span className="min-w-0 flex-1 truncate">
 						{name}
-						{dir && <span className="ml-1.5 text-[11px] text-muted">{dir}</span>}
+						{dir && <span className="ml-1.5 truncate font-mono text-[11px] text-faint">{dir}</span>}
 					</span>
 				</button>
 				<span className="shrink-0 text-[11px] group-hover:hidden">
 					{changed ? (
 						<>
-							<span className="text-ok">+{f.added}</span> <span className="text-err">−{f.removed}</span>
+							<span className="tabular-nums text-accent-strong">+{f.added}</span> <span className="tabular-nums text-err">−{f.removed}</span>
 						</>
 					) : (
 						<span className="text-muted">读取 {f.reads} 次</span>
@@ -59,7 +59,7 @@ export function SessionFiles() {
 					type="button"
 					onClick={() => insertIntoPrompt(f.path)}
 					title="把路径引用到输入框"
-					className="hidden shrink-0 rounded px-1 text-[11px] text-accent hover:bg-accent-soft group-hover:block"
+					className="hidden shrink-0 rounded-full px-2 py-0.5 text-[11.5px] text-primary hover:bg-primary-soft group-hover:block"
 				>
 					引用
 				</button>
@@ -68,25 +68,25 @@ export function SessionFiles() {
 	};
 
 	return (
-		<div className="term min-h-0 flex-1 overflow-y-auto py-2 text-[12px] leading-5">
+		<div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-2 text-[12.5px] leading-6">
 			{files.length === 0 && <div className="px-3 text-muted">本会话还没有读取或修改文件</div>}
 			{changedFiles.length > 0 && (
 				<>
-					<div className="flex items-center px-3 pt-1 pb-1 text-[11px] text-muted">
+					<div className="flex h-8 items-center px-2 text-[11.5px] font-semibold text-muted">
 						<span className="flex-1">已修改 {changedFiles.length} 个文件</span>
-						<span className="text-ok">+{totals.added}</span>&nbsp;<span className="text-err">−{totals.removed}</span>
+						<span className="font-medium tabular-nums text-accent-strong">+{totals.added}</span>&nbsp;<span className="font-medium tabular-nums text-err">−{totals.removed}</span>
 					</div>
 					{changedFiles.map(row)}
 				</>
 			)}
 			{readOnly.length > 0 && (
 				<>
-					<div className="px-3 pt-3 pb-1 text-[11px] text-muted">只读取过 {readOnly.length} 个文件</div>
+					<div className="flex h-8 items-center px-2 pt-2 text-[11.5px] font-semibold text-muted">只读取过 {readOnly.length} 个文件</div>
 					{readOnly.map(row)}
 				</>
 			)}
 			{files.length > 0 && (
-				<div className="px-3 pt-3 text-[11px] leading-4 text-muted">
+				<div className="mt-2 border-t border-border px-2 pt-2 text-[11.5px] leading-5 text-faint">
 					只统计 read / write / edit 工具；通过 bash 命令改动的文件不在此列，可在“项目文件”中查看。
 				</div>
 			)}

@@ -27,15 +27,15 @@ function EmptyState() {
 	const hasProjects = useApp((s) => s.projects.projects.length > 0);
 	return (
 		<div className="flex flex-1 items-center justify-center p-8">
-			<div className="w-full max-w-lg text-center">
-				<div className="mx-auto mb-5 flex size-12 items-center justify-center rounded-2xl bg-accent-soft font-mono text-xl text-accent">✻</div>
-				<h1 className="mb-2 text-2xl font-semibold tracking-tight">{hasProjects ? "选择一个项目" : "导入你的第一个项目"}</h1>
-				<p className="mb-6 text-muted">
+			<div className="w-full max-w-[560px] text-center">
+				<div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-[20px] bg-primary-soft text-[26px] leading-none text-primary">✻</div>
+				<h1 className="mb-3 text-[32px] font-semibold tracking-tight">{hasProjects ? "选择一个项目" : "导入你的第一个项目"}</h1>
+				<p className="mb-8 text-[17px] leading-relaxed text-muted">
 					{hasProjects
 						? "在左侧点击项目即可打开；多个项目可以同时运行任务。"
 						: "导入项目文件夹，FloWork 会在其中运行 pi，读写代码、执行命令。可以一次导入多个。"}
 				</p>
-				<div className="flex flex-wrap justify-center gap-2">
+				<div className="flex flex-wrap justify-center gap-3">
 					<Button
 						variant="primary"
 						onClick={() => void importProjects()}

@@ -1,6 +1,7 @@
 /**
  * 侧边栏项目树：置顶区、分组（可折叠）、未分组。
  * 项目展开后显示其会话；支持右键 / 更多菜单、行内重命名、拖拽排序与拖入分组。
+ * Apple 体系：行都是内缩圆角行，选中态用蓝色软底，图标走 Icon 组件。
  */
 import { type DragEvent, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
@@ -8,6 +9,7 @@ import type { Project, ProjectGroup, SessionSummary } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { relativeTime } from "../../lib/format";
 import { projectName, useApp } from "../../store";
+import { Icon } from "../Icon";
 import { Spinner } from "../terminal/Spinner";
 import { askText } from "../PromptDialog";
 import { askConfirm } from "../ConfirmDialog";
@@ -58,13 +60,13 @@ function StatusMark({ pid }: { pid: string }) {
 	const status = useApp(useShallow((s) => s.projectStatus(pid)));
 	if (status.waiting > 0)
 		return (
-			<span className="shrink-0 rounded bg-warn/15 px-1 text-[10px] font-medium text-warn" title="等待你确认">
+			<span className="shrink-0 rounded-full bg-warn-soft px-2 py-0.5 text-[10.5px] font-medium text-warn" title="等待你确认">
 				待确认 {status.waiting}
 			</span>
 		);
-	if (status.running) return <Spinner className="shrink-0 text-[12px] text-accent" />;
+	if (status.running) return <Spinner className="shrink-0 text-[12px] text-primary" />;
 	if (status.unread) return <span className="size-1.5 shrink-0 rounded-full bg-ok" title="后台任务已完成" />;
-	if (status.open) return <span className="size-1.5 shrink-0 rounded-full border border-muted/60" title="pi 进程运行中（空闲）" />;
+	if (status.open) return <span className="size-1.5 shrink-0 rounded-full border border-border-strong" title="pi 进程运行中（空闲）" />;
 	return null;
 }
 
@@ -105,18 +107,18 @@ function SessionRow({ project, session, active }: { project: Project; session: S
 				e.preventDefault();
 				setMenu({ x: e.clientX, y: e.clientY });
 			}}
-			className={`group/session relative flex items-center rounded-md ${
-				active ? "bg-panel shadow-[0_1px_2px_rgba(0,0,0,0.05)]" : "hover:bg-panel-2"
+			className={`group/session relative flex items-center rounded-[10px] ${
+				active ? "bg-primary-soft" : "hover:bg-panel-2"
 			}`}
 		>
 			<button
 				type="button"
 				onClick={() => void useApp.getState().openProject(project.id, session.path)}
 				title={label}
-				className="min-w-0 flex-1 px-2 py-1 text-left"
+				className="min-w-0 flex-1 px-2.5 py-1.5 text-left"
 			>
-				<div className={`truncate text-[12px] ${active ? "font-medium" : ""} ${pending ? "text-muted" : ""}`}>{label}</div>
-				<div className="text-[10.5px] text-muted">
+				<div className={`truncate text-[12.5px] ${active ? "font-medium text-primary" : ""} ${pending ? "text-muted" : ""}`}>{label}</div>
+				<div className="text-[11px] text-faint">
 					{relativeTime(session.modified)} · {session.messageCount} 条
 				</div>
 			</button>
@@ -128,9 +130,12 @@ function SessionRow({ project, session, active }: { project: Project; session: S
 					setMenu({ x: rect.left, y: rect.bottom + 4 });
 				}}
 				title="会话操作"
-				className="invisible mr-0.5 shrink-0 rounded px-1 text-muted group-hover/session:visible hover:bg-panel-2 hover:text-fg disabled:opacity-40"
+				className="invisible mr-1 flex size-6 shrink-0 items-center justify-center rounded-full text-muted group-hover/session:visible hover:bg-panel-2 hover:text-fg disabled:opacity-40"
 			>
-				⋯
+				<Icon
+					name="ellipsis"
+					className="size-3.5"
+				/>
 			</button>
 			{menu && <Menu items={items} position={menu} onClose={() => setMenu(null)} />}
 		</div>
@@ -149,18 +154,22 @@ function SessionList({ project }: { project: Project }) {
 	const overflow = list.length > SESSIONS_PREVIEW;
 
 	return (
-		<div className="mb-1 ml-[18px] border-l border-border pl-1.5">
+		<div className="mt-0.5 mb-1 space-y-0.5 pl-6">
 			<button
 				type="button"
 				disabled={project.missing}
 				onClick={() => void newSessionIn(project.id)}
-				className="flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-left text-[12px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
+				className="flex w-full items-center gap-1.5 rounded-[10px] px-2.5 py-1.5 text-left text-[12.5px] text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40"
 			>
-				<span className="text-accent">+</span> 新会话
+				<Icon
+					name="plus"
+					className="size-3.5"
+				/>
+				新会话
 			</button>
-			{sessions === undefined && <div className="px-2 py-1 text-[11px] text-muted">加载中…</div>}
+			{sessions === undefined && <div className="px-2.5 py-1 text-[11.5px] text-faint">加载中…</div>}
 			{/* 展开全部时限制高度并在列表内部滚动，会话再多也不会把侧边栏撑长 */}
-			<div className={showAll && overflow ? "max-h-[42vh] overflow-y-auto overscroll-contain" : undefined}>
+			<div className={showAll && overflow ? "max-h-[42vh] space-y-0.5 overflow-y-auto overscroll-contain" : "space-y-0.5"}>
 				{visible.map((s) => (
 					<SessionRow
 						key={s.path}
@@ -175,9 +184,12 @@ function SessionList({ project }: { project: Project }) {
 					type="button"
 					onClick={() => setShowAll(!showAll)}
 					title={showAll ? `只显示最近 ${SESSIONS_PREVIEW} 个会话` : `展开全部 ${list.length} 个会话`}
-					className="flex w-full items-center gap-1 rounded-md px-2 py-0.5 text-left text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex w-full items-center gap-1.5 rounded-[10px] px-2.5 py-1 text-left text-[11.5px] text-primary hover:bg-panel-2"
 				>
-					<span className="text-[9px]">{showAll ? "▾" : "▸"}</span>
+					<Icon
+						name={showAll ? "chevron-up" : "chevron-down"}
+						className="size-3.5"
+					/>
 					{showAll ? "收起" : `显示全部 ${list.length} 个`}
 				</button>
 			)}
@@ -270,8 +282,8 @@ function ProjectRow({
 					e.preventDefault();
 					setMenu({ x: e.clientX, y: e.clientY });
 				}}
-				className={`group relative flex items-center gap-1 rounded-lg py-1.5 pr-1 pl-1 ${
-					active ? "bg-panel shadow-[0_1px_2px_rgba(0,0,0,0.05)]" : "hover:bg-panel-2"
+				className={`group relative flex items-center gap-1.5 rounded-[10px] py-1.5 pr-1 pl-1.5 ${
+					active ? "bg-primary-soft" : "hover:bg-panel-2"
 				} ${dropHint === "before" ? "shadow-[inset_0_2px_0_var(--color-accent)]" : ""} ${
 					dropHint === "after" ? "shadow-[inset_0_-2px_0_var(--color-accent)]" : ""
 				}`}
@@ -279,10 +291,13 @@ function ProjectRow({
 				<button
 					type="button"
 					onClick={() => toggleExpanded(project.id)}
-					className="w-4 shrink-0 text-center text-[10px] text-muted hover:text-fg"
+					className="flex size-4 shrink-0 items-center justify-center text-faint hover:text-fg"
 					title={expanded ? "折叠会话" : "展开会话"}
 				>
-					{expanded ? "▾" : "▸"}
+					<Icon
+						name={expanded ? "chevron-down" : "chevron-right"}
+						className="size-3.5"
+					/>
 				</button>
 				{renaming ? (
 					<input
@@ -297,7 +312,7 @@ function ProjectRow({
 							if (e.key === "Enter") e.currentTarget.blur();
 							if (e.key === "Escape") setRenaming(false);
 						}}
-						className="min-w-0 flex-1 rounded border border-accent bg-panel px-1 text-[13px] outline-none"
+						className="min-w-0 flex-1 rounded-[10px] border border-primary/40 bg-surface-raised px-2 py-0.5 text-[13px] outline-none ring-4 ring-primary/10"
 					/>
 				) : (
 					<button
@@ -308,16 +323,17 @@ function ProjectRow({
 						}}
 						onDoubleClick={() => setRenaming(true)}
 						title={project.path}
-						className="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+						className="flex min-w-0 flex-1 items-center gap-2 text-left"
 					>
-						<span className={`text-[13px] ${project.missing ? "text-muted line-through" : active ? "text-accent" : "text-muted"}`}>
-							{project.missing ? "⚠" : "▣"}
-						</span>
-						<span className={`min-w-0 truncate text-[13px] ${active ? "font-medium" : ""} ${project.missing ? "text-muted" : ""}`}>
+						<Icon
+							name={project.missing ? "shield-alert" : expanded ? "folder-open" : "folder"}
+							className={`size-4 shrink-0 ${project.missing ? "text-warn" : active ? "text-primary" : "text-muted"}`}
+						/>
+						<span className={`min-w-0 truncate text-[13px] ${active ? "font-medium" : ""} ${project.missing ? "text-muted line-through" : ""}`}>
 							{name}
 						</span>
 						{project.hostId && (
-							<span className="shrink-0 rounded bg-accent/15 px-1 text-[10px] font-normal text-accent">远程</span>
+							<span className="shrink-0 rounded-full bg-panel-2 px-2 py-0.5 text-[10.5px] font-medium text-muted">远程</span>
 						)}
 					</button>
 				)}
@@ -328,10 +344,13 @@ function ProjectRow({
 						const rect = e.currentTarget.getBoundingClientRect();
 						setMenu({ x: rect.left, y: rect.bottom + 4 });
 					}}
-					className="invisible shrink-0 rounded px-1 text-muted group-hover:visible hover:bg-panel-2 hover:text-fg"
+					className="invisible flex size-6 shrink-0 items-center justify-center rounded-full text-muted group-hover:visible hover:bg-panel-2 hover:text-fg"
 					title="更多操作"
 				>
-					⋯
+					<Icon
+						name="ellipsis"
+						className="size-3.5"
+					/>
 				</button>
 			</div>
 			{expanded && <SessionList project={project} />}
@@ -385,22 +404,25 @@ function SectionHeader({ section, onDropOn }: { section: Section; onDropOn: (e: 
 				e.preventDefault();
 				setMenu({ x: e.clientX, y: e.clientY });
 			}}
-			className={`group mt-2 flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium tracking-wide text-muted ${
-				over ? "bg-accent-soft text-accent" : ""
+			className={`group mt-2 flex items-center gap-1.5 rounded-[10px] px-2.5 py-1 text-[11.5px] font-semibold text-faint ${
+				over ? "bg-primary-soft text-primary" : ""
 			}`}
 		>
 			{group ? (
 				<button
 					type="button"
 					onClick={() => void api.projects.groupUpdate(group.id, { collapsed: !group.collapsed })}
-					className="flex min-w-0 flex-1 items-center gap-1 text-left hover:text-fg"
+					className="flex min-w-0 flex-1 items-center gap-1.5 text-left hover:text-fg"
 				>
-					<span className="w-3 text-[9px]">{group.collapsed ? "▸" : "▾"}</span>
+					<Icon
+						name={group.collapsed ? "chevron-right" : "chevron-down"}
+						className="size-3.5 shrink-0"
+					/>
 					<span className="truncate">{section.title}</span>
-					<span className="font-normal">{section.projects.length}</span>
+					<span className="font-normal tabular-nums">{section.projects.length}</span>
 				</button>
 			) : (
-				<span className="flex-1 pl-4">{section.title}</span>
+				<span className="flex-1 pl-5">{section.title}</span>
 			)}
 			{group && (
 				<button
@@ -409,9 +431,12 @@ function SectionHeader({ section, onDropOn }: { section: Section; onDropOn: (e: 
 						const rect = e.currentTarget.getBoundingClientRect();
 						setMenu({ x: rect.left, y: rect.bottom + 4 });
 					}}
-					className="invisible rounded px-1 group-hover:visible hover:bg-panel-2 hover:text-fg"
+					className="invisible flex size-6 items-center justify-center rounded-full hover:bg-panel-2 hover:text-fg group-hover:visible"
 				>
-					⋯
+					<Icon
+						name="ellipsis"
+						className="size-3.5"
+					/>
 				</button>
 			)}
 			{menu && <Menu items={items} position={menu} onClose={() => setMenu(null)} />}
@@ -443,11 +468,11 @@ export function ProjectTree() {
 	};
 
 	if (projects.length === 0) {
-		return <div className="px-3 py-2 text-[12px] leading-5 text-muted">还没有项目。点击右上角的 + 导入文件夹，或用“发现项目”从已有会话中导入。</div>;
+		return <div className="px-3.5 py-3 text-[12.5px] leading-relaxed text-muted">还没有项目。点击右上角的 + 导入文件夹，或用“发现项目”从已有会话中导入。</div>;
 	}
 
 	return (
-		<div className="flex flex-col">
+		<div className="flex flex-col gap-0.5">
 			{sections.map((section) => (
 				<div key={section.key}>
 					<SectionHeader section={section} onDropOn={onDropOn} />
@@ -456,7 +481,7 @@ export function ProjectTree() {
 							<ProjectRow key={p.id} project={p} section={section} groups={groups} onDragStart={onDragStart} onDropOn={onDropOn} />
 						))}
 					{section.group && !section.group.collapsed && section.projects.length === 0 && (
-						<div className="py-1 pl-6 text-[11px] text-muted/80">拖动项目到这里</div>
+						<div className="py-1.5 pl-7 text-[11.5px] text-faint">拖动项目到这里</div>
 					)}
 				</div>
 			))}

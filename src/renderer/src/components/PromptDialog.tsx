@@ -82,7 +82,7 @@ export function PromptDialog() {
 						close(null);
 					}
 				}}
-				className="w-full rounded-md border border-border bg-panel px-2.5 py-1.5 text-sm outline-none placeholder:text-muted/60 focus:border-accent"
+				className="w-full rounded-[10px] border border-border bg-surface-raised px-3 py-2 text-[13.5px] text-fg outline-none placeholder:text-muted/70 focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
 			/>
 		</Modal>
 	);

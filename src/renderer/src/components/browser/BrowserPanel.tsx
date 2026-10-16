@@ -7,7 +7,7 @@ import { Button } from "../ui";
 function NavigationButton({ icon, label, disabled, onClick }: { icon: IconName; label: string; disabled?: boolean; onClick: () => void }) {
 	return (
 		<button type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick}
-			className="flex size-7 shrink-0 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30">
+			className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-30">
 			<Icon name={icon} className="size-3.5" />
 		</button>
 	);
@@ -61,12 +61,12 @@ export function BrowserPanel() {
 	};
 
 	return (
-		<div className="ml-1.5 flex min-h-0 flex-1 flex-col" data-browser-panel>
+		<div className="flex min-h-0 flex-1 flex-col" data-browser-panel>
 			{desktop && (
-				<div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-1">
+				<div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
 					<div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
 						{state.tabs.map((tab) => (
-							<div key={tab.id} className={`flex h-7 min-w-24 max-w-44 shrink-0 items-center rounded ${active?.id === tab.id ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2"}`}>
+							<div key={tab.id} className={`flex h-7 min-w-[96px] max-w-[176px] shrink-0 items-center rounded-full ${active?.id === tab.id ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2"}`}>
 								<button type="button" onClick={() => void browserCommand({ type: "activate", tabId: tab.id })} title={tab.url || "新标签页"}
 									className="flex min-w-0 flex-1 items-center gap-1.5 px-2 text-left text-xs">
 									<Icon name={tab.loading ? "loader-circle" : "globe"} className={`size-3 ${tab.loading ? "animate-spin" : ""}`} />
@@ -79,7 +79,7 @@ export function BrowserPanel() {
 					<NavigationButton icon="plus" label="新建标签页" disabled={!ready} onClick={() => void browserCommand({ type: "create" })} />
 				</div>
 			)}
-			<form className="flex shrink-0 items-center gap-0.5 border-b border-border p-1.5" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
+			<form className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2.5" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
 				{desktop && <>
 					<NavigationButton icon="arrow-left" label="后退" disabled={!active?.canGoBack} onClick={() => active && void browserCommand({ type: "back", tabId: active.id })} />
 					<NavigationButton icon="arrow-right" label="前进" disabled={!active?.canGoForward} onClick={() => active && void browserCommand({ type: "forward", tabId: active.id })} />
@@ -88,9 +88,9 @@ export function BrowserPanel() {
 				</>}
 				<input ref={input} value={address} onChange={(event) => { setAddress(event.target.value); setAddressError(null); }} aria-label="网页地址"
 					placeholder="输入网址或 localhost:端口" spellCheck={false} autoComplete="off"
-					className="h-7 min-w-0 flex-1 rounded border border-border bg-panel px-2 font-mono text-xs outline-none focus:border-accent" />
+					className="h-8 min-w-0 flex-1 rounded-full bg-panel-2 px-3.5 font-mono text-[12px] outline-none placeholder:text-muted/70 focus:ring-4 focus:ring-primary/10" />
 				<button type="submit" title={desktop ? "打开地址" : "在外部浏览器打开"} aria-label={desktop ? "打开地址" : "在外部浏览器打开"}
-					className="flex size-7 shrink-0 items-center justify-center rounded text-muted hover:bg-panel-2 hover:text-fg">
+					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg">
 					<Icon name="arrow-right" className="size-3.5" />
 				</button>
 			</form>
@@ -99,15 +99,15 @@ export function BrowserPanel() {
 				{!desktop ? (
 					<div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
 						<Icon name="globe" className="size-8 text-faint" />
-						<h2 className="font-medium">内置浏览器仅在桌面版可用</h2>
-						<p className="max-w-sm text-xs leading-5 text-muted">Web 版无法可靠嵌入任意网站。请使用 FloWork 桌面版，或在外部浏览器中打开地址。</p>
-						{externalUrl && <a href={externalUrl} target="_blank" rel="noopener noreferrer" className="rounded border border-border-strong bg-panel-2 px-3 py-1.5 text-xs hover:bg-highlight">在外部浏览器打开</a>}
+						<h2 className="text-[15px] font-semibold tracking-tight">内置浏览器仅在桌面版可用</h2>
+						<p className="max-w-sm text-[12.5px] leading-relaxed text-muted">Web 版无法可靠嵌入任意网站。请使用 FloWork 桌面版，或在外部浏览器中打开地址。</p>
+						{externalUrl && <a href={externalUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-panel-2 px-4 py-1.5 text-[12.5px] hover:bg-highlight">在外部浏览器打开</a>}
 					</div>
 				) : !hasPage && (
 					<div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
 						<Icon name="globe" className="size-8 text-faint" />
-						<h2 className="font-medium">{active?.error ? "网页加载失败" : !ready ? "正在连接浏览器…" : "打开一个网页"}</h2>
-						<p className="max-w-sm text-xs leading-5 break-words text-muted">{active?.error || "在上方输入网址。网页标签属于此窗口，不随聊天会话切换关闭。"}</p>
+						<h2 className="text-[15px] font-semibold tracking-tight">{active?.error ? "网页加载失败" : !ready ? "正在连接浏览器…" : "打开一个网页"}</h2>
+						<p className="max-w-sm text-[12.5px] leading-relaxed break-words text-muted">{active?.error || "在上方输入网址。网页标签属于此窗口，不随聊天会话切换关闭。"}</p>
 						{active?.error && <Button size="sm" onClick={() => void browserCommand({ type: "reload", tabId: active.id })}>重新加载</Button>}
 						{!ready && error && <Button size="sm" onClick={() => void browserCommand({ type: "state" })}>重试连接</Button>}
 					</div>

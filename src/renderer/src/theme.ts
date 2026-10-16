@@ -14,9 +14,9 @@ const DARK_QUERY = "(prefers-color-scheme: dark)";
 export function storedTheme(): ThemeMode {
 	try {
 		const value = localStorage.getItem(STORAGE_KEY);
-		return value === "dark" || value === "light" || value === "system" ? value : "system";
+		return value === "dark" || value === "light" || value === "system" ? value : "light";
 	} catch {
-		return "system";
+		return "light";
 	}
 }
 

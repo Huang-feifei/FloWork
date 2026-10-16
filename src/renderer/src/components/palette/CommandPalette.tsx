@@ -156,11 +156,11 @@ export function CommandPalette() {
 		>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: 阻止冒泡到遮罩 */}
 			<div
-				className="fw-float absolute top-2 left-1/2 w-[640px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-lg border border-border-strong"
+				className="fw-float absolute top-2 left-1/2 w-[640px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[22px]"
 				onMouseDown={(e) => e.stopPropagation()}
 			>
-				<div className="flex h-10 items-center gap-2 border-b border-border px-3 font-mono text-[13px]">
-					<span className="text-accent">›</span>
+				<div className="flex h-12 items-center gap-2.5 border-b border-border px-4">
+					<span className="text-[15px] leading-none text-primary">›</span>
 					<input
 						ref={inputRef}
 						value={text}
@@ -181,7 +181,7 @@ export function CommandPalette() {
 							}
 						}}
 						placeholder="搜索文件、会话、命令；> 命令，# 会话"
-						className="min-w-0 flex-1 bg-transparent text-fg outline-none placeholder:text-faint"
+						className="min-w-0 flex-1 bg-transparent text-[15px] text-fg outline-none placeholder:text-faint"
 					/>
 					<span className="text-[11px] text-faint">{flat.length} 项</span>
 				</div>
@@ -190,7 +190,7 @@ export function CommandPalette() {
 					{flat.length === 0 && <div className="px-3 py-2 text-[13px] text-faint">{query ? "没有匹配项" : "输入关键词开始搜索"}</div>}
 					{groups.map((g) => (
 						<div key={g.title}>
-							<div className="flex h-7 items-end px-3 pb-1 font-mono text-[10.5px] font-semibold tracking-[0.06em] text-faint">{g.title}</div>
+							<div className="flex h-7 items-end px-4 pb-1 text-[11.5px] font-semibold text-faint">{g.title}</div>
 							{g.items.map((it) => {
 								const i = flat.indexOf(it);
 								const on = i === current;
@@ -200,17 +200,16 @@ export function CommandPalette() {
 										key={`${g.title}-${it.label}-${it.hint ?? ""}`}
 										onMouseEnter={() => setActive(i)}
 										onClick={(e) => choose(it, e.altKey)}
-										className={`relative flex h-8 w-full items-center gap-2.5 px-3 text-left ${on ? "bg-accent-soft" : "hover:bg-panel-2"}`}
+										className={`relative flex h-9 w-full items-center gap-2.5 rounded-[10px] px-4 text-left ${on ? "bg-primary-soft" : "hover:bg-panel-2"}`}
 									>
-										{on && <span className="absolute inset-y-0 left-0 w-0.5 bg-accent" />}
 										<Icon
 											name={it.icon}
-											className={`size-4 ${on ? "text-accent" : "text-faint"}`}
+											className={`size-4 ${on ? "text-primary" : "text-faint"}`}
 										/>
-										<span className="min-w-0 truncate text-[13px]">{it.label}</span>
+										<span className={`min-w-0 truncate text-[13.5px] ${on ? "font-medium text-primary" : ""}`}>{it.label}</span>
 										{it.hint && <span className="min-w-0 truncate font-mono text-[11.5px] text-faint">{it.hint}</span>}
 										{it.key && <span className="ml-auto font-mono text-[11px] text-faint">{it.key}</span>}
-										{on && !it.key && <span className="ml-auto font-mono text-[11px] text-accent">↵ 打开</span>}
+										{on && !it.key && <span className="ml-auto font-mono text-[11px] text-primary">↵ 打开</span>}
 									</button>
 								);
 							})}
@@ -218,7 +217,7 @@ export function CommandPalette() {
 					))}
 				</div>
 
-				<div className="flex h-7 items-center gap-4 border-t border-border px-3 font-mono text-[11px] text-faint">
+				<div className="flex h-8 items-center gap-4 border-t border-border px-4 font-mono text-[11px] text-faint">
 					<span>↑↓ 选择</span>
 					<span>↵ 打开</span>
 					<span>alt+↵ 引用到输入框</span>

@@ -1,9 +1,11 @@
-/** 网页版的文件夹选择器（桌面版使用系统对话框），支持一次选择多个文件夹导入为项目 */
+/** 网页版的文件夹选择器（桌面版使用系统对话框），支持一次选择多个文件夹导入为项目。
+ *  Apple 体系：白卡片列表 + 内缩圆角行，多选改用开关（toggles over checkboxes），根目录是灰色胶囊。 */
 import { useEffect, useRef, useState } from "react";
 import type { DirListing } from "@shared/protocol";
 import { api, errorText } from "../api/client";
 import { useApp } from "../store";
-import { Button, Input, Modal } from "./ui";
+import { Icon } from "./Icon";
+import { Badge, Button, Input, Modal, Toggle } from "./ui";
 
 export function FolderPicker() {
 	const open = useApp((s) => s.folderPicker.open);
@@ -53,7 +55,7 @@ export function FolderPicker() {
 			width="w-[680px]"
 			footer={
 				<>
-					<span className="mr-auto self-center text-xs text-muted">
+					<span className="mr-auto self-center text-[12.5px] text-muted">
 						{selected.length > 0 ? `已选 ${selected.length} 个` : "勾选文件夹，可一次导入多个"}
 					</span>
 					<Button onClick={closeFolderPicker}>取消</Button>
@@ -73,76 +75,83 @@ export function FolderPicker() {
 					onChange={(e) => setPathInput(e.target.value)}
 					onKeyDown={(e) => e.key === "Enter" && void load(pathInput)}
 					placeholder="输入路径后回车"
+					className="font-mono"
 				/>
 				<Button onClick={() => void load(pathInput)}>前往</Button>
 			</div>
 
 			{listing && (
-				<div className="mb-2 flex flex-wrap items-center gap-1.5">
+				<div className="mb-3 flex flex-wrap items-center gap-1.5">
 					{listing.roots.map((r) => (
-						<Button key={r} size="sm" variant="ghost" onClick={() => void load(r)}>
+						<Button key={r} size="sm" variant="default" onClick={() => void load(r)}>
 							{r}
 						</Button>
 					))}
-					<Button size="sm" variant="ghost" onClick={() => void load(listing.home)}>
+					<Button size="sm" variant="default" onClick={() => void load(listing.home)}>
 						主目录
 					</Button>
 				</div>
 			)}
 
-			{error && <div className="mb-2 rounded border border-err/40 bg-err/10 px-2 py-1 text-xs text-err">{error}</div>}
+			{error && <div className="mb-3 rounded-xl bg-err-soft px-3.5 py-2 text-[12.5px] text-err">{error}</div>}
 
-			<div className="h-72 overflow-y-auto rounded-md border border-border bg-panel">
+			<div className="h-72 overflow-y-auto rounded-2xl border border-border bg-surface-raised p-1.5">
 				{listing?.parent && (
 					<button
 						type="button"
 						onClick={() => void load(listing.parent ?? undefined)}
-						className="block w-full px-3 py-1.5 text-left text-sm text-muted hover:bg-panel-2"
+						className="flex h-9 w-full items-center gap-2 rounded-[10px] px-2.5 text-left text-[13px] text-muted hover:bg-panel-2"
 					>
-						.. 上一级
+						<Icon name="arrow-left" className="size-4" />
+						上一级
 					</button>
 				)}
 				{listing?.entries.map((entry) => {
 					const done = isImported(entry.path);
 					return (
-						<div key={entry.path} className="flex items-center gap-2 px-3 py-1 hover:bg-panel-2">
-							<input
-								type="checkbox"
-								disabled={done}
-								checked={done || selected.includes(entry.path)}
-								onChange={() => toggle(entry.path)}
-								title={done ? "已导入" : "选择"}
-							/>
+						<div key={entry.path} className="flex h-10 items-center gap-2.5 rounded-[10px] px-2.5 hover:bg-panel-2">
+							<span className={done ? "pointer-events-none opacity-40" : ""}>
+								<Toggle
+									on={done || selected.includes(entry.path)}
+									onChange={() => toggle(entry.path)}
+									title={done ? "已导入" : "选择"}
+								/>
+							</span>
 							<button
 								type="button"
 								onClick={() => void load(entry.path)}
 								onDoubleClick={() => !done && void addProjects([entry.path])}
-								className="min-w-0 flex-1 truncate text-left text-sm"
+								className="flex min-w-0 flex-1 items-center gap-2 truncate text-left text-[13.5px] text-fg"
 							>
-								📁 {entry.name}
+								<Icon name="folder" className="size-4 shrink-0 text-muted" />
+								<span className="truncate">{entry.name}</span>
 							</button>
-							{done && <span className="text-[11px] text-muted">已导入</span>}
+							{done && <Badge tone="ok">已导入</Badge>}
 						</div>
 					);
 				})}
-				{listing && listing.entries.length === 0 && <div className="px-3 py-2 text-xs text-muted">没有子文件夹</div>}
+				{listing && listing.entries.length === 0 && (
+					<div className="px-2.5 py-3 text-[12.5px] text-muted">没有子文件夹</div>
+				)}
 			</div>
+
 			{selected.length > 0 && (
-				<div className="mt-2 flex flex-wrap gap-1.5">
+				<div className="mt-3 flex flex-wrap gap-1.5">
 					{selected.map((p) => (
 						<button
 							type="button"
 							key={p}
 							onClick={() => toggle(p)}
 							title="点击移除"
-							className="rounded bg-accent-soft px-2 py-0.5 text-[11px] text-accent"
+							className="flex items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-0.5 text-[11.5px] text-primary"
 						>
-							{p.split(/[\\/]/).pop()} ✕
+							{p.split(/[\\/]/).pop()}
+							<Icon name="x" className="size-3" />
 						</button>
 					))}
 				</div>
 			)}
-			<div className="mt-2 text-[11px] text-muted">单击文件夹名进入，勾选框选择；双击直接导入并打开。</div>
+			<div className="mt-3 text-[12px] leading-5 text-faint">单击文件夹名进入，开关选择；双击直接导入并打开。</div>
 		</Modal>
 	);
 }
