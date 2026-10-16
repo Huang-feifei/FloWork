@@ -7,6 +7,7 @@ import { Icon } from "./Icon";
 import { askText } from "./PromptDialog";
 import { Menu } from "./sidebar/Menu";
 import { ProjectTree } from "./sidebar/ProjectTree";
+import { ResizeHandle, usePersistentWidth } from "./ResizeHandle";
 
 export function Sidebar() {
 	const hasProject = useApp((s) => s.activeProjectId !== null);
@@ -15,6 +16,7 @@ export function Sidebar() {
 	const projectIds = useApp(useShallow((s) => s.projects.projects.map((p) => p.id)));
 	const expandedCount = useApp((s) => projectIds.filter((id) => s.expanded[id]).length);
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+	const width = usePersistentWidth("flowork.sidebarWidth", 260, 200, 520);
 
 	/** 一键折叠 / 展开所有项目的会话列表 */
 	const setAllExpanded = (open: boolean) => {
@@ -23,7 +25,15 @@ export function Sidebar() {
 	};
 
 	return (
-		<aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-sidebar">
+		<aside
+			className="relative flex shrink-0 flex-col border-r border-border bg-sidebar"
+			style={{ width: width.width }}
+		>
+			<ResizeHandle
+				state={width}
+				edge="right"
+				label="调整项目栏宽度"
+			/>
 			<div className="flex h-9 shrink-0 items-center gap-0.5 pr-1.5 pl-3">
 				<span className="flex-1 font-mono text-[11px] font-semibold tracking-[0.08em] text-muted">项目</span>
 				<button

@@ -9,16 +9,26 @@ import { FilePreview } from "../panels/FilePreview";
 import { ProjectFiles } from "../panels/ProjectFiles";
 import { TerminalTab } from "../terminal/TerminalPanel";
 import { Badge } from "../ui";
+import { ResizeHandle, usePersistentWidth } from "../ResizeHandle";
 
 export function RemoteView() {
 	const project = useApp((s) => s.projects.projects.find((p) => p.id === s.activeProjectId));
 	const host = useApp((s) => s.hosts.find((h) => h.id === project?.hostId));
 	const name = project?.name || project?.path.split("/").filter(Boolean).pop() || project?.path || "";
+	const treeWidth = usePersistentWidth("flowork.remoteTreeWidth", 300, 220, 600);
 	const hostLabel = host ? host.name || `${host.user ? `${host.user}@` : ""}${host.host}` : "已删除的主机";
 
 	return (
 		<div className="flex min-h-0 flex-1">
-			<aside className="flex w-[300px] shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar">
+			<aside
+				className="relative flex shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar"
+				style={{ width: treeWidth.width }}
+			>
+				<ResizeHandle
+					state={treeWidth}
+					edge="right"
+					label="调整文件栏宽度"
+				/>
 				<div className="flex items-center gap-2 border-b border-border px-3 py-2">
 					<span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{name}</span>
 					<Badge tone="accent">远程</Badge>
