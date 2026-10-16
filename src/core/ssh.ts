@@ -5,16 +5,24 @@
  * known_hosts 与跳板机（ProxyJump）配置，无需在应用里重新实现认证与 host key 校验；
  * 终端（node-pty）也能直接 spawn 它。代价是每个操作一次新连接（Windows 的 OpenSSH
  * 不支持 ControlMaster 复用），因此远程操作按“少而整”的方式组织。
+ *
+ * 密码认证：用 OpenSSH 自带的 SSH_ASKPASS（8.4 起支持 SSH_ASKPASS_REQUIRE=force，Windows 10/11
+ * 自带的 OpenSSH 9.x 可用），由一个小脚本从环境变量 FLOWORK_SSH_SECRET 输出口令。
+ * 不需要安装 sshpass，口令也不会出现在命令行参数或磁盘文件里。
  */
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SshHost } from "@shared/protocol";
 
 const CONNECT_TIMEOUT_SEC = 10;
 
 let cachedSsh: string | null | undefined;
-let cachedSshpass: string | null | undefined;
+let cachedAskpass: string | undefined;
+
+/** 口令通过这个环境变量交给 askpass 脚本 */
+const SECRET_ENV = "FLOWORK_SSH_SECRET";
 
 /** 在 PATH 中查找可执行文件（Windows 补上 .exe） */
 function which(name: string): string | null {
@@ -42,12 +50,41 @@ export function sshBinary(): string | null {
 	return cachedSsh;
 }
 
-/** sshpass 可执行文件；密码认证的非交互命令需要它 */
-export function sshpassBinary(): string | null {
-	if (cachedSshpass !== undefined) return cachedSshpass;
-	if (process.env.FLOWORK_SSHPASS) cachedSshpass = existsSync(process.env.FLOWORK_SSHPASS) ? process.env.FLOWORK_SSHPASS : null;
-	else cachedSshpass = which("sshpass");
-	return cachedSshpass;
+/**
+ * askpass 脚本：原样输出环境变量里的口令。
+ * Windows 用 PowerShell 读取（cmd 的 echo 会被 & | < > ^ % ! 等字符破坏），其他平台用 sh 的 printf。
+ * 脚本本身不含任何秘密，写到临时目录即可。
+ */
+function askpassScript(): string {
+	if (cachedAskpass && existsSync(cachedAskpass)) return cachedAskpass;
+	const dir = join(tmpdir(), "flowork-ssh");
+	mkdirSync(dir, { recursive: true });
+	if (process.platform === "win32") {
+		const file = join(dir, "askpass.cmd");
+		writeFileSync(file, ["@echo off", `powershell -NoProfile -NonInteractive -Command "[Console]::Out.Write($env:${SECRET_ENV})"`, ""].join("\r\n"));
+		cachedAskpass = file;
+	} else {
+		const file = join(dir, "askpass.sh");
+		writeFileSync(file, ["#!/bin/sh", `printf '%s\\n' "$${SECRET_ENV}"`, ""].join("\n"));
+		chmodSync(file, 0o700);
+		cachedAskpass = file;
+	}
+	return cachedAskpass;
+}
+
+/** 密码认证时给 ssh 子进程加上 askpass 相关环境变量 */
+export function sshEnv(target: SshHost, base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+	const env = { ...base };
+	if (target.auth === "password" && target.password) {
+		env.SSH_ASKPASS = askpassScript();
+		env.SSH_ASKPASS_REQUIRE = "force";
+		env[SECRET_ENV] = target.password;
+		// 旧版 OpenSSH 只在设置了 DISPLAY 时才使用 askpass
+		env.DISPLAY ??= "flowork:0";
+	} else {
+		delete env[SECRET_ENV];
+	}
+	return env;
 }
 
 /** POSIX 单引号转义，用于把路径安全嵌进远程脚本 */
@@ -62,7 +99,8 @@ function destination(target: SshHost): string {
 
 /**
  * 组装 ssh 参数。
- * - BatchMode：非交互命令绝不弹出口令提示，避免卡住后端（密码认证需要 sshpass）。
+ * - BatchMode：非交互命令绝不弹出口令提示，避免卡住后端。
+ *   密码认证不能开 BatchMode（否则 ssh 根本不尝试密码），改为只允许一次口令尝试，由 askpass 应答。
  * - accept-new：新主机自动记录 host key，但已记录过的 key 变化仍会拒绝。
  * - IdentitiesOnly：指定私钥时只用这一把，避免被 agent 里其它 key 抢占。
  */
@@ -75,7 +113,9 @@ function sshOptions(target: SshHost, { batch }: { batch: boolean }): string[] {
 		"-o",
 		"ServerAliveInterval=15",
 	];
-	if (batch) options.push("-o", "BatchMode=yes");
+	if (target.auth === "password") {
+		options.push("-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "NumberOfPasswordPrompts=1");
+	} else if (batch) options.push("-o", "BatchMode=yes");
 	if (target.auth === "key" && target.keyPath) options.push("-i", target.keyPath, "-o", "IdentitiesOnly=yes");
 	if (target.port) options.push("-p", String(target.port));
 	return options;
@@ -94,15 +134,6 @@ export interface SshExecOptions {
 	stdin?: string | Buffer;
 }
 
-/** 密码认证：把口令交给 sshpass（未安装时报出可读错误） */
-function wrapForPassword(target: SshHost, command: string, args: string[]): { command: string; args: string[] } {
-	if (target.auth !== "password" || !target.password) return { command, args };
-	const sshpass = sshpassBinary();
-	if (!sshpass) return { command, args };
-	// sshpass 需要在 ssh 之前；用 -e 从环境变量读口令，避免出现在进程列表里
-	return { command: sshpass, args: ["-e", command, ...args] };
-}
-
 /**
  * 在远程执行一段 sh 脚本（脚本作为远程命令传入，stdin 留给数据上传）。
  * 返回退出码与输出，不抛错——调用方根据 code 判断。
@@ -114,23 +145,12 @@ export function sshExec(target: SshHost, script: string, options: SshExecOptions
 			reject(new Error("未找到 ssh 可执行文件，无法连接远程主机"));
 			return;
 		}
-		if (target.auth === "password") {
-			if (!target.password) {
-				reject(new Error("主机未设置密码"));
-				return;
-			}
-			if (!sshpassBinary()) {
-				reject(new Error("密码认证需要 sshpass，请改用密钥或 ssh-agent"));
-				return;
-			}
+		if (target.auth === "password" && !target.password) {
+			reject(new Error("主机未设置密码"));
+			return;
 		}
-		// 密码认证交给 sshpass 应答提示，此时不能开 BatchMode（否则 ssh 根本不尝试密码）
-		const args = [...sshOptions(target, { batch: target.auth !== "password" }), destination(target), script];
-		const { command, args: finalArgs } = wrapForPassword(target, ssh, args);
-		const env = { ...process.env };
-		if (target.auth === "password" && target.password) env.SSHPASS = target.password;
-
-		const child = spawn(command, finalArgs, { env, stdio: ["pipe", "pipe", "pipe"] });
+		const args = [...sshOptions(target, { batch: true }), destination(target), script];
+		const child = spawn(ssh, args, { env: sshEnv(target), stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
 		let stdout = "";
 		let stderr = "";
 		let settled = false;
@@ -159,18 +179,29 @@ export async function sshRun(target: SshHost, script: string, options: SshExecOp
 	const result = await sshExec(target, script, options);
 	if (result.code !== 0) {
 		const detail = result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`;
-		throw new Error(`SSH 命令失败：${detail}`);
+		const hint = result.code === 255 ? describeSshFailure(result.stderr) : null;
+		throw new Error(hint ? `${hint}（${detail}）` : `SSH 命令失败：${detail}`);
 	}
 	return result.stdout;
 }
 
-/** 交互式终端用的 ssh 参数（保留 -tt 分配伪终端） */
+/** 交互式终端用的 ssh 参数（保留 -tt 分配伪终端）；密码认证时调用方需用 sshEnv() 设置环境变量 */
 export function sshTerminalArgs(target: SshHost, remoteCommand?: string): { command: string; args: string[] } {
 	const ssh = sshBinary();
 	if (!ssh) throw new Error("未找到 ssh 可执行文件，无法连接远程主机");
 	const args = ["-tt", ...sshOptions(target, { batch: false }), destination(target)];
 	if (remoteCommand) args.push(remoteCommand);
-	return wrapForPassword(target, ssh, args);
+	return { command: ssh, args };
+}
+
+/** 认证失败的典型输出：用于给出可读的错误提示 */
+export function describeSshFailure(stderr: string): string | null {
+	if (/Permission denied/i.test(stderr)) return "认证失败：用户名、密码或私钥不正确";
+	if (/Host key verification failed|REMOTE HOST IDENTIFICATION HAS CHANGED/i.test(stderr)) return "主机密钥校验失败：服务器的 host key 与 known_hosts 记录不一致（可能重装过系统，也可能存在中间人）";
+	if (/Connection refused/i.test(stderr)) return "连接被拒绝：确认 SSH 服务已启动、端口正确";
+	if (/timed out|Connection timed out/i.test(stderr)) return "连接超时：确认主机地址、端口与网络可达";
+	if (/Could not resolve hostname/i.test(stderr)) return "无法解析主机名";
+	return null;
 }
 
 /** 连接测试：探测平台、home 与远程 Node */

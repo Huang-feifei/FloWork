@@ -101,7 +101,7 @@ function HostForm({
 				<Select value={form.auth} onChange={(e) => patch({ auth: e.target.value as SshHostInput["auth"] })}>
 					<option value="agent">ssh-agent / ~/.ssh/config（推荐）</option>
 					<option value="key">私钥文件</option>
-					<option value="password">密码（仅交互式终端，需要 sshpass）</option>
+					<option value="password">密码</option>
 				</Select>
 			</Field>
 			{form.auth === "key" && (
@@ -118,7 +118,7 @@ function HostForm({
 				</Field>
 			)}
 			{form.auth === "password" && (
-				<Field label="密码" hint={isDesktop ? "密码经系统加密（Windows DPAPI）后保存在本机 ~/.flowork/hosts.json；非交互的文件操作需要本机安装 sshpass。" : "网页版以明文保存在本机 ~/.flowork/hosts.json（桌面版会加密）；非交互的文件操作需要本机安装 sshpass。"}>
+				<Field label="密码" hint={isDesktop ? "密码经系统加密（Windows DPAPI）后保存在本机 ~/.flowork/hosts.json。" : "网页版以明文保存在本机 ~/.flowork/hosts.json（桌面版会加密）。"}>
 					<Input type="password" value={form.password ?? ""} onChange={(e) => patch({ password: e.target.value })} />
 				</Field>
 			)}

@@ -16,7 +16,7 @@ import { findGitBash, withGitBashOnPath } from "./git-bash";
 import { getPiAgentDir } from "./paths";
 import { samePath } from "./projects";
 import { remoteIsDirectory } from "./remote-fs";
-import { shQuote, sshTerminalArgs } from "./ssh";
+import { shQuote, sshEnv, sshTerminalArgs } from "./ssh";
 
 export type TerminalOpenParams = BackendMethods["terminal.open"]["params"];
 export type TerminalOpenResult = BackendMethods["terminal.open"]["result"];
@@ -146,7 +146,7 @@ export class TerminalManager {
 				rows,
 				// ssh 是本地进程，cwd 必须是本地存在的目录
 				cwd: homedir(),
-				env: { ...process.env, TERM: "xterm-256color" },
+				env: { ...sshEnv(host), TERM: "xterm-256color" },
 			});
 		} catch (error) {
 			throw new Error(`无法连接远程主机（${host.user ? `${host.user}@` : ""}${host.host}）：${error instanceof Error ? error.message : String(error)}`);
