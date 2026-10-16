@@ -73,7 +73,7 @@ scripts/                    网页版构建、开发、启动脚本，以及自�
 
 默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。
 
-FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）、hosts.json（SSH 主机）、trust.json（项目信任决定）。设置页中的所有修改都写入 pi 配置目录：
+FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）、hosts.json（SSH 主机；桌面版的密码经系统加密后保存）、trust.json（项目信任决定）。设置页中的所有修改都写入 pi 配置目录：
 
 | 设置页 | 写入 |
 | --- | --- |
@@ -119,7 +119,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - **CSP**：`renderer.config.ts` 中的插件只在生产构建往 `index.html` 注入 `Content-Security-Policy`（桌面版与网页版共用同一份策略）；开发模式不注入，否则 Vite HMR 的内联脚本与 websocket 会被挡掉。具体策略见该文件里的注释。
 - **外链白名单**：主进程只把 `http:` / `https:` 链接交给系统浏览器（`setWindowOpenHandler`），其它协议一律拒绝并打日志；页面内导航（`will-navigate`）只允许留在应用自身，其余同样交给白名单处理。
 - **内置浏览器**：网页运行在独立隔离 session（独立 partition、禁缓存），权限请求、设备权限、屏幕共享与下载一律拒绝；只允许 HTTP(S)，`will-frame-navigate` / `will-redirect` 拦截非白名单导航与重定向；禁止访问 FloWork 应用自身地址与控制端口，避免页面回连本地控制服务；弹窗需用户手势（1 秒内点击 / 回车）才开新标签，否则拒绝。
-- **凭据**：auth.json 与 hosts.json（SSH 密码）目前仍是明文（见「pi 配置目录」），改用系统加密存储尚未实现。
+- **凭据**：hosts.json 里的 SSH 密码在桌面版经 Electron `safeStorage`（Windows 上为 DPAPI，绑定当前系统用户）加密后落盘为 `passwordEnc`，旧的明文密码在首次读取时自动迁移；网页版没有系统加密接口，仍为明文，且无法解密桌面版保存的密码（需要重新填写）。auth.json 由 pi SDK 直接读写，目前仍是明文，见路线图。
 
 ## 已实现
 
@@ -164,5 +164,6 @@ node scripts/test-ext-ui.mjs      # 第三方扩展对话框与界面接口
 
 ## 路线图
 
-- **M3**：内置终端与内置浏览器；转为桌面版发布。electron-builder 打包与收紧 CSP 已完成（见「桌面版发布」），凭据改用系统加密存储待做。
+- **M3**：内置终端与内置浏览器；转为桌面版发布。electron-builder 打包、收紧 CSP 与 SSH 密码加密已完成（见「桌面版发布」）。
+- **auth.json 加密**：pi 的 `ModelRuntime.create({ credentials })` 允许注入自定义 CredentialStore，但 `AuthStorage` 未从包入口导出，且 service worker、各 session worker 与扩展都可能创建运行时；需要自行实现带跨进程锁的加密 CredentialStore，并处理 OAuth 刷新写回与 `!command` 形式的 key，风险较高，单独排期。
 - **远程 AI 会话**：目前远程项目只提供终端与文件操作，pi 仍跑在本机。在服务器上运行 pi 需要给 worker 增加 stdio 传输、把 pi-worker 与运行时部署到远端并管理每台主机的常驻进程。

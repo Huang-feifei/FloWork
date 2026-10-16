@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { app, BrowserWindow, dialog, nativeTheme, shell } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, safeStorage, shell } from "electron";
 import { Backend } from "../core/backend";
 import { BrowserManager } from "./browser";
 import { registerIpc } from "./ipc";
@@ -73,6 +73,12 @@ const backend = new Backend({
 		};
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
 		return result.canceled ? null : (result.filePaths[0] ?? null);
+	},
+	// SSH 密码落盘前用系统加密（Windows 上是 DPAPI，绑定当前系统用户）
+	secrets: {
+		available: () => app.isReady() && safeStorage.isEncryptionAvailable(),
+		encrypt: (plain) => safeStorage.encryptString(plain).toString("base64"),
+		decrypt: (cipher) => safeStorage.decryptString(Buffer.from(cipher, "base64")),
 	},
 	// 删除走系统回收站，可恢复
 	trashItem: (abs) => shell.trashItem(abs),

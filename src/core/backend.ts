@@ -17,7 +17,7 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
-import { HostStore } from "./hosts";
+import { HostStore, type SecretCodec } from "./hosts";
 import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
 import { ProjectStore, samePath } from "./projects";
 import * as remoteFs from "./remote-fs";
@@ -53,6 +53,8 @@ export interface BackendHost {
 	openTerminal?: (absDir: string) => void;
 	/** 系统原生文件选择对话框（挑选 SSH 私钥）；网页版不提供 */
 	pickFile?: () => Promise<string | null>;
+	/** 系统级加密（Windows DPAPI / macOS 钥匙串 / libsecret），用于落盘的 SSH 密码；网页版不提供（退回明文） */
+	secrets?: SecretCodec;
 }
 
 type PushListener = (push: BackendPush) => void;
@@ -60,7 +62,7 @@ type PushListener = (push: BackendPush) => void;
 export class Backend {
 	readonly workers: WorkerManager;
 	readonly projects = new ProjectStore();
-	readonly hosts = new HostStore();
+	readonly hosts: HostStore;
 	/** 真终端按 cwd 归属，不随客户端断线关闭 */
 	readonly terminals: TerminalManager;
 	private readonly listeners = new Set<PushListener>();
@@ -68,6 +70,7 @@ export class Backend {
 	private readonly clientSessions = new Map<string, Set<string>>();
 
 	constructor(private readonly host: BackendHost) {
+		this.hosts = new HostStore(undefined, host.secrets);
 		this.workers = new WorkerManager(host.spawnWorker, (event) => this.push({ type: "auth", event }));
 		this.terminals = new TerminalManager(
 			(push) => this.push(push),
