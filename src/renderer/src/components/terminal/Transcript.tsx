@@ -8,7 +8,7 @@
  * 历史轮次里连续的「思考 + 工具调用」会收成一行摘要（会话头部「展开过程」可关掉），
  * 正在运行的那一轮始终展开，这样长会话不会满屏都是过程。
  */
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ContentBlock, ImageAttachment } from "@shared/protocol";
 import { parseSkillInvocation } from "@shared/skill-text";
 import { useApp } from "../../store";
@@ -251,10 +251,78 @@ const MessageView = memo(function MessageView({
 	}
 });
 
+/**
+ * 长会话分段渲染：首次只挂最近 INITIAL_ROWS 条可见消息（工具结果不单独成行，不计数），
+ * 往上滚到顶部再每次多挂 MORE_ROWS 条。按条数而不是按轮数切：一轮里 agent 可能连续回复几十上百次。
+ */
+const INITIAL_ROWS = 80;
+const MORE_ROWS = 80;
+
+const isRow = (m: ChatMessage | undefined) => !!m && m.role !== "toolResult";
+
+/** 从末尾往前数 rows 条可见消息，返回开始渲染的下标；不足时从 0 开始 */
+function windowStart(messages: readonly ChatMessage[], rows: number): number {
+	let seen = 0;
+	for (let i = messages.length - 1; i >= 0; i--) {
+		if (isRow(messages[i]) && ++seen === rows) return i;
+	}
+	return 0;
+}
+
+function countRows(messages: readonly ChatMessage[], end: number): number {
+	let n = 0;
+	for (let i = 0; i < end; i++) if (isRow(messages[i])) n++;
+	return n;
+}
+
+/** 顶部的「更早内容」入口：滚到可见时自动加载，也可以点击一次加载全部 */
+function LoadEarlier({ hidden, onMore, onAll }: { hidden: number; onMore: () => void; onAll: () => void }) {
+	const ref = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		// root 为视口：会话滚动容器的裁剪同样计入相交判断；内容插在上方时浏览器的滚动锚定保持当前画面不跳
+		// 只在「离开过可视区再回来」时自动加载：刚挂载时会话还没贴底，哨兵可能短暂可见，不能因此连锁加载全部
+		let armed = false;
+		const observer = new IntersectionObserver((entries) => {
+			const visible = entries.some((e) => e.isIntersecting);
+			if (!visible) armed = true;
+			else if (armed) {
+				armed = false;
+				onMore();
+			}
+		});
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [onMore]);
+	return (
+		<div ref={ref} className="flex items-center justify-center gap-3 py-1 text-[12px] text-muted">
+			<span>更早还有 {hidden} 条消息未显示</span>
+			<button type="button" onClick={onMore} className="text-accent hover:underline">
+				再显示 {Math.min(MORE_ROWS, hidden)} 条
+			</button>
+			<button type="button" onClick={onAll} className="text-muted hover:text-fg hover:underline">
+				全部显示
+			</button>
+		</div>
+	);
+}
+
 export function Transcript() {
 	const messages = useApp((s) => s.messages);
 	const streaming = useApp((s) => s.streaming);
 	const foldProcess = useApp((s) => s.foldProcess);
+	const sessionKey = useApp((s) => s.state?.sessionId ?? "");
+	const [rows, setRows] = useState(INITIAL_ROWS);
+
+	// 切换会话时回到只显示最近的一段
+	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在会话变化时重置
+	useEffect(() => setRows(INITIAL_ROWS), [sessionKey]);
+
+	const start = useMemo(() => windowStart(messages, rows), [messages, rows]);
+	const hidden = useMemo(() => countRows(messages, start), [messages, start]);
+	const showMore = useCallback(() => setRows((n) => n + MORE_ROWS), []);
+	const showAll = useCallback(() => setRows(Number.POSITIVE_INFINITY), []);
 
 	const toolResults = useMemo(() => {
 		const map: ToolResultMap = new Map();
@@ -266,9 +334,10 @@ export function Transcript() {
 
 	return (
 		<div className="flex flex-col gap-3">
+			{hidden > 0 && <LoadEarlier hidden={hidden} onMore={showMore} onAll={showAll} />}
 			{messages.map((m, i) =>
-				// 工具结果不单独成行，不需要 data-entry-id
-				m.role === "toolResult" ? null : (
+				// 窗口之前的消息不挂载；工具结果不单独成行，不需要 data-entry-id
+				i < start || m.role === "toolResult" ? null : (
 					// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
 					// data-entry-id 让会话树窄轨知道哪条消息在屏幕上
 					<div key={i} data-entry-id={m.entryId}>
