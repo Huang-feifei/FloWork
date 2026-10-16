@@ -42,6 +42,8 @@ export const api = {
 		test: (id: string) => call("hosts.test", { id }),
 		listDirs: (id: string, path?: string) => call("hosts.listDirs", { id, path }),
 		pickKey: () => call("hosts.pickKey", undefined),
+		inspectKey: (id: string) => call("hosts.inspectKey", { id }),
+		acceptKey: (id: string, fingerprints: string[]) => call("hosts.acceptKey", { id, fingerprints }),
 	},
 	listDirs: (path?: string) => call("fs.listDirs", { path }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
@@ -85,8 +87,27 @@ export const api = {
 	onStatus: transport.onStatus.bind(transport),
 };
 
-export function errorText(error: unknown): string {
+/** 主机密钥变化的错误：返回 hostId（错误文本以内部前缀开头） */
+export function hostKeyErrorHost(error: unknown): string | null {
 	const text = error instanceof Error ? error.message : String(error);
+	const m = /FLOWORK_HOST_KEY_CHANGED:([\w-]+)/.exec(text);
+	return m ? (m[1] ?? null) : null;
+}
+
+let onHostKeyChanged: ((hostId: string) => void) | undefined;
+/** store 注册：任何地方格式化到主机密钥错误时，弹出处理对话框 */
+export function setHostKeyChangedHandler(handler: (hostId: string) => void): void {
+	onHostKeyChanged = handler;
+}
+
+export function errorText(error: unknown): string {
+	const raw = error instanceof Error ? error.message : String(error);
+	const hostId = hostKeyErrorHost(raw);
+	if (hostId) {
+		onHostKeyChanged?.(hostId);
+		return "服务器的主机密钥与本机记录不一致，请在弹出的对话框中核对指纹";
+	}
+	const text = raw;
 	// 去掉 Electron IPC 的包装前缀
 	return text.replace(/^Error invoking remote method '[^']+': (Error: )?/, "");
 }

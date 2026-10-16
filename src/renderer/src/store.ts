@@ -23,7 +23,7 @@ import {
 	type SshHost,
 	type ThinkingLevel,
 } from "@shared/protocol";
-import { api, errorText } from "./api/client";
+import { api, errorText, setHostKeyChangedHandler } from "./api/client";
 import type { ConnectionStatus } from "./api/transport";
 import { askConfirm } from "./components/ConfirmDialog";
 import { disposeTerminal } from "./components/terminal/TerminalPanel";
@@ -86,6 +86,10 @@ interface AppState extends SessionSlice {
 	hosts: SshHost[];
 	/** 添加远程项目对话框是否打开 */
 	remoteOpen: boolean;
+	/** 主机密钥已变化：等待用户比对指纹并确认（hostId） */
+	hostKeyPrompt: string | null;
+	/** 更新指纹后要重试的动作（例如重新连接主机） */
+	hostKeyRetry: (() => void) | null;
 	activeProjectId: string | null;
 	/** 后台项目的会话切片 */
 	background: Record<string, SessionSlice>;
@@ -135,6 +139,7 @@ interface AppState extends SessionSlice {
 	/** 添加并打开一个远程项目（服务器上的目录） */
 	addRemoteProject(hostId: string, path: string, name?: string): Promise<void>;
 	setRemoteOpen(open: boolean): void;
+	setHostKeyPrompt(hostId: string | null, retry?: () => void): void;
 	setDiscoverOpen(open: boolean): void;
 	openProject(projectId: string, sessionPath?: string): Promise<void>;
 	/** 停止项目的 pi 进程；当前项目会被关闭回到空白页 */
@@ -239,6 +244,12 @@ function operationKey(cwd: string, path: string): string {
 
 let noticeSeq = 0;
 let initialized = false;
+
+/** 错误文本里带 HOST_KEY_CHANGED 前缀时取出 hostId（错误可能被包在「打开项目失败：」等前缀之后，或被 JSON 转义） */
+export function hostKeyChangedHost(text: string): string | null {
+	const m = /FLOWORK_HOST_KEY_CHANGED:([\w-]+)/.exec(text);
+	return m ? (m[1] ?? null) : null;
+}
 
 export const useApp = create<AppState>()((set, get) => {
 	// ----- 切片读写：当前项目在顶层，其他在 background -----
@@ -372,9 +383,12 @@ export const useApp = create<AppState>()((set, get) => {
 					get().pushNotice("info", `「${name}」的任务已${event.aborted ? "中断" : "完成"}`);
 				}
 				return;
-			case "tool_execution_end":
+			case "tool_execution_end": {
 				if (isActive && ["write", "edit", "bash", "powershell"].includes(event.toolName)) get().refreshFiles();
+				const hostKey = event.isError ? hostKeyChangedHost(JSON.stringify(event.result ?? "")) : null;
+				if (hostKey) set({ hostKeyPrompt: hostKey });
 				return;
+			}
 			case "session_info_changed":
 				void get().refreshProjectSessions(pid);
 				return;
@@ -419,6 +433,8 @@ export const useApp = create<AppState>()((set, get) => {
 		projects: { projects: [], groups: [] },
 		hosts: [],
 		remoteOpen: false,
+		hostKeyPrompt: null,
+		hostKeyRetry: null,
 		activeProjectId: null,
 		background: {},
 		projectSessions: {},
@@ -536,6 +552,11 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setRemoteOpen(open) {
 			set({ remoteOpen: open });
+		},
+
+		setHostKeyPrompt(hostId, retry) {
+			// 已经打开时保留先前登记的重试动作，除非这次给了新的
+			set((s) => ({ hostKeyPrompt: hostId, hostKeyRetry: hostId ? (retry ?? (s.hostKeyPrompt === hostId ? s.hostKeyRetry : null)) : null }));
 		},
 
 		setDiscoverOpen(open) {
@@ -910,6 +931,11 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		pushNotice(level, text) {
+			const hostKey = hostKeyChangedHost(text);
+			if (hostKey) {
+				set({ hostKeyPrompt: hostKey });
+				return;
+			}
 			const id = ++noticeSeq;
 			set((s) => ({ notices: [...s.notices.slice(-4), { id, level, text }] }));
 			if (level !== "error") setTimeout(() => get().dismissNotice(id), 6000);
@@ -961,6 +987,11 @@ export const useApp = create<AppState>()((set, get) => {
 			}
 		},
 	};
+});
+
+// 任何地方格式化到「主机密钥已变化」的错误时，弹出核对指纹的对话框
+setHostKeyChangedHandler((hostId) => {
+	if (!useApp.getState().hostKeyPrompt) useApp.getState().setHostKeyPrompt(hostId);
 });
 
 // 开发模式下暴露 store，便于截图脚本注入示例数据检查样式

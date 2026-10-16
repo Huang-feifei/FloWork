@@ -23,7 +23,8 @@ import {
 	type WriteOperations,
 } from "@earendil-works/pi-coding-agent";
 import type { HostProfile, SshHost } from "@shared/protocol";
-import { shQuote, sshEnv, sshExec, sshRun, sshTerminalArgsRaw } from "../core/ssh";
+import { isHostKeyChangedError } from "../core/host-key";
+import { hostKeyChangedError, shQuote, sshEnv, sshExec, sshRun, sshTerminalArgsRaw } from "../core/ssh";
 
 export interface OpsTarget {
 	host: SshHost;
@@ -92,7 +93,10 @@ async function remoteAccess(host: SshHost, path: string, mode: "r" | "rw"): Prom
 	const test = mode === "r" ? '[ -f "$p" ] && [ -r "$p" ]' : '[ -f "$p" ] && [ -r "$p" ] && [ -w "$p" ]';
 	const result = await sshExec(host, `p=${shQuote(path)}\n${test}`, { timeoutMs: 20_000 });
 	if (result.code !== 0) {
-		if (result.code === 255) throw new Error(result.stderr.trim() || "SSH 连接失败");
+		if (result.code === 255) {
+			if (isHostKeyChangedError(result.stderr)) throw hostKeyChangedError(host, result.stderr);
+			throw new Error(result.stderr.trim() || "SSH 连接失败");
+		}
 		const error = new Error(`ENOENT: 文件不存在或没有权限：${path}`) as Error & { code: string };
 		error.code = "ENOENT";
 		throw error;
@@ -171,6 +175,10 @@ function remoteBashOps(target: OpsTarget): BashOperations {
 				});
 				child.on("error", (error) => finish(() => reject(error)));
 				child.on("close", (code) => {
+					if (pgid === null && code === 255 && isHostKeyChangedError(stderrHead)) {
+						finish(() => reject(hostKeyChangedError(host, stderrHead)));
+						return;
+					}
 					if (stderrHead) onData(Buffer.from(stderrHead));
 					finish(() => {
 						// 255 是 ssh 自身失败（连接 / 认证）；命令本身返回 255 的情况较少，同样按失败处理

@@ -100,8 +100,9 @@ export class SessionHost {
 			ops.info.profile = await probeHostProfile(ops.target.host);
 			delete ops.info.profileError;
 		} catch (error) {
-			ops.info.profileError = errorText(error);
-			this.emit({ type: "notice", level: "warning", text: `无法探测主机环境：${errorText(error)}` });
+			ops.info.profileError = errorText(error).replace(/^FLOWORK_HOST_KEY_CHANGED:[^\n]*\n/, "");
+			// 带前缀的错误原样发给界面，界面据此弹出「主机密钥已变化」对话框
+			this.emit({ type: "notice", level: "warning", text: errorText(error).startsWith("FLOWORK_HOST_KEY_CHANGED:") ? errorText(error) : `无法探测主机环境：${errorText(error)}` });
 		}
 		if (this.runtime) this.changed();
 	}

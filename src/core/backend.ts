@@ -17,12 +17,13 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import { isDirectory, listDirs } from "./fs";
+import { acceptHostKey, inspectHostKey } from "./host-key";
 import { OpsPathMap } from "./ops-paths";
 import { HostStore, type SecretCodec } from "./hosts";
 import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
 import { ProjectStore, samePath } from "./projects";
 import * as remoteFs from "./remote-fs";
-import { probeHost, sshBinary } from "./ssh";
+import { probeHost, sshBinary, sshRun } from "./ssh";
 import { TerminalManager } from "./terminal";
 import {
 	createWorkspaceEntry,
@@ -279,6 +280,14 @@ export class Backend {
 				const params = rawParams as BackendMethods["hosts.listDirs"]["params"];
 				return remoteFs.listRemoteDirs(await this.hosts.require(params.id), params.path);
 			}
+			case "hosts.inspectKey": {
+				const params = rawParams as BackendMethods["hosts.inspectKey"]["params"];
+				return inspectHostKey(await this.hosts.require(params.id));
+			}
+			case "hosts.acceptKey": {
+				const params = rawParams as BackendMethods["hosts.acceptKey"]["params"];
+				return acceptHostKey(await this.hosts.require(params.id), params.fingerprints);
+			}
 			case "hosts.pickKey": {
 				if (!this.host.pickFile) throw new Error("当前外壳不支持系统文件对话框");
 				return this.host.pickFile();
@@ -322,6 +331,7 @@ export class Backend {
 				if (host) {
 					// 运维会话：先确认能连上，错误信息比 worker 里冒出来的更直接
 					if (host.auth === "password" && !host.password) throw new Error("该主机的密码未保存或无法解密，请在主机设置里重新填写");
+					await sshRun(host, "true", { timeoutMs: 20_000 });
 				} else if (!(await isDirectory(cwd))) throw new Error(`工作区不存在或不是文件夹：${cwd}`);
 				const opened = await this.workers.openSession(
 					{ ...params, cwd, ops: host ? { host, remoteCwd: params.cwd } : undefined },

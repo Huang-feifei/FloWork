@@ -13,6 +13,7 @@ import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
 import { RemoteProjectDialog } from "./components/sidebar/RemoteProjectDialog";
+import { HostKeyDialog } from "./components/sidebar/HostKeyDialog";
 import { StatusBar } from "./components/StatusBar";
 import { BottomPanel } from "./components/terminal/BottomPanel";
 import { TerminalView } from "./components/terminal/TerminalView";
@@ -105,6 +106,7 @@ export function App() {
 				<FolderPicker />
 				<DiscoverDialog />
 				<RemoteProjectDialog />
+				<HostKeyDialog />
 				<AuthDialog />
 				<PromptDialog />
 				<ConfirmDialog />

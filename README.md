@@ -131,7 +131,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - 会话树窄轨：会话区右缘一条竖轨，每个用户消息一条横条（屏幕上可见的最亮、当前分支上其余淡亮、其他分支最暗，当前位置加粗，分叉点带竖线与缩进）；悬停弹出节点卡片，可回到任意节点继续（用户消息会填回输入框以便修改重发）、分叉为新会话、节点标签。命令面板与标题栏「会话」菜单可隐藏 / 显示窄轨（默认显示，选择记在 localStorage）
 - 会话输出滚动：默认跟随最新输出（内容长高即贴底，不做滚动动画，避免流式输出时追不上）；上滚查看历史后停止跟随，并浮出「回到最新」按钮。长会话分段渲染：打开时只挂最近 80 条消息，滚到顶部自动再加载 80 条，也可一键全部显示
 - 会话折叠：历史轮次里连续的「思考 + 工具调用」收成一行摘要（思考字数 + 工具名，点击展开），正在运行的那一轮始终展开；会话头部「展开过程」按钮、标题栏「会话」菜单与命令面板可切换，选择记在 localStorage
-- 远程主机（SSH）：添加 SSH 主机（ssh-agent / 私钥文件 / 密码，端口与默认目录可选，可测试连接并探测远端平台与 Node 版本）。密码登录使用 OpenSSH 自带的 `SSH_ASKPASS`（不需要 sshpass）。「连接主机（运维）」以默认目录或 home 打开运维会话，也可以浏览服务器目录后加为项目。远程操作都走系统 `ssh`，因此 `~/.ssh/config` 的主机别名、ssh-agent、known_hosts 与 ProxyJump 都能直接复用。远程删除是永久删除（不进回收站）。主机列表保存在 `~/.flowork/hosts.json`
+- 远程主机（SSH）：添加 SSH 主机（ssh-agent / 私钥文件 / 密码，端口与默认目录可选，可测试连接并探测远端平台与 Node 版本）。密码登录使用 OpenSSH 自带的 `SSH_ASKPASS`（不需要 sshpass）。「连接主机（运维）」以默认目录或 home 打开运维会话，也可以浏览服务器目录后加为项目。远程操作都走系统 `ssh`，因此 `~/.ssh/config` 的主机别名、ssh-agent、known_hosts 与 ProxyJump 都能直接复用。远程删除是永久删除（不进回收站）。服务器重装系统等导致主机密钥变化时，弹出对话框并排显示本机记录与服务器当前的指纹，用户核对并勾选确认后才更新 known_hosts（旧文件由 OpenSSH 备份为 known_hosts.old；写入前再扫描一次，指纹又变了则取消），随后自动重新连接。主机列表保存在 `~/.flowork/hosts.json`
 - 运维会话（远程项目）：pi 仍在本机运行，API Key 不离开本机；`bash` / `read` / `write` / `edit` 四个工具通过 SSH 在服务器上执行（`src/worker/ops-tools.ts`，沿用 pi 自带的工具定义、只替换 operations）。会话开始时探测主机画像（发行版、包管理器、init、资源、防火墙、常见服务），连同运维守则写进系统提示词。审批按命令风险（`src/shared/command-risk.ts`）判断：只读命令在默认模式下自动执行；高危命令（删除系统目录、格式化、重启、停 sshd、改 sshd_config / 防火墙 / 账号、`curl | sh` 等）在任何模式下都要确认，且不能「本会话始终允许」。`write` / `edit` 覆盖已有文件前在服务器上备份为 `<文件>.flowork-bak-<时间戳>`（保留权限与属主）。命令在远端以独立进程组运行，中断或超时时整组结束；stdin 关闭，交互式命令不会卡住会话。底部终端面板连接同一台主机的远程 shell。目前只支持 Linux / Unix 主机
 - Windows：自动识别 Git Bash（包括非默认安装位置），避免 bash 工具落到 WSL；设置页显示实际使用的 shell
 - 项目：侧边栏导入多个项目（可多选、可从已有会话发现），置顶、分组、拖拽排序、重命名、移除；项目展开显示会话（默认只列最近 3 个，其余在「显示全部」后，展开时列表限高内部滚动）；侧边栏「更多」菜单可一键折叠 / 展开全部会话。切换项目时原项目的 pi 进程继续在后台运行，侧边栏显示运行中 / 待确认 / 已完成。项目列表保存在 `~/.flowork/projects.json`
@@ -169,6 +169,7 @@ node scripts/test-command-risk.mjs # 运维命令风险分级（不需要构建�
 #   FLOWORK_TEST_SSH="127.0.0.1:2222" FLOWORK_TEST_SSH_PASSWORD="..."
 node scripts/test-ops-tools.mjs     # 远程工具：执行、流式输出、中断与超时、读写编辑与备份
 node scripts/test-ops-session.mjs   # 隔离后端 + 本地模拟模型：完整的审批与执行链路
+node scripts/test-host-key.mjs      # 主机密钥变化的检测与更新（另需 FLOWORK_TEST_SSH_CONTAINER；使用临时 known_hosts）
 ```
 
 ## 路线图

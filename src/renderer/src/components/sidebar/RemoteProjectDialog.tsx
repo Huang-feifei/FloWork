@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import type { RemoteDirListing, SshHost, SshHostInput, SshTestResult } from "@shared/protocol";
-import { api, errorText } from "../../api/client";
+import { api, errorText, hostKeyErrorHost } from "../../api/client";
 import { isDesktop } from "../../lib/desktop";
 import { useApp } from "../../store";
 import { Badge, Button, Field, Input, Modal, Select } from "../ui";
@@ -244,6 +244,10 @@ export function RemoteProjectDialog() {
 			const path = host.defaultPath || (await api.hosts.listDirs(host.id)).home;
 			await addRemoteProject(host.id, path, hostLabel(host));
 		} catch (e) {
+			if (hostKeyErrorHost(e)) {
+				useApp.getState().setHostKeyPrompt(host.id, () => void connectHost(host));
+				return;
+			}
 			useApp.getState().pushNotice("error", `连接主机失败：${errorText(e)}`);
 		}
 	};

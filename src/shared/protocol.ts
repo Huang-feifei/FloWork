@@ -630,6 +630,29 @@ export interface SshHost {
 
 export type SshHostInput = Omit<SshHost, "id" | "createdAt" | "platform">;
 
+/** known_hosts 中的一条记录（或服务器当前出示的一把公钥） */
+export interface HostKeyEntry {
+	type: string;
+	/** SHA256:xxxx */
+	fingerprint: string;
+	/** 所在的 known_hosts 文件（仅已记录的条目有） */
+	file?: string;
+}
+
+/** 主机密钥检查结果：known 为本机记录，current 为服务器当前出示的 */
+export interface HostKeyReport {
+	hostId: string;
+	/** known_hosts 中的主机标记，例如 [1.2.3.4]:2222 */
+	target: string;
+	known: HostKeyEntry[];
+	current: HostKeyEntry[];
+	/** 同类型公钥指纹不同 */
+	changed: boolean;
+}
+
+/** 错误信息里带上这个前缀，界面据此弹出「主机密钥已变化」对话框；格式：前缀 + hostId + 换行 + 原始错误 */
+export const HOST_KEY_CHANGED_PREFIX = "FLOWORK_HOST_KEY_CHANGED:";
+
 /** 连接测试结果：连通性 + 远程环境探测 */
 export interface SshTestResult {
 	ok: boolean;
@@ -687,6 +710,10 @@ export interface BackendMethods {
 	"hosts.listDirs": { params: { id: string; path?: string }; result: RemoteDirListing };
 	/** 系统对话框挑选私钥文件（仅桌面版） */
 	"hosts.pickKey": { params: undefined; result: string | null };
+	/** 比对 known_hosts 记录与服务器当前的主机密钥 */
+	"hosts.inspectKey": { params: { id: string }; result: HostKeyReport };
+	/** 用户确认后更新 known_hosts（只接受与 fingerprints 一致的公钥） */
+	"hosts.acceptKey": { params: { id: string; fingerprints: string[] }; result: { removedFrom: string[] } };
 	"fs.listDirs": { params: { path?: string }; result: DirListing };
 	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
 	"workspace.read": { params: { root: string; path: string }; result: FilePreview };

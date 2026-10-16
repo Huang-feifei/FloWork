@@ -14,7 +14,8 @@ import { spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SshHost } from "@shared/protocol";
+import { HOST_KEY_CHANGED_PREFIX, type SshHost } from "@shared/protocol";
+import { isHostKeyChangedError } from "./host-key";
 
 const CONNECT_TIMEOUT_SEC = 10;
 
@@ -104,8 +105,14 @@ function destination(target: SshHost): string {
  * - accept-new：新主机自动记录 host key，但已记录过的 key 变化仍会拒绝。
  * - IdentitiesOnly：指定私钥时只用这一把，避免被 agent 里其它 key 抢占。
  */
+/** 额外的 ssh 配置文件（环境变量 FLOWORK_SSH_CONFIG）；测试用它把 known_hosts 指到临时文件 */
+export function sshConfigArgs(): string[] {
+	return process.env.FLOWORK_SSH_CONFIG ? ["-F", process.env.FLOWORK_SSH_CONFIG] : [];
+}
+
 function sshOptions(target: SshHost, { batch }: { batch: boolean }): string[] {
 	const options = [
+		...sshConfigArgs(),
 		"-o",
 		`ConnectTimeout=${CONNECT_TIMEOUT_SEC}`,
 		"-o",
@@ -179,6 +186,7 @@ export async function sshRun(target: SshHost, script: string, options: SshExecOp
 	const result = await sshExec(target, script, options);
 	if (result.code !== 0) {
 		const detail = result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`;
+		if (result.code === 255 && isHostKeyChangedError(result.stderr)) throw hostKeyChangedError(target, detail);
 		const hint = result.code === 255 ? describeSshFailure(result.stderr) : null;
 		throw new Error(hint ? `${hint}（${detail}）` : `SSH 命令失败：${detail}`);
 	}
@@ -202,6 +210,11 @@ export function sshTerminalArgsRaw(target: SshHost, remoteCommand: string): { co
 	const ssh = sshBinary();
 	if (!ssh) throw new Error("未找到 ssh 可执行文件，无法连接远程主机");
 	return { command: ssh, args: ["-T", ...sshOptions(target, { batch: true }), destination(target), remoteCommand] };
+}
+
+/** 主机密钥变化：错误信息带上前缀与 hostId，界面识别后弹出确认对话框 */
+export function hostKeyChangedError(target: SshHost, detail: string): Error {
+	return new Error(`${HOST_KEY_CHANGED_PREFIX}${target.id}\n服务器的主机密钥与本机记录不一致（${detail.split("\n").find((l) => /Host key for|Offending/.test(l))?.trim() ?? "Host key verification failed"}）`);
 }
 
 /** 认证失败的典型输出：用于给出可读的错误提示 */

@@ -95,6 +95,7 @@ interface Entry {
 	cwd: string;
 	/** 远程项目所属主机；为空表示本地终端 */
 	hostId?: string;
+	hostKeyWarned?: boolean;
 	term: Terminal;
 	fit: FitAddon;
 	container: HTMLDivElement;
@@ -134,6 +135,15 @@ function byTerminalId(terminalId: string): Entry | undefined {
 const orphan = new Map<string, string[]>();
 const ORPHAN_MS = 5000;
 const ORPHAN_LIMIT = 8;
+
+/** 远程终端输出里出现主机密钥变化：弹出处理对话框（每个终端实例只弹一次） */
+function watchHostKey(entry: Entry, data: string): void {
+	if (!entry.hostId || entry.hostKeyWarned) return;
+	if (/REMOTE HOST IDENTIFICATION HAS CHANGED|Host key verification failed/.test(data)) {
+		entry.hostKeyWarned = true;
+		useApp.getState().setHostKeyPrompt(entry.hostId);
+	}
+}
 
 function stash(terminalId: string, data: string): void {
 	const chunks = orphan.get(terminalId);
@@ -197,6 +207,7 @@ function listen(): void {
 		}
 		if (push.type === "terminal_data") {
 			entry.term.write(push.data);
+			watchHostKey(entry, push.data);
 			return;
 		}
 		entry.term.write(`\r\n\x1b[2m[终端已退出，退出码 ${push.code}]\x1b[0m\r\n`);
@@ -277,7 +288,10 @@ async function openEntry(entry: Entry): Promise<void> {
 		const buffered = orphan.get(result.terminalId);
 		if (buffered) {
 			orphan.delete(result.terminalId);
-			for (const chunk of buffered) entry.term.write(chunk);
+			for (const chunk of buffered) {
+				entry.term.write(chunk);
+				watchHostKey(entry, chunk);
+			}
 		}
 		setView(entry, { status: "running", shell: result.shell, exitCode: null, error: null });
 	} catch (error) {
@@ -292,6 +306,7 @@ async function restart(entry: Entry): Promise<void> {
 	if (entry.disposed || entry.view.status === "opening") return;
 	const previous = entry.terminalId;
 	entry.terminalId = null;
+	entry.hostKeyWarned = false;
 	setView(entry, { status: "idle", exitCode: null, error: null });
 	entry.term.reset();
 	if (previous) await api.terminal.close(previous).catch(() => undefined);

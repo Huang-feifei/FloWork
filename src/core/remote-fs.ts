@@ -41,7 +41,9 @@ export async function remoteIsDirectory(host: SshHost, path: string): Promise<bo
 	const script = `p=${shQuote(path)}\n[ -d "$p" ] && echo yes || echo no`;
 	try {
 		return (await sshRun(host, script, { timeoutMs: 15_000 })).trim() === "yes";
-	} catch {
+	} catch (error) {
+		// 连接本身失败（主机密钥变化、认证失败等）要让调用方看到真正的原因
+		if (error instanceof Error && /^FLOWORK_HOST_KEY_CHANGED:|认证失败|连接被拒绝|连接超时|无法解析/.test(error.message)) throw error;
 		return false;
 	}
 }
