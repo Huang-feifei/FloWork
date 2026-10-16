@@ -117,7 +117,7 @@ function OpsWelcome() {
 			</div>
 			<div className="mt-1 text-muted">
 				AI 的命令与文件操作都在这台服务器上执行（起始目录 {ops.remoteCwd}）。
-				{facts.os ? ` ${facts.os}，包管理器 ${facts.package_manager ?? "未知"}，${facts.init ?? ""}。` : ""}
+				{facts.os ? ` ${facts.os}，包管理器 ${facts.package_manager ?? "未知"}${facts.init === "systemd" ? "，systemd" : facts.init ? `，未检测到 systemd（${facts.init}）` : ""}。` : ""}
 			</div>
 			<div className="mt-1 text-muted">
 				只读命令按审批模式处理；高危命令（删除系统目录、重启、改 SSH / 防火墙 / 账号等）在任何模式下都会先请你确认。修改已有文件前会自动备份为
