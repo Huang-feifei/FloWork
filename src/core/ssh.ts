@@ -194,6 +194,16 @@ export function sshTerminalArgs(target: SshHost, remoteCommand?: string): { comm
 	return { command: ssh, args };
 }
 
+/**
+ * 非交互、需要流式读取输出的远程命令（不分配伪终端，stdout / stderr 分开）。
+ * 调用方自己 spawn，并用 sshEnv() 设置环境变量。
+ */
+export function sshTerminalArgsRaw(target: SshHost, remoteCommand: string): { command: string; args: string[] } {
+	const ssh = sshBinary();
+	if (!ssh) throw new Error("未找到 ssh 可执行文件，无法连接远程主机");
+	return { command: ssh, args: ["-T", ...sshOptions(target, { batch: true }), destination(target), remoteCommand] };
+}
+
 /** 认证失败的典型输出：用于给出可读的错误提示 */
 export function describeSshFailure(stderr: string): string | null {
 	if (/Permission denied/i.test(stderr)) return "认证失败：用户名、密码或私钥不正确";

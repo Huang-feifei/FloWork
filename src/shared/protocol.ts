@@ -150,12 +150,30 @@ export interface SessionState {
 	trust?: ProjectTrust;
 	/** 当前排队的消息；pi 在消息被送达时更新 */
 	queue: SessionQueue;
+	/** 运维会话（SSH 远程主机）：cwd 为远程起始目录 */
+	ops?: OpsSessionInfo;
+}
+
+/** 远程主机画像：会话开始时探测一次（发行版、包管理器、服务等），键为英文、值为原始文本 */
+export interface HostProfile {
+	facts: Record<string, string>;
+	probedAt: number;
+}
+
+export interface OpsSessionInfo {
+	hostId: string;
+	/** user@host[:port] */
+	label: string;
+	remoteCwd: string;
+	/** 探测失败或尚未完成时为空 */
+	profile?: HostProfile;
+	profileError?: string;
 }
 
 /**
  * 工具审批模式：
- * - auto：全部自动执行
- * - ask_writes：修改文件、执行命令及其他非只读工具前确认（默认）
+ * - auto：全部自动执行（运维会话中高危命令仍需确认）
+ * - ask_writes：修改文件、执行命令及其他非只读工具前确认（默认）；运维会话中只读命令自动执行
  * - ask_all：所有工具都需确认
  */
 export type ApprovalMode = "auto" | "ask_writes" | "ask_all";
@@ -164,6 +182,12 @@ export const DEFAULT_APPROVAL_MODE: ApprovalMode = "ask_writes";
 export const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 
 export type ApprovalDecision = "allow" | "allow_session" | "deny";
+
+/** 运维会话中工具调用的风险评估（随审批请求下发，界面据此显示红色警告） */
+export interface ApprovalRisk {
+	level: "read" | "write" | "danger";
+	reasons: string[];
+}
 
 export interface SessionSummary {
 	path: string;
@@ -431,7 +455,7 @@ export type SessionEvent =
 	| { type: "session_info_changed"; name?: string }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| { type: "notice"; level: "info" | "warning" | "error"; text: string }
-	| { type: "approval_request"; toolCallId: string; toolName: string; args: unknown }
+	| { type: "approval_request"; toolCallId: string; toolName: string; args: unknown; risk?: ApprovalRisk }
 	| { type: "approval_resolved"; toolCallId: string; decision: ApprovalDecision }
 	/** 第三方扩展请求用户输入（ctx.ui.select / confirm / input / editor） */
 	| { type: "ext_ui_request"; request: ExtUIRequest }
@@ -457,6 +481,8 @@ export interface WorkerInit {
 	/** 打开已有会话；不传则新建 */
 	sessionPath?: string;
 	approvalMode?: ApprovalMode;
+	/** 运维会话：工具在这台主机上执行；cwd 为本地占位目录 */
+	ops?: { host: SshHost; remoteCwd: string };
 }
 
 export type MainToWorker =

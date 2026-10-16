@@ -13,27 +13,40 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
+import { assessToolCall } from "@shared/command-risk";
 import {
 	type ApprovalDecision,
 	type ApprovalMode,
+	type ApprovalRisk,
 	type CommandResultMap,
 	DEFAULT_APPROVAL_MODE,
+	type HostProfile,
 	type ImageAttachment,
+	type OpsSessionInfo,
 	READ_ONLY_TOOLS,
 	type SessionCommand,
 	type SessionEvent,
 	type SessionState,
 	type SlashCommand,
+	type SshHost,
 } from "@shared/protocol";
 import { toChatMessage, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
 import { ExtensionUI } from "./extension-ui";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
+import { BackupLog, createOpsExtension, type OpsTarget, probeHostProfile } from "./ops-tools";
 import { getProjectTrust, isProjectTrusted, setProjectTrust } from "./trust";
 import { validateSession } from "./session-files";
 
 interface PendingApproval {
 	toolName: string;
+	/** 高危操作：不允许「本会话始终允许」 */
+	danger: boolean;
 	resolve: (decision: ApprovalDecision, reason?: string) => void;
+}
+
+export interface OpsInit {
+	host: SshHost;
+	remoteCwd: string;
 }
 
 /**
@@ -64,6 +77,8 @@ export class SessionHost {
 	private reloadPending = false;
 	/** 第三方扩展的 ctx.ui（对话框、状态、小组件） */
 	private readonly extUI: ExtensionUI;
+	/** 运维会话：工具在远程主机上执行 */
+	private ops: { target: OpsTarget; info: OpsSessionInfo; backups: BackupLog } | undefined;
 
 	constructor(
 		private readonly emit: (event: SessionEvent) => void,
@@ -73,6 +88,24 @@ export class SessionHost {
 		this.extUI = new ExtensionUI(emit);
 	}
 
+	private get opsProfile(): HostProfile | null {
+		return this.ops?.info.profile ?? null;
+	}
+
+	/** 运维会话开始时探测主机画像；失败不阻止会话，只在头部提示 */
+	private async probeProfile(): Promise<void> {
+		const ops = this.ops;
+		if (!ops) return;
+		try {
+			ops.info.profile = await probeHostProfile(ops.target.host);
+			delete ops.info.profileError;
+		} catch (error) {
+			ops.info.profileError = errorText(error);
+			this.emit({ type: "notice", level: "warning", text: `无法探测主机环境：${errorText(error)}` });
+		}
+		if (this.runtime) this.changed();
+	}
+
 	private get session(): AgentSession {
 		if (!this.runtime) throw new Error("会话尚未初始化");
 		return this.runtime.session;
@@ -80,13 +113,15 @@ export class SessionHost {
 
 	/** 每次新建 / 切换 / 分叉会话时 pi 都会调用它重建服务，FloWork 扩展随之注入 */
 	private readonly createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
+		const ops = this.ops;
+		const extensionFactories = [createFloworkExtension({ approve: (req, signal) => this.approve(req, signal), skipWriteDiff: !!ops })];
+		if (ops) extensionFactories.push(createOpsExtension(ops.target, () => this.opsProfile, ops.backups));
 		const services = await createAgentSessionServices({
 			cwd,
-			// SDK 默认信任所有项目；这里按用户的信任决定加载项目级配置（见 trust.ts）
-			settingsManager: SettingsManager.create(cwd, getAgentDir(), { projectTrusted: isProjectTrusted(cwd) }),
-			resourceLoaderOptions: {
-				extensionFactories: [createFloworkExtension({ approve: (req, signal) => this.approve(req, signal) })],
-			},
+			// SDK 默认信任所有项目；这里按用户的信任决定加载项目级配置（见 trust.ts）。
+			// 运维会话的 cwd 是本地占位目录，里面没有项目配置，按不信任处理
+			settingsManager: SettingsManager.create(cwd, getAgentDir(), { projectTrusted: !ops && isProjectTrusted(cwd) }),
+			resourceLoaderOptions: { extensionFactories },
 		});
 		return {
 			...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
@@ -95,7 +130,18 @@ export class SessionHost {
 		};
 	};
 
-	async init(cwd: string, sessionPath?: string): Promise<SessionState> {
+	async init(cwd: string, sessionPath?: string, ops?: OpsInit): Promise<SessionState> {
+		if (ops) {
+			const { host, remoteCwd } = ops;
+			const label = `${host.user ? `${host.user}@` : ""}${host.host}${host.port ? `:${host.port}` : ""}`;
+			this.ops = {
+				target: { host, remoteCwd, localCwd: cwd },
+				info: { hostId: host.id, label, remoteCwd },
+				backups: new BackupLog(),
+			};
+			// 画像在后台探测，完成后推送 session_changed；第一轮对话前通常已经完成
+			void this.probeProfile();
+		}
 		if (sessionPath) await validateSession(cwd, sessionPath);
 		const sessionManager = sessionPath ? SessionManager.open(sessionPath) : SessionManager.create(cwd);
 		this.runtime = await createAgentSessionRuntime(this.createRuntime, { cwd, agentDir: getAgentDir(), sessionManager });
@@ -154,7 +200,13 @@ ${err.extensionPath}` });
 
 	private stateOf(): SessionState {
 		const session = this.session;
-		return { ...toSessionState(session), trust: getProjectTrust(session.sessionManager.getCwd()) };
+		const state: SessionState = { ...toSessionState(session), trust: getProjectTrust(session.sessionManager.getCwd()) };
+		if (this.ops) {
+			state.ops = { ...this.ops.info };
+			// 运维会话不需要项目信任（占位目录里没有项目配置）
+			delete state.trust;
+		}
+		return state;
 	}
 
 	private changed(): SessionState {
@@ -165,20 +217,40 @@ ${err.extensionPath}` });
 
 	// ----- 工具审批 -----
 
-	private needsApproval(toolName: string): boolean {
+	/**
+	 * 是否需要确认：
+	 * - 本地会话按工具名判断（只读工具在 ask_writes 下自动执行）
+	 * - 运维会话按命令内容判断：高危在任何模式下都要确认、不受「始终允许」影响；
+	 *   ask_writes 下只读命令自动执行；auto 下非高危自动执行
+	 */
+	private needsApproval(toolName: string, risk: ApprovalRisk | undefined): boolean {
+		if (risk) {
+			if (risk.level === "danger") return true;
+			if (this.approvalMode === "auto" || this.allowedTools.has(toolName)) return false;
+			if (this.approvalMode === "ask_all") return true;
+			return risk.level !== "read";
+		}
 		if (this.approvalMode === "auto" || this.allowedTools.has(toolName)) return false;
 		if (this.approvalMode === "ask_all") return true;
 		return !READ_ONLY_TOOLS.has(toolName);
 	}
 
+	private assess(request: ApprovalRequest): ApprovalRisk | undefined {
+		if (!this.ops) return undefined;
+		const { risk, reasons } = assessToolCall(request.toolName, request.input);
+		return { level: risk, reasons };
+	}
+
 	private approve(request: ApprovalRequest, signal: AbortSignal | undefined): Promise<string | null> {
-		if (!this.needsApproval(request.toolName)) return Promise.resolve(null);
+		const risk = this.assess(request);
+		if (!this.needsApproval(request.toolName, risk)) return Promise.resolve(null);
 		if (signal?.aborted) return Promise.resolve("运行已中断");
 		return new Promise((resolve) => {
 			const onAbort = () => this.resolveApproval(request.toolCallId, "deny", "运行已中断");
 			signal?.addEventListener("abort", onAbort, { once: true });
 			this.pendingApprovals.set(request.toolCallId, {
 				toolName: request.toolName,
+				danger: risk?.level === "danger",
 				resolve: (decision, reason) => {
 					signal?.removeEventListener("abort", onAbort);
 					resolve(decision === "deny" ? (reason ?? "用户拒绝执行此工具调用") : null);
@@ -189,6 +261,7 @@ ${err.extensionPath}` });
 				toolCallId: request.toolCallId,
 				toolName: request.toolName,
 				args: request.input,
+				risk,
 			});
 		});
 	}
@@ -197,7 +270,8 @@ ${err.extensionPath}` });
 		const pending = this.pendingApprovals.get(toolCallId);
 		if (!pending) return;
 		this.pendingApprovals.delete(toolCallId);
-		if (decision === "allow_session") this.allowedTools.add(pending.toolName);
+		// 高危操作的「始终允许」按单次允许处理，不放开整个工具
+		if (decision === "allow_session" && !pending.danger) this.allowedTools.add(pending.toolName);
 		pending.resolve(decision, reason);
 		this.emit({ type: "approval_resolved", toolCallId, decision });
 	}
@@ -285,8 +359,10 @@ ${err.extensionPath}` });
 				return null;
 			case "set_approval_mode":
 				this.approvalMode = command.mode;
-				// 切换到自动模式时，放行正在等待的请求
-				if (command.mode === "auto") for (const id of [...this.pendingApprovals.keys()]) this.resolveApproval(id, "allow");
+				// 切换到自动模式时，放行正在等待的请求（高危操作除外）
+				if (command.mode === "auto") {
+					for (const [id, pending] of [...this.pendingApprovals]) if (!pending.danger) this.resolveApproval(id, "allow");
+				}
 				return null;
 			case "respond_approval":
 				this.resolveApproval(command.toolCallId, command.decision);
@@ -295,6 +371,7 @@ ${err.extensionPath}` });
 				this.extUI.respond(command.id, command);
 				return null;
 			case "set_project_trust": {
+				if (this.ops) throw new Error("运维会话没有项目信任设置");
 				const cwd = session.sessionManager.getCwd();
 				if (session.isStreaming) throw new Error("请先等待当前运行结束");
 				setProjectTrust(cwd, command.trusted);

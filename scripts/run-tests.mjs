@@ -19,6 +19,8 @@ const filters = args.filter((a) => !a.startsWith("--"));
 const SUITES = [
 	{ name: "hosts", file: "scripts/test-hosts.mjs", needsBuild: false },
 	{ name: "command-risk", file: "scripts/test-command-risk.mjs", needsBuild: false },
+	// 需要测试主机：未设置 FLOWORK_TEST_SSH 时自动跳过
+	{ name: "ops-tools", file: "scripts/test-ops-tools.mjs", needsBuild: false },
 	{ name: "projects", file: "scripts/test-projects.mjs", needsBuild: true },
 	{ name: "sessions", file: "scripts/test-sessions.mjs", needsBuild: true },
 	{ name: "resources", file: "scripts/test-resources.mjs", needsBuild: true },

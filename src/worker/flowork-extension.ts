@@ -17,6 +17,8 @@ export interface ApprovalRequest {
 export interface FloworkExtensionHost {
 	/** 返回 null 表示允许；返回字符串表示拒绝原因（会告诉模型） */
 	approve(request: ApprovalRequest, signal: AbortSignal | undefined): Promise<string | null>;
+	/** 运维会话：write 的文件在远程，不能用本地文件生成 diff */
+	skipWriteDiff?: boolean;
 }
 
 /** diff 过大时不放进会话记录 */
@@ -48,7 +50,7 @@ export function createFloworkExtension(host: FloworkExtensionHost): ExtensionFac
 			);
 			if (reason !== null) return { block: true, reason };
 
-			if (event.toolName === "write") {
+			if (event.toolName === "write" && !host.skipWriteDiff) {
 				const input = event.input as { path?: unknown };
 				if (typeof input.path === "string") {
 					const path = resolvePath(input.path, ctx.cwd);

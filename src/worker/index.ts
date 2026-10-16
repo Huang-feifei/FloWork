@@ -95,14 +95,14 @@ async function handleCommand(id: string, command: AnyCommand): Promise<void> {
 channel.onMessage((message) => {
 	switch (message.kind) {
 		case "init": {
-			const { role, cwd, sessionPath, approvalMode } = message.init;
+			const { role, cwd, sessionPath, approvalMode, ops } = message.init;
 			if (role === "service") {
 				getServiceHost();
 				send({ kind: "ready" });
 				return;
 			}
 			sessionHost = new SessionHost((event) => send({ kind: "event", event }), approvalMode);
-			sessionHost.init(cwd, sessionPath).then(
+			sessionHost.init(cwd, sessionPath, ops).then(
 				(state) => send({ kind: "ready", state }),
 				(error: unknown) => send({ kind: "init_error", error: errorText(error) }),
 			);
