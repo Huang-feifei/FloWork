@@ -112,11 +112,11 @@ html[data-theme="dark"] {
 	--color-muted: #949daa;
 	--color-faint: #66707c;
 
-	/* 深色下橙色回归品牌色（浅色体系里 accent 是蓝色） */
-	--color-accent: #f0883e;
-	--color-accent-strong: #ff9f5a;
-	--color-accent-soft: rgb(240 136 62 / 0.15);
-	--color-accent-foreground: #1a0e05;
+	/* 深色下强调色也是同一支蓝（与浅色体系一致，不再用旧的橙色品牌色） */
+	--color-accent: #0a84ff;
+	--color-accent-strong: #409cff;
+	--color-accent-soft: rgb(10 132 255 / 0.2);
+	--color-accent-foreground: #ffffff;
 
 	--color-ok: #56d364;
 	--color-ok-soft: rgb(86 211 100 / 0.13);
@@ -133,7 +133,7 @@ html[data-theme="dark"] {
 
 	--color-scrim: rgb(0 0 0 / 0.35);
 
-	--color-window: #0d1222;
+	--color-window: #141417;
 	--color-surface-solid: #1e232c;
 	--color-scrollbar: rgb(255 255 255 / 0.16);
 	--color-scrollbar-hover: rgb(255 255 255 / 0.28);
@@ -142,6 +142,20 @@ html[data-theme="dark"] {
 	--color-inline-code-fg: #ffb37a;
 	--color-inline-code-bg: rgb(240 136 62 / 0.14);
 	--color-pre-bg: rgb(0 0 0 / 0.28);
+
+	/* 体系新增的 token 在深色下也必须给值，否则卡片会保持白色、蓝字会看不清 */
+	--color-surface: #1c1c1e;
+	--color-surface-raised: #232328;
+	--color-surface-foreground: #e6e8ec;
+	--color-primary: #0a84ff;
+	--color-primary-strong: #409cff;
+	--color-primary-soft: rgb(10 132 255 / 0.2);
+	--color-primary-foreground: #ffffff;
+	--color-danger: #ff453a;
+	--color-danger-strong: #ff6961;
+	--color-danger-soft: rgb(255 69 58 / 0.18);
+	--color-danger-foreground: #ffffff;
+	--color-warn-foreground: #1a0e05;
 }
 
 html,
@@ -221,11 +235,9 @@ select option {
 /* 深色壁纸：同一组光斑换成深色底 */
 html[data-theme="dark"] .fw-wallpaper {
 	background:
-		radial-gradient(42% 55% at 12% 18%, rgb(64 78 140 / 0.9), transparent 70%),
-		radial-gradient(38% 50% at 88% 82%, rgb(176 92 40 / 0.85), transparent 72%),
-		radial-gradient(30% 40% at 62% 30%, rgb(30 110 120 / 0.7), transparent 70%),
-		radial-gradient(28% 36% at 30% 88%, rgb(110 52 120 / 0.6), transparent 70%),
-		linear-gradient(160deg, #0d1222, #121018 55%, #160f0c);
+		radial-gradient(60% 60% at 18% 10%, rgb(255 255 255 / 0.05), transparent 70%),
+		radial-gradient(50% 55% at 88% 88%, rgb(255 255 255 / 0.035), transparent 72%),
+		linear-gradient(160deg, #1b1b1f, #141417 55%, #101013);
 }
 
 /* 浮层玻璃：命令面板、审批卡片、输入框等悬浮在内容上方的元素；白卡片 + 弥散柔光 */
@@ -433,4 +445,153 @@ html[data-theme="dark"] .fw-seg-item-active {
 	border: none;
 	border-top: 1px solid var(--color-border);
 	margin: 0.8em 0;
+}
+
+/* ---------- 外观偏好（设置 › 外观）----------
+ * 由 src/renderer/src/appearance.ts 写到 <html> 上的 data-* 属性驱动。
+ * 属性缺失时就是默认值：苹果蓝 + 系统字 + 标准字号 + 跟随系统背景 + 无辅助增强。 */
+
+/* 强调色：只换 primary / accent 这一支 token，其余色板不动 */
+html[data-accent="blue"] {
+	--color-primary: #0071e3;
+	--color-primary-strong: #0062c4;
+	--color-primary-soft: rgb(0 113 227 / 0.1);
+	--color-accent: #0071e3;
+	--color-accent-strong: #0062c4;
+	--color-accent-soft: rgb(0 113 227 / 0.1);
+}
+html[data-accent="purple"] {
+	--color-primary: #8e3fa0;
+	--color-primary-strong: #78348a;
+	--color-primary-soft: rgb(142 63 160 / 0.12);
+	--color-accent: #8e3fa0;
+	--color-accent-strong: #78348a;
+	--color-accent-soft: rgb(142 63 160 / 0.12);
+}
+html[data-accent="pink"] {
+	--color-primary: #d6247a;
+	--color-primary-strong: #b81c66;
+	--color-primary-soft: rgb(214 36 122 / 0.12);
+	--color-accent: #d6247a;
+	--color-accent-strong: #b81c66;
+	--color-accent-soft: rgb(214 36 122 / 0.12);
+}
+html[data-accent="red"] {
+	--color-primary: #d70015;
+	--color-primary-strong: #b00010;
+	--color-primary-soft: rgb(215 0 21 / 0.1);
+	--color-accent: #d70015;
+	--color-accent-strong: #b00010;
+	--color-accent-soft: rgb(215 0 21 / 0.1);
+}
+html[data-accent="orange"] {
+	--color-primary: #b45309;
+	--color-primary-strong: #96440a;
+	--color-primary-soft: rgb(180 83 9 / 0.12);
+	--color-accent: #b45309;
+	--color-accent-strong: #96440a;
+	--color-accent-soft: rgb(180 83 9 / 0.12);
+}
+html[data-accent="yellow"] {
+	--color-primary: #9a7b00;
+	--color-primary-strong: #806600;
+	--color-primary-soft: rgb(154 123 0 / 0.14);
+	--color-accent: #9a7b00;
+	--color-accent-strong: #806600;
+	--color-accent-soft: rgb(154 123 0 / 0.14);
+}
+html[data-accent="green"] {
+	--color-primary: #1f8b4c;
+	--color-primary-strong: #197040;
+	--color-primary-soft: rgb(31 139 76 / 0.12);
+	--color-accent: #1f8b4c;
+	--color-accent-strong: #197040;
+	--color-accent-soft: rgb(31 139 76 / 0.12);
+}
+html[data-accent="graphite"] {
+	--color-primary: #6b6b70;
+	--color-primary-strong: #55555a;
+	--color-primary-soft: rgb(107 107 112 / 0.14);
+	--color-accent: #6b6b70;
+	--color-accent-strong: #55555a;
+	--color-accent-soft: rgb(107 107 112 / 0.14);
+}
+
+/* 界面字体：只使用系统字体，不加载外部字体 */
+html[data-font="compact"] {
+	--font-sans:
+		"Segoe UI Variable Text", "Segoe UI", system-ui, "PingFang SC", "Microsoft YaHei UI", sans-serif;
+}
+html[data-font="cn"] {
+	--font-sans: "PingFang SC", "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+}
+
+/* 等宽字体：终端 / diff / 代码用 */
+html[data-mono="cn"] {
+	--font-mono: "Sarasa Mono SC", "Microsoft YaHei UI", "Cascadia Mono", Consolas, monospace;
+}
+
+/* 界面字号：整体缩放（紧凑 / 标准 / 宽松） */
+html[data-scale="compact"] body {
+	zoom: 0.94;
+}
+html[data-scale="loose"] body {
+	zoom: 1.06;
+}
+
+/* 代码字号：只影响终端 / diff / 代码块 */
+html[data-code-size="12"] .term {
+	font-size: 12px;
+}
+html[data-code-size="14"] .term {
+	font-size: 14px;
+}
+
+/* 窗口背景：跟随系统壁纸 / 纯色 / 图片；模糊与不透明度对三种模式都生效 */
+.fw-wallpaper {
+	filter: blur(var(--app-bg-blur, 0px));
+	opacity: var(--app-bg-opacity, 1);
+}
+html[data-bg="solid"] .fw-wallpaper {
+	background: var(--color-window);
+}
+html[data-bg="image"] .fw-wallpaper {
+	background-image: var(--app-bg-image);
+	background-size: cover;
+	background-position: center;
+}
+
+/* 辅助功能：提高对比度 */
+html[data-contrast="high"] {
+	--color-border: rgb(0 0 0 / 0.2);
+	--color-border-strong: rgb(0 0 0 / 0.34);
+	--color-muted: #4b4b50;
+	--color-faint: #5c5c63;
+	--color-panel-2: rgb(0 0 0 / 0.07);
+}
+html[data-theme="dark"][data-contrast="high"] {
+	--color-border: rgb(255 255 255 / 0.22);
+	--color-border-strong: rgb(255 255 255 / 0.36);
+	--color-muted: #c9cfd8;
+	--color-faint: #a8afba;
+	--color-panel-2: rgb(255 255 255 / 0.1);
+}
+
+/* 辅助功能：减少动态效果 */
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+	animation-duration: 0.001ms !important;
+	animation-iteration-count: 1 !important;
+	transition-duration: 0.001ms !important;
+}
+
+/* 边栏图标大小：活动栏与侧栏头部按钮读这两个变量 */
+:root {
+	--activity-item: 2.25rem;
+	--activity-icon: 1.125rem;
+}
+html[data-sidebar-icons="lg"] {
+	--activity-item: 2.75rem;
+	--activity-icon: 1.375rem;
 }

@@ -10,6 +10,7 @@ import { ApprovalPanel } from "./ApprovalPanel";
 import { ExtDialogPanel, ExtWidgets } from "./ExtDialogPanel";
 import { ImageThumb } from "./ImageThumb";
 import { Spinner, useElapsed } from "./Spinner";
+import { Picker } from "./Picker";
 import { SessionRail } from "./SessionRail";
 import { SlashMenu, useSlashMenu } from "./SlashMenu";
 import { Transcript } from "./Transcript";
@@ -490,79 +491,74 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	const isOps = useApp((s) => !!s.state?.ops);
 	const { setModel, setThinkingLevel, setApprovalMode, abort } = useApp.getState();
 	const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : "";
-	const selectCls = "h-8 shrink-0 rounded-full bg-transparent px-3 text-[12.5px] outline-none hover:bg-panel-2";
+	/** 审批选项：ops 会话用运维语汇，普通会话用工具语汇（文案与原 select 一致） */
+	const approvalItems: { value: ApprovalMode; title: string }[] = isOps
+		? [
+				{ value: "ask_writes", title: "审批：只读自动，改动确认" },
+				{ value: "ask_all", title: "审批：每条都确认" },
+				{ value: "auto", title: "审批：全部自动，只拦高危" },
+			]
+		: [
+				{ value: "ask_writes", title: "审批：修改与命令" },
+				{ value: "ask_all", title: "审批：全部工具" },
+				{ value: "auto", title: "审批：关闭（自动执行）" },
+			];
+	const approvalLabel = approvalItems.find((o) => o.value === approvalMode)?.title ?? "审批";
+	/** 模型按 provider 分组：分组标题给出 provider，行里只留模型 ID，长 ID 才读得清 */
+	const modelItems = models.map((m) => ({
+		value: `${m.provider}/${m.id}`,
+		group: m.provider,
+		title: m.id,
+		badge: m.reasoning ? "可思考" : undefined,
+	}));
 
 	return (
 		<div className="flex items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
-			<select
-				value={approvalMode}
-				onChange={(e) => void setApprovalMode(e.target.value as ApprovalMode)}
-				className={`${selectCls} ${approvalMode === "auto" ? "text-warn" : "text-muted hover:text-fg"}`}
+			<Picker
+				label={approvalLabel}
 				title={isOps ? "命令审批（高危命令始终需要确认）" : "工具审批"}
-			>
-				{isOps ? (
-					<>
-						<option value="ask_writes">审批：只读自动，改动确认</option>
-						<option value="ask_all">审批：每条都确认</option>
-						<option value="auto">审批：全部自动，只拦高危</option>
-					</>
-				) : (
-					<>
-						<option value="ask_writes">审批：修改与命令</option>
-						<option value="ask_all">审批：全部工具</option>
-						<option value="auto">审批：关闭（自动执行）</option>
-					</>
-				)}
-			</select>
+				items={approvalItems}
+				value={approvalMode}
+				tone={approvalMode === "auto" ? "warn" : "muted"}
+				onSelect={(next) => void setApprovalMode(next as ApprovalMode)}
+			/>
 			{state &&
 				(state.availableThinkingLevels.length > 1 ? (
-					<select
-						value={state.thinkingLevel}
-						onChange={(e) => void setThinkingLevel(e.target.value as ThinkingLevel)}
-						className={`${selectCls} text-muted hover:text-fg`}
+					<Picker
+						label={`思考 ${thinkingLabel(state.thinkingLevel)}`}
 						title="思考强度"
-					>
-						{state.availableThinkingLevels.map((level) => (
-							<option
-								key={level}
-								value={level}
-							>
-								思考 {thinkingLabel(level)}
-							</option>
-						))}
-					</select>
+						items={state.availableThinkingLevels.map((level) => ({ value: level, title: `思考 ${thinkingLabel(level)}` }))}
+						value={state.thinkingLevel}
+						onSelect={(next) => void setThinkingLevel(next as ThinkingLevel)}
+					/>
 				) : (
-					<select
-						disabled
-						value="off"
-						className={`${selectCls} text-faint`}
+					<Picker
+						label="思考 关闭（模型不支持）"
 						title="该模型没有声明支持思考，所以只有「关闭」。在 设置 → 自定义端点 里为该模型打开「思考」后即可选择强度"
-					>
-						<option value="off">思考 关闭（模型不支持）</option>
-					</select>
+						items={[{ value: "off", title: "思考 关闭（模型不支持）" }]}
+						value="off"
+						tone="faint"
+						disabled
+						onSelect={() => undefined}
+					/>
 				))}
 			<div className="flex-1" />
 			{models.length > 0 && (
-				<select
+				<Picker
+					align="end"
+					searchable
+					mono
+					title="切换模型"
+					searchPlaceholder="搜索模型…"
+					emptyText="没有匹配的模型"
+					label={currentKey || "选择模型"}
 					value={currentKey}
-					onChange={(e) => {
-						const model = models.find((m) => `${m.provider}/${m.id}` === e.target.value);
+					items={modelItems}
+					onSelect={(next) => {
+						const model = models.find((m) => `${m.provider}/${m.id}` === next);
 						if (model) void setModel(model);
 					}}
-					className={`${selectCls} max-w-72 min-w-0 font-medium text-fg`}
-					title="切换模型"
-				>
-					{!currentKey && <option value="">选择模型</option>}
-					{models.map((m) => (
-						<option
-							key={`${m.provider}/${m.id}`}
-							value={`${m.provider}/${m.id}`}
-						>
-							{m.provider}/{m.id}
-							{m.reasoning ? " · 可思考" : ""}
-						</option>
-					))}
-				</select>
+				/>
 			)}
 			{isRunning && !canSend ? (
 				<button

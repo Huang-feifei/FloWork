@@ -39,6 +39,13 @@ import {
 	type ResolvedTheme,
 	type ThemeMode,
 } from "./theme";
+import {
+	applyAppearance,
+	normalizeAppearance,
+	storeAppearance,
+	storedAppearance,
+	type Appearance,
+} from "./appearance";
 
 export type { ExtWidget, PendingApproval, ToolRun } from "./session-slice";
 export { waitingCount } from "./session-slice";
@@ -75,6 +82,8 @@ interface AppState extends SessionSlice {
 	theme: ThemeMode;
 	/** 实际生效的深浅色（theme = system 时由系统决定） */
 	resolvedTheme: ResolvedTheme;
+	/** 外观偏好：字体与字号 / 强调色 / 窗口背景 / 辅助功能 */
+	appearance: Appearance;
 	/** 配置变更计数，设置页据此刷新 */
 	configVersion: number;
 	/** 网页版文件夹选择器；mode = add 时导入为项目 */
@@ -133,6 +142,8 @@ interface AppState extends SessionSlice {
 	setView(view: View, tab?: SettingsTab): void;
 	/** 切换界面主题（深色 / 浅色 / 跟随系统），立即生效并持久化 */
 	setTheme(mode: ThemeMode): void;
+	/** 更新外观偏好（字体与字号 / 强调色 / 窗口背景 / 辅助功能），立即生效并持久化 */
+	setAppearance(patch: Partial<Appearance>): void;
 
 	// 项目
 	importProjects(): Promise<void>;
@@ -432,6 +443,7 @@ export const useApp = create<AppState>()((set, get) => {
 		view: "welcome",
 		settingsTab: "providers",
 		theme: storedTheme(),
+		appearance: storedAppearance(),
 		resolvedTheme: resolveTheme(storedTheme()),
 		configVersion: 0,
 		folderPicker: { open: false },
@@ -516,6 +528,12 @@ export const useApp = create<AppState>()((set, get) => {
 			storeTheme(mode);
 			set({ theme: mode, resolvedTheme: applyTheme(mode) });
 			syncDesktopTheme(mode);
+		},
+
+		setAppearance(patch) {
+			const next = applyAppearance(normalizeAppearance({ ...get().appearance, ...patch }));
+			storeAppearance(next);
+			set({ appearance: next });
 		},
 
 		// ----- 项目 -----

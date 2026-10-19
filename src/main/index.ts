@@ -115,7 +115,7 @@ function createWindow(show = true): BrowserWindow {
 		title: "FloWork",
 		...(windowIcon ? { icon: windowIcon } : {}),
 		// 页面渲染前可见的窗口底色，需与 styles.css 的 --color-window 一致
-		backgroundColor: nativeTheme.shouldUseDarkColors ? "#0d1222" : "#eef1f6",
+		backgroundColor: nativeTheme.shouldUseDarkColors ? "#141417" : "#f5f5f7",
 		autoHideMenuBar: true,
 		// 自绘标题栏：整条栏为拖拽区，最小化 / 最大化 / 关闭由界面自绘（与设计稿一致），
 		// 因此 Windows / Linux 不再使用系统 titleBarOverlay；macOS 保留红绿灯。

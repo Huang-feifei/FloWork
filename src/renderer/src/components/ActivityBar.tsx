@@ -9,11 +9,11 @@ function ActivityItem({ icon, label, active, badge, onClick }: { icon: Parameter
 			type="button"
 			title={label}
 			onClick={onClick}
-			className={`relative flex size-9 items-center justify-center rounded-[10px] ${
+			className={`relative flex size-[var(--activity-item)] items-center justify-center rounded-[10px] ${
 				active ? "bg-panel-2 text-primary" : "text-faint hover:bg-highlight hover:text-muted"
 			}`}
 		>
-			<Icon name={icon} className="size-[18px]" />
+			<Icon name={icon} className="size-[var(--activity-icon)]" />
 			{badge && (
 				<span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-warn px-1 text-[10px] font-semibold text-warn-foreground">
 					{badge}

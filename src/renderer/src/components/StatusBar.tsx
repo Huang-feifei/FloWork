@@ -31,7 +31,7 @@ function Usage() {
 		<>
 			{totals.input + totals.output > 0 && (
 				<span
-					className="px-2.5 tabular-nums"
+					className="shrink-0 px-2.5 tabular-nums"
 					title="累计输入 / 输出 token 与费用"
 				>
 					↑{formatTokens(totals.input)} ↓{formatTokens(totals.output)}
@@ -40,7 +40,7 @@ function Usage() {
 			)}
 			{contextPct !== null && (
 				<span
-					className="flex items-center gap-1.5 px-2.5"
+					className="flex shrink-0 items-center gap-1.5 px-2.5"
 					title="最近一次请求占用的上下文窗口"
 				>
 					ctx

@@ -119,6 +119,7 @@ const PATHS = {
 			<path d="M4 18h16" />
 		</>
 	),
+	check: <path d="M20 6 9 17l-5-5" />,
 	x: (
 		<>
 			<path d="M18 6 6 18" />
