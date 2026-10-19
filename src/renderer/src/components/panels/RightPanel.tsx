@@ -14,7 +14,7 @@ export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteO
 	{ id: "server", label: "服务器目录", hint: "浏览服务器上的任意目录、上传下载", remoteOnly: true },
 	{ id: "services", label: "服务状态", hint: "远端主机的负载、服务与端口（只读）", remoteOnly: true },
 	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
-	{ id: "browser", label: "浏览器", hint: "在聊天旁浏览网页（桌面版）" },
+	{ id: "browser", label: "内置浏览器", hint: "在聊天旁浏览网页、预览本地 HTML（桌面版）" },
 ];
 
 /** 300px 宽的面板里放不下完整页签名，分段控件用短名，完整名字放 title */
@@ -23,7 +23,7 @@ const SHORT: Record<string, string> = {
 	server: "目录",
 	services: "服务",
 	session: "会话",
-	browser: "浏览",
+	browser: "内置浏览器",
 };
 
 export function useChangedCount(): number {
@@ -102,16 +102,17 @@ export function RightPanel() {
 					localStorage.setItem(WIDTH_KEY, String(next));
 				}} />}
 			<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-				<Segmented
-					items={tabs.map((t) => ({
-						id: t.id,
-						label: t.id === "session" && changedCount > 0 ? `${SHORT[t.id] ?? t.label} ${changedCount}` : (SHORT[t.id] ?? t.label),
-						title: t.hint,
-					}))}
-					active={active ?? ""}
-					onChange={(id) => setRightPanel(id as Panel)}
-				/>
-				<div className="flex-1" />
+				<div className="fw-seg-scroll min-w-0 flex-1">
+					<Segmented
+						items={tabs.map((t) => ({
+							id: t.id,
+							label: t.id === "session" && changedCount > 0 ? `${SHORT[t.id] ?? t.label} ${changedCount}` : (SHORT[t.id] ?? t.label),
+							title: t.hint,
+						}))}
+						active={active ?? ""}
+						onChange={(id) => setRightPanel(id as Panel)}
+					/>
+				</div>
 				<button
 					type="button"
 					onClick={() => setRightPanel(null)}

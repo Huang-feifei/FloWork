@@ -269,6 +269,14 @@ html[data-theme="dark"] .fw-float {
 	border-radius: var(--radius-pill);
 	background: rgb(0 0 0 / 0.05);
 }
+/* 分段控件放不下时横向滚动（不换行、不撑破面板），滚动条隐藏 */
+.fw-seg-scroll {
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.fw-seg-scroll::-webkit-scrollbar {
+	display: none;
+}
 html[data-theme="dark"] .fw-seg {
 	background: rgb(255 255 255 / 0.08);
 }

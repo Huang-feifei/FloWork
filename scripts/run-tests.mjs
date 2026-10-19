@@ -24,6 +24,7 @@ const SUITES = [
 	// 还需要 FLOWORK_TEST_SSH_CONTAINER（会在容器里重新生成主机密钥）；未设置时跳过
 	{ name: "host-key", file: "scripts/test-host-key.mjs", needsBuild: false },
 	{ name: "projects", file: "scripts/test-projects.mjs", needsBuild: true },
+	{ name: "preview", file: "scripts/test-preview.mjs", needsBuild: true },
 	{ name: "sessions", file: "scripts/test-sessions.mjs", needsBuild: true },
 	{ name: "resources", file: "scripts/test-resources.mjs", needsBuild: true },
 	{ name: "ext-ui", file: "scripts/test-ext-ui.mjs", needsBuild: true },

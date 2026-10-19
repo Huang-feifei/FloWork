@@ -21,6 +21,11 @@ export const useBrowser = create<BrowserUIState>()(() => ({
 
 let initialized = false;
 let stateVersion = 0;
+/** 是否有程序化打开（预览等）正在进行，避免首屏默认页同时插一个标签 */
+let opening = false;
+
+/** 首次打开内置浏览器时的默认页，避免空白 */
+export const DEFAULT_BROWSER_URL = "https://www.bing.com/";
 
 export async function initializeBrowser(): Promise<void> {
 	const bridge = browserBridge();
@@ -42,6 +47,33 @@ export async function browserCommand(command: BrowserCommand): Promise<void> {
 		useBrowser.setState({ ...(version === stateVersion ? { state } : {}), ready: true, error: null });
 	} catch (error) {
 		useBrowser.setState({ error: errorText(error) });
+	}
+}
+
+/** 打开内置浏览器时，如果还没有任何标签页就默认到必应 */
+export async function ensureBrowserDefault(): Promise<void> {
+	if (!browserBridge()) return;
+	await initializeBrowser();
+	if (opening) return;
+	if (useBrowser.getState().state.tabs.length === 0) await browserCommand({ type: "create", url: DEFAULT_BROWSER_URL });
+}
+
+/** 在内置浏览器里打开一个地址：当前是空白页或默认页时复用，否则新开标签；网页版退回系统浏览器 */
+export async function openInBrowser(url: string): Promise<void> {
+	if (!browserBridge()) {
+		window.open(url, "_blank", "noopener,noreferrer");
+		return;
+	}
+	opening = true;
+	try {
+		await initializeBrowser();
+		const { tabs, activeTabId } = useBrowser.getState().state;
+		const active = tabs.find((tab) => tab.id === activeTabId);
+		if (!active) await browserCommand({ type: "create", url });
+		else if (active.url === "about:blank" || active.url === DEFAULT_BROWSER_URL) await browserCommand({ type: "navigate", tabId: active.id, url });
+		else await browserCommand({ type: "create", url });
+	} finally {
+		opening = false;
 	}
 }
 

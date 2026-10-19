@@ -24,6 +24,7 @@ import { acceptHostKey, inspectHostKey } from "./host-key";
 import { OpsPathMap } from "./ops-paths";
 import { HostStore, type SecretCodec } from "./hosts";
 import { getPiAgentDir, getPiCliSessionsDir } from "./paths";
+import { PreviewServer } from "./preview-server";
 import { ProjectStore, samePath } from "./projects";
 import * as remoteFs from "./remote-fs";
 import { probeHost, sshBinary, sshRun } from "./ssh";
@@ -79,6 +80,8 @@ export class Backend {
 	private readonly opsPaths = new OpsPathMap();
 	/** handleId → 运维会话（用于把 worker 返回的状态里的路径换回远程路径） */
 	private readonly opsHandles = new Set<string>();
+	/** 本地预览服务：把项目根以只读 HTTP 暴露给内置浏览器 */
+	private readonly preview = new PreviewServer();
 
 	constructor(private readonly host: BackendHost) {
 		this.hosts = new HostStore(undefined, host.secrets);
@@ -261,6 +264,11 @@ export class Backend {
 				if (!this.host.openTerminal) throw new Error("当前外壳不支持在终端中打开");
 				this.host.openTerminal(resolveInside(params.root, params.path).abs);
 				return null;
+			}
+			case "preview.serve": {
+				const params = rawParams as BackendMethods["preview.serve"]["params"];
+				if (await this.hostOf(params.root)) throw new Error("远程项目暂不支持在浏览器中预览");
+				return this.preview.serve(params.root);
 			}
 			// ----- 服务器目录：按 hostId + 绝对路径操作 -----
 			case "server.list": {
@@ -538,6 +546,7 @@ export class Backend {
 
 	async shutdown(): Promise<void> {
 		this.terminals.closeAll();
+		this.preview.closeAll();
 		await this.workers.shutdownAll();
 	}
 }

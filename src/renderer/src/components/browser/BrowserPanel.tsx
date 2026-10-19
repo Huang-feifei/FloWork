@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { normalizeBrowserUrl } from "@shared/browser";
-import { browserBridge, browserCommand, initializeBrowser, useBrowser, useBrowserViewport } from "../../lib/browser";
+import { browserBridge, browserCommand, ensureBrowserDefault, useBrowser, useBrowserViewport } from "../../lib/browser";
 import { Icon, type IconName } from "../Icon";
 import { Button } from "../ui";
 
@@ -25,7 +25,7 @@ export function BrowserPanel() {
 	const hasPage = !!active?.url && active.url !== "about:blank" && !active.error;
 	useBrowserViewport(host, desktop && hasPage);
 
-	useEffect(() => { void initializeBrowser(); }, []);
+	useEffect(() => { void ensureBrowserDefault(); }, []);
 	useEffect(() => {
 		setAddress(active?.url === "about:blank" ? "" : active?.url ?? "");
 		setAddressError(null);

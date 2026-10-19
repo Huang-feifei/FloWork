@@ -7,6 +7,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { type FilePreview as Preview, WRITE_CONFLICT_PREFIX } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
+import { browserBridge, openInBrowser } from "../../lib/browser";
 import { collectSessionFiles } from "../../lib/session-files";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
@@ -39,7 +40,7 @@ export function FilePreview() {
 	const cwd = useApp((s) => s.cwd);
 	const messages = useApp((s) => s.messages);
 	const filesVersion = useApp((s) => s.filesVersion);
-	const { openPreview, insertIntoPrompt, pushNotice, refreshFiles } = useApp.getState();
+	const { openPreview, insertIntoPrompt, pushNotice, refreshFiles, setRightPanel } = useApp.getState();
 	const [file, setFile] = useState<Preview | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [tab, setTab] = useState<"content" | "changes">("content");
@@ -57,6 +58,8 @@ export function FilePreview() {
 
 	const dirty = file !== null && editing && draft !== normalizeEol(file.text);
 	const editable = file !== null && !file.binary && !file.truncated;
+	/** HTML / SVG 可以交给内置浏览器渲染；仅本地项目（远程文件在 SSH 后面） */
+	const canPreviewInBrowser = file !== null && !file.binary && !previewHostId && !!cwd && /\.(?:html?|svg)$/i.test(path ?? "");
 
 	/** 读文件：服务器目录里的文件（带 hostId）走 server.read，其余走本地工作区 */
 	const readFile = useCallback(
@@ -107,6 +110,22 @@ export function FilePreview() {
 		if (dirty && !(await askConfirm({ title: "关闭文件", message: "有未保存的修改，确定关闭？", confirmLabel: "关闭", danger: true }))) return;
 		openPreview(null);
 	}, [dirty, openPreview]);
+
+	const openBrowserPreview = useCallback(async () => {
+		if (!path || !cwd || previewHostId) return;
+		try {
+			const { origin } = await api.servePreview(cwd);
+			const url = `${origin}/${path.split("/").map(encodeURIComponent).join("/")}`;
+			if (browserBridge()) {
+				setRightPanel("browser");
+				await openInBrowser(url);
+			} else {
+				window.open(url, "_blank", "noopener,noreferrer");
+			}
+		} catch (e) {
+			pushNotice("error", `预览失败：${errorText(e)}`);
+		}
+	}, [path, cwd, previewHostId, setRightPanel, pushNotice]);
 
 	const save = useCallback(async () => {
 		if (!path || !file || !dirty || saving || (!previewHostId && !cwd)) return;
@@ -172,6 +191,17 @@ export function FilePreview() {
 				{editable && tab === "content" && !editing && (
 					<button type="button" onClick={() => setEditing(true)} className="flex h-8 items-center rounded-full bg-panel-2 px-3.5 hover:bg-highlight">
 						编辑
+					</button>
+				)}
+				{canPreviewInBrowser && (
+					<button
+						type="button"
+						onClick={() => void openBrowserPreview()}
+						title="在内置浏览器中预览渲染效果"
+						className="flex h-8 items-center gap-1.5 rounded-full bg-panel-2 px-3.5 hover:bg-highlight"
+					>
+						<Icon name="globe" className="size-3.5" />
+						预览
 					</button>
 				)}
 				{editing && (

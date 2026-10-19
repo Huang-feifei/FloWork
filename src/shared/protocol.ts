@@ -765,6 +765,8 @@ export interface BackendMethods {
 	"workspace.reveal": { params: { root: string; path: string }; result: null };
 	/** 在系统终端中打开所在目录（仅桌面版） */
 	"workspace.openTerminal": { params: { root: string; path: string }; result: null };
+	/** 为项目根目录起一个只读的本地预览服务，返回可直接在内置浏览器打开的 origin（仅本地项目） */
+	"preview.serve": { params: { root: string }; result: { origin: string } };
 	// ----- 服务器目录：按 hostId + 绝对路径操作，不限定在项目根内 -----
 	/** 列目录；path 省略时从 / 开始 */
 	"server.list": { params: { hostId: string; path?: string }; result: ServerDirListing };

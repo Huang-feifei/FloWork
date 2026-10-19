@@ -73,6 +73,7 @@ export const api = {
 	moveWorkspaceEntry: (root: string, path: string, targetDir: string) => call("workspace.move", { root, path, targetDir }),
 	revealWorkspaceEntry: (root: string, path: string) => call("workspace.reveal", { root, path }),
 	openTerminalAt: (root: string, path: string) => call("workspace.openTerminal", { root, path }),
+	servePreview: (root: string) => call("preview.serve", { root }),
 
 	service: <C extends ServiceCommand>(command: C) => call("service.send", command) as Promise<CommandResult<C>>,
 
