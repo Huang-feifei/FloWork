@@ -185,21 +185,34 @@ function entryPreview(entry: LooseRecord): { role?: string; preview: string } {
 	return { preview: str(entry.type) };
 }
 
+/**
+ * 会话树 → 前序扁平数组（children 一律为空），由渲染层用 parentId 还原成树。
+ *
+ * 为什么不直接发嵌套树：Electron utilityProcess 的消息在嵌套约 1000 层以上会被
+ * **静默投递成 null**（不报错），而长会话的线性链很容易超过这个深度，主进程读
+ * `message.kind` 就会抛未捕获异常。扁平化后消息深度只有 1 层，彻底避开该限制。
+ */
 export function toTree(nodes: readonly PiTreeNode[]): SessionTreeNode[] {
-	return nodes.map((node) => {
-		const entry = asRecord(node.entry);
-		const { role, preview } = entryPreview(entry);
-		return {
-			id: str(entry.id),
-			parentId: typeof entry.parentId === "string" ? entry.parentId : null,
-			entryType: str(entry.type),
-			role,
-			preview,
-			label: node.label,
-			timestamp: str(entry.timestamp),
-			children: toTree(node.children),
-		};
-	});
+	const out: SessionTreeNode[] = [];
+	const walk = (list: readonly PiTreeNode[]) => {
+		for (const node of list) {
+			const entry = asRecord(node.entry);
+			const { role, preview } = entryPreview(entry);
+			out.push({
+				id: str(entry.id),
+				parentId: typeof entry.parentId === "string" ? entry.parentId : null,
+				entryType: str(entry.type),
+				role,
+				preview,
+				label: node.label,
+				timestamp: str(entry.timestamp),
+				children: [],
+			});
+			walk(node.children);
+		}
+	};
+	walk(nodes);
+	return out;
 }
 
 /**

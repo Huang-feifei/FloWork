@@ -248,6 +248,29 @@ async function runChecks(client, observer, SessionManager, data) {
 		await assert.rejects(client.call("session.open", { cwd: project, sessionPath: f.race.path }), /.+/);
 		assert.equal(existsSync(f.race.path), false);
 		report("open/delete竞态无复活、无存活owner并推送sessions_changed");
+
+		// 长会话回归：线性链 >1300 层时，Electron utilityProcess 会把嵌套过深的消息静默投递成
+		// null（不报错），主进程读 message.kind 就抛未捕获异常。因此 get_tree 必须下发扁平条目，
+		// 由渲染层用 parentId 还原成树（见 worker/adapter.ts 的 toTree、renderer 的 buildTree）。
+		const deepCount = 1400;
+		const deepManager = SessionManager.create(project);
+		for (let i = 0; i < deepCount; i += 1) deepManager.appendMessage({ role: "user", content: [{ type: "text", text: `deep ${i}` }], timestamp: Date.now() });
+		const deepFixture = { path: deepManager.getSessionFile(), id: deepManager.getSessionId(), cwd: project };
+		const deepOpened = await open(deepFixture);
+		const deepTree = (await client.send(deepOpened.handleId, { type: "get_tree" })).tree;
+		assert.ok(deepTree.length > 1300, `get_tree 必须返回全部条目（得到 ${deepTree.length}）`);
+		assert.ok(deepTree.every((node) => Array.isArray(node.children) && node.children.length === 0), "会话树必须扁平化下发，否则深链会被 Electron 置为 null");
+		const deepById = new Map(deepTree.map((node) => [node.id, node]));
+		let deepest = 0;
+		for (const node of deepTree) {
+			let depth = 0;
+			let cursor = node;
+			while (cursor?.parentId && deepById.has(cursor.parentId)) { depth += 1; cursor = deepById.get(cursor.parentId); }
+			if (depth > deepest) deepest = depth;
+		}
+		assert.equal(deepest, deepTree.length - 1, "扁平列表必须能用 parentId 还原出完整单链");
+		await close(deepOpened.handleId);
+		report("长会话（>1300 层）get_tree 扁平化：深嵌套不置空、链路完整");
 	} finally {
 		for (const handleId of active) await client.call("session.close", { handleId }).catch(() => undefined);
 	}

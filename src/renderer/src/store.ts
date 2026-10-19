@@ -30,6 +30,7 @@ import type { ConnectionStatus } from "./api/transport";
 import { askConfirm } from "./components/ConfirmDialog";
 import { disposeTerminal } from "./components/terminal/TerminalPanel";
 import { getRecentCwds } from "./lib/recent";
+import { buildTree } from "./lib/session-tree";
 import { emptySlice, pickSlice, reduceEvent, type SessionSlice, waitingCount } from "./session-slice";
 import {
 	applyTheme,
@@ -1097,7 +1098,8 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async loadTree() {
 			const result = await active((h) => api.session(h, { type: "get_tree" }));
-			if (result) set({ tree: result.tree, leafId: result.leafId });
+			// worker 发来的是前序扁平列表，这里还原成树供 SessionRail 使用
+			if (result) set({ tree: buildTree(result.tree), leafId: result.leafId });
 		},
 
 		async navigateTo(entryId) {

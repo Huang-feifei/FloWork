@@ -13,6 +13,24 @@ export interface TreeRow {
 	branchStart: boolean;
 }
 
+/**
+ * 把 worker 发来的前序扁平条目列表还原成树（见 worker/adapter.ts 的 toTree）。
+ * 父节点不在列表里（例如被裁剪）时按根节点处理。
+ */
+export function buildTree(flat: readonly SessionTreeNode[]): SessionTreeNode[] {
+	const byId = new Map<string, SessionTreeNode>();
+	for (const node of flat) byId.set(node.id, { ...node, children: [] });
+	const roots: SessionTreeNode[] = [];
+	for (const node of flat) {
+		const self = byId.get(node.id);
+		if (!self) continue;
+		const parent = node.parentId ? byId.get(node.parentId) : undefined;
+		if (parent) parent.children.push(self);
+		else roots.push(self);
+	}
+	return roots;
+}
+
 /** 在树中只显示用户与助手消息，其他条目（工具结果、模型切换等）透明穿过 */
 export function isVisible(node: SessionTreeNode): boolean {
 	if (node.entryType === "branch_summary" || node.entryType === "compaction") return true;

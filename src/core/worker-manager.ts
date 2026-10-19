@@ -72,6 +72,12 @@ export class WorkerClient {
 			}, INIT_TIMEOUT_MS);
 
 			proc.onMessage((message) => {
+				// Electron utilityProcess 在消息过深等情况下会静默投递 null（不报错），
+				// 这里先挡住，避免主进程抛未捕获异常弹出错误框。
+				if (!message || typeof message !== "object") {
+					console.error(`${tag} 忽略无效消息：${String(message)}`);
+					return;
+				}
 				switch (message.kind) {
 					case "ready":
 						ready = true;
