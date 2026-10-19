@@ -256,6 +256,27 @@ const PATHS = {
 	),
 
 	/* 会话区 */
+	copy: (
+		<>
+			<rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+			<path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+		</>
+	),
+	undo: (
+		<>
+			<path d="M9 14 4 9l5-5" />
+			<path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
+		</>
+	),
+	"list-checks": (
+		<>
+			<path d="m3 17 2 2 4-4" />
+			<path d="m3 7 2 2 4-4" />
+			<path d="M13 6h8" />
+			<path d="M13 12h8" />
+			<path d="M13 18h8" />
+		</>
+	),
 	"git-fork": (
 		<>
 			<circle

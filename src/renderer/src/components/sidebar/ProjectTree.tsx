@@ -8,7 +8,7 @@ import { useShallow } from "zustand/react/shallow";
 import type { Project, ProjectGroup, SessionSummary } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { relativeTime } from "../../lib/format";
-import { projectName, useApp } from "../../store";
+import { normalizedPath, projectName, selectOpenSession, useApp } from "../../store";
 import { Icon } from "../Icon";
 import { Spinner } from "../terminal/Spinner";
 import { askText } from "../PromptDialog";
@@ -71,7 +71,7 @@ function StatusMark({ pid }: { pid: string }) {
 }
 
 /** 一条历史会话：点击打开；右键或 ⋯ 菜单重命名 / 删除 */
-function SessionRow({ project, session, active }: { project: Project; session: SessionSummary; active: boolean }) {
+function SessionRow({ project, session }: { project: Project; session: SessionSummary }) {
 	const busy = useApp((s) => s.sessionBusy(project.id, session.path));
 	const pending = useApp((s) => s.sessionOperation(project.id, session.path));
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -107,9 +107,7 @@ function SessionRow({ project, session, active }: { project: Project; session: S
 				e.preventDefault();
 				setMenu({ x: e.clientX, y: e.clientY });
 			}}
-			className={`group/session relative flex items-center rounded-[10px] ${
-				active ? "bg-primary-soft" : "hover:bg-panel-2"
-			}`}
+			className="group/session relative flex items-center rounded-[10px] hover:bg-panel-2"
 		>
 			<button
 				type="button"
@@ -117,7 +115,7 @@ function SessionRow({ project, session, active }: { project: Project; session: S
 				title={label}
 				className="min-w-0 flex-1 px-2.5 py-1.5 text-left"
 			>
-				<div className={`truncate text-[12.5px] ${active ? "font-medium text-primary" : ""} ${pending ? "text-muted" : ""}`}>{label}</div>
+				<div className={`truncate text-[12.5px] ${pending ? "text-muted" : ""}`}>{label}</div>
 				<div className="text-[11px] text-faint">
 					{relativeTime(session.modified)} · {session.messageCount} 条
 				</div>
@@ -142,14 +140,62 @@ function SessionRow({ project, session, active }: { project: Project; session: S
 	);
 }
 
+/** 项目下打开中的会话（标签）：点击切换，× 关闭 */
+const EMPTY_HANDLES: string[] = [];
+
+function OpenSessionRow({ project, handleId }: { project: Project; handleId: string }) {
+	const info = useApp(useShallow((s) => selectOpenSession(s, handleId)));
+	const label = info.name || (info.draft ? "新会话" : "会话");
+	return (
+		<div className={`group/open relative flex items-center rounded-[10px] ${info.active ? "bg-primary-soft" : "hover:bg-panel-2"}`}>
+			<button
+				type="button"
+				onClick={() => useApp.getState().activateSession(handleId)}
+				title={label}
+				className="flex min-w-0 flex-1 items-center gap-1.5 px-2.5 py-1.5 text-left"
+			>
+				{info.waiting > 0 ? (
+					<span className="shrink-0 rounded-full bg-warn-soft px-1.5 py-0.5 text-[10px] font-medium text-warn" title="等待你确认">
+						待确认
+					</span>
+				) : info.running ? (
+					<Spinner className="shrink-0 text-[11px] text-primary" />
+				) : (
+					<span className="size-1.5 shrink-0 rounded-full border border-border-strong" title="空闲" />
+				)}
+				<span className={`min-w-0 truncate text-[12.5px] ${info.active ? "font-medium text-primary" : ""}`}>{label}</span>
+			</button>
+			<button
+				type="button"
+				disabled={project.missing}
+				onClick={() => void useApp.getState().closeSession(handleId)}
+				title="关闭会话"
+				className="invisible mr-1 flex size-6 shrink-0 items-center justify-center rounded-full text-muted group-hover/open:visible hover:bg-panel-2 hover:text-fg disabled:opacity-40"
+			>
+				<Icon
+					name="x"
+					className="size-3.5"
+				/>
+			</button>
+		</div>
+	);
+}
+
 function SessionList({ project }: { project: Project }) {
 	const sessions = useApp((s) => s.projectSessions[project.id]);
-	const activeProjectId = useApp((s) => s.activeProjectId);
-	const activeFile = useApp((s) => s.state?.sessionFile);
-	const view = useApp((s) => s.view);
-	const { openProject, newSessionIn } = useApp.getState();
+	const handles = useApp((s) => s.projectHandles[project.id] ?? EMPTY_HANDLES);
+	const openFiles = useApp(
+		useShallow((s) =>
+			(s.projectHandles[project.id] ?? [])
+				.map((h) => (s.handleId === h ? s : s.background[h])?.state?.sessionFile ?? "")
+				.filter(Boolean)
+				.map(normalizedPath),
+		),
+	);
+	const { newSessionIn } = useApp.getState();
 	const [showAll, setShowAll] = useState(false);
-	const list = sessions ?? [];
+	const openSet = new Set(openFiles);
+	const list = (sessions ?? []).filter((s) => !openSet.has(normalizedPath(s.path)));
 	const visible = showAll ? list : list.slice(0, SESSIONS_PREVIEW);
 	const overflow = list.length > SESSIONS_PREVIEW;
 
@@ -167,7 +213,19 @@ function SessionList({ project }: { project: Project }) {
 				/>
 				新会话
 			</button>
+			{handles.length > 0 && (
+				<div className="space-y-0.5">
+					{handles.map((handleId) => (
+						<OpenSessionRow
+							key={handleId}
+							project={project}
+							handleId={handleId}
+						/>
+					))}
+				</div>
+			)}
 			{sessions === undefined && <div className="px-2.5 py-1 text-[11.5px] text-faint">加载中…</div>}
+			{list.length > 0 && handles.length > 0 && <div className="px-2.5 pt-1.5 pb-0.5 text-[10.5px] font-semibold tracking-wide text-faint">历史会话</div>}
 			{/* 展开全部时限制高度并在列表内部滚动，会话再多也不会把侧边栏撑长 */}
 			<div className={showAll && overflow ? "max-h-[42vh] space-y-0.5 overflow-y-auto overscroll-contain" : "space-y-0.5"}>
 				{visible.map((s) => (
@@ -175,7 +233,6 @@ function SessionList({ project }: { project: Project }) {
 						key={s.path}
 						project={project}
 						session={s}
-						active={activeProjectId === project.id && s.path === activeFile && view === "chat"}
 					/>
 				))}
 			</div>

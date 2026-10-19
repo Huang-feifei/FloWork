@@ -60,7 +60,7 @@ function Usage() {
 export function StatusBar() {
 	const info = useApp((s) => s.info);
 	const connection = useApp((s) => s.connection);
-	const cwd = useApp((s) => s.cwd);
+	const activeOpen = useApp((s) => s.handleId !== null);
 	const view = useApp((s) => s.view);
 	const background = useApp((s) => s.background);
 	const pending = useApp((s) => waitingCount(s));
@@ -70,7 +70,7 @@ export function StatusBar() {
 
 	const backgroundRunning = Object.values(background).filter((s) => s.isRunning).length;
 	const backgroundWaiting = Object.values(background).reduce((n, s) => n + waitingCount(s), 0);
-	const workers = backgroundRunning + (cwd ? 1 : 0);
+	const workers = backgroundRunning + (activeOpen ? 1 : 0);
 	const waiting = pending + backgroundWaiting;
 
 	return (

@@ -2,9 +2,9 @@
  * 界面状态。
  *
  * - 项目：侧边栏中导入的工作区，列表由后端保存（~/.flowork/projects.json）。
- * - 每个打开过的项目有自己的 session worker 与会话状态切片（见 session-slice.ts）。
- *   当前项目的切片字段展开在 store 顶层；切换项目时把它移入 background，后台项目的任务继续运行、事件照常累积。
- * - 同一项目内的“新会话 / 切换历史会话”在同一个 worker 内通过 new_session / switch_session 完成。
+ * - 每个打开的会话有自己的 session worker 与会话状态切片（见 session-slice.ts）。
+ *   当前显示的会话字段展开在 store 顶层，其余打开中的会话按 handleId 存在 background，全部继续运行、事件照常累积。
+ * - 一个项目可以同时打开多个会话（标签式）；「新会话」会新起一个 worker，点开历史会话也新开一个，可分别关闭。
  */
 import { create } from "zustand";
 import {
@@ -100,8 +100,12 @@ interface AppState extends SessionSlice {
 	/** 更新指纹后要重试的动作（例如重新连接主机） */
 	hostKeyRetry: (() => void) | null;
 	activeProjectId: string | null;
-	/** 后台项目的会话切片 */
+	/** 未显示的打开会话切片，按 handleId 索引；当前显示的会话字段在 store 顶层 */
 	background: Record<string, SessionSlice>;
+	/** 项目 -> 打开中的 handleId（含当前显示的），按打开顺序 */
+	projectHandles: Record<string, string[]>;
+	/** 项目 -> 上次查看的 handleId（切回项目时恢复） */
+	projectActive: Record<string, string>;
 	/** 各项目的会话列表（展开时加载） */
 	projectSessions: Record<string, SessionSummary[]>;
 	sessionOperations: Record<string, "rename" | "delete">;
@@ -162,6 +166,12 @@ interface AppState extends SessionSlice {
 	refreshProjectSessions(projectId: string): Promise<void>;
 	projectStatus(projectId: string): ProjectStatus;
 	newSessionIn(projectId: string): Promise<void>;
+	/** 在指定项目里打开一个会话（sessionPath 为空则新草稿）；新起 worker，不影响已在运行的会话 */
+	openSessionIn(projectId: string, sessionPath?: string): Promise<void>;
+	/** 切换到某个已打开的会话 */
+	activateSession(handleId: string): void;
+	/** 关闭某个已打开的会话（运行中会先确认） */
+	closeSession(handleId: string): Promise<void>;
 
 	// 当前项目的会话
 	refreshSessions(): Promise<void>;
@@ -255,6 +265,28 @@ export function normalizedPath(path: string): string {
 	return /^(?:[a-z]:|\/\/)/i.test(normalized) ? normalized.toLowerCase() : normalized;
 }
 
+/** 一个项目里打开中的会话（供侧边栏渲染，字段均为基本类型，便于 useShallow 比较） */
+export interface OpenSession {
+	handleId: string;
+	name: string;
+	running: boolean;
+	waiting: number;
+	active: boolean;
+	draft: boolean;
+}
+
+export function selectOpenSession(s: AppState, handleId: string): OpenSession {
+	const slice: SessionSlice | undefined = s.handleId === handleId ? s : s.background[handleId];
+	return {
+		handleId,
+		name: slice?.state?.sessionName ?? "",
+		running: !!slice?.isRunning,
+		waiting: slice ? waitingCount(slice) : 0,
+		active: s.handleId === handleId,
+		draft: !slice?.state?.sessionFile,
+	};
+}
+
 function operationKey(cwd: string, path: string): string {
 	return JSON.stringify([normalizedPath(cwd), normalizedPath(path)]);
 }
@@ -269,29 +301,59 @@ export function hostKeyChangedHost(text: string): string | null {
 }
 
 export const useApp = create<AppState>()((set, get) => {
-	// ----- 切片读写：当前项目在顶层，其他在 background -----
+	// ----- 切片读写：当前显示的会话在顶层，其他打开中的会话在 background（按 handleId） -----
 
-	function sliceOf(pid: string): SessionSlice | undefined {
-		if (pid === get().activeProjectId) return pickSlice(get());
-		return get().background[pid];
+	function sliceOfHandle(handleId: string): SessionSlice | undefined {
+		if (get().handleId === handleId) return pickSlice(get());
+		return get().background[handleId];
 	}
 
-	function patchSlice(pid: string, patch: Partial<SessionSlice> | ((s: SessionSlice) => Partial<SessionSlice> | null)) {
+	function patchHandle(handleId: string, patch: Partial<SessionSlice> | ((s: SessionSlice) => Partial<SessionSlice> | null)) {
 		set((st) => {
-			if (pid === st.activeProjectId) {
+			if (st.handleId === handleId) {
 				const p = typeof patch === "function" ? patch(pickSlice(st)) : patch;
 				return p ?? st;
 			}
-			const current = st.background[pid];
+			const current = st.background[handleId];
 			if (!current) return st;
 			const p = typeof patch === "function" ? patch(current) : patch;
-			return p ? { background: { ...st.background, [pid]: { ...current, ...p } } } : st;
+			return p ? { background: { ...st.background, [handleId]: { ...current, ...p } } } : st;
 		});
 	}
 
+	/** 所有打开中的会话切片：[handleId, slice] */
+	function allSlices(): Array<[string, SessionSlice]> {
+		const st = get();
+		const out: Array<[string, SessionSlice]> = [];
+		if (st.handleId) out.push([st.handleId, pickSlice(st)]);
+		for (const [handleId, slice] of Object.entries(st.background)) out.push([handleId, slice]);
+		return out;
+	}
+
 	function projectByHandle(handleId: string): string | undefined {
-		if (get().handleId === handleId) return get().activeProjectId ?? undefined;
-		return Object.entries(get().background).find(([, s]) => s.handleId === handleId)?.[0];
+		const st = get();
+		if (st.handleId === handleId) return st.activeProjectId ?? undefined;
+		for (const [pid, handles] of Object.entries(st.projectHandles)) if (handles.includes(handleId)) return pid;
+		return undefined;
+	}
+
+	/** 把当前显示的会话收回 background（保留其进程与状态） */
+	function moveActiveToBackground(): void {
+		set((st) => {
+			if (!st.handleId) return st;
+			const background = { ...st.background };
+			if (!background[st.handleId]) background[st.handleId] = pickSlice(st);
+			const pid = st.activeProjectId;
+			return { background, ...(pid ? { projectActive: { ...st.projectActive, [pid]: st.handleId } } : {}) };
+		});
+	}
+
+	/** 登记一个新打开的会话（不切换显示） */
+	function registerHandle(pid: string, handleId: string, slice: SessionSlice): void {
+		set((st) => ({
+			background: { ...st.background, [handleId]: slice },
+			projectHandles: { ...st.projectHandles, [pid]: [...(st.projectHandles[pid] ?? []).filter((h) => h !== handleId), handleId] },
+		}));
 	}
 
 	function project(pid: string): Project | undefined {
@@ -313,22 +375,49 @@ export const useApp = create<AppState>()((set, get) => {
 	}
 
 	function owners(cwd: string, path: string): Array<[string, SessionSlice]> {
-		const st = get();
-		const slices: Array<[string, SessionSlice]> = Object.entries(st.background);
-		if (st.activeProjectId) slices.push([st.activeProjectId, pickSlice(st)]);
-		return slices.filter(([, slice]) => matchesFile(slice, cwd, path));
+		return allSlices().filter(([, slice]) => matchesFile(slice, cwd, path));
 	}
 
-	function clearOwner(pid: string, handleId: string): void {
+	/** 关闭一个会话：从打开列表移除；若关闭的是当前显示的，则切到同项目下一个或清空 */
+	function clearOwner(handleId: string): void {
+		const pid = projectByHandle(handleId);
 		set((st) => {
-			if (pid === st.activeProjectId) {
-				if (st.handleId !== handleId) return st;
-				return { ...emptySlice(project(pid)?.path ?? st.cwd), draft: { text: "", seq: st.draft.seq + 1 }, unread: { ...st.unread, [pid]: false } };
-			}
-			if (st.background[pid]?.handleId !== handleId) return st;
 			const background = { ...st.background };
-			delete background[pid];
-			return { background, unread: { ...st.unread, [pid]: false } };
+			delete background[handleId];
+			const projectHandles = { ...st.projectHandles };
+			const projectActive = { ...st.projectActive };
+			let next: { handleId: string; slice: SessionSlice } | undefined;
+			if (pid) {
+				const rest = (projectHandles[pid] ?? []).filter((h) => h !== handleId);
+				if (rest.length > 0) {
+					projectHandles[pid] = rest;
+					if (projectActive[pid] === handleId && rest[0]) projectActive[pid] = rest[0];
+				} else {
+					delete projectHandles[pid];
+					delete projectActive[pid];
+				}
+				if (st.handleId === handleId) {
+					const nextHandle = rest[0];
+					const slice = nextHandle ? background[nextHandle] : undefined;
+					if (nextHandle && slice) {
+						delete background[nextHandle];
+						next = { handleId: nextHandle, slice };
+					}
+				}
+			}
+			const unread = pid ? { ...st.unread, [pid]: false } : st.unread;
+			if (next) return { ...next.slice, background, projectHandles, projectActive, unread };
+			if (st.handleId === handleId) {
+				return {
+					...emptySlice(pid && project(pid) ? (project(pid) as Project).path : st.cwd),
+					draft: { text: "", seq: st.draft.seq + 1 },
+					background,
+					projectHandles,
+					projectActive,
+					unread,
+				};
+			}
+			return { background, projectHandles, projectActive, unread };
 		});
 	}
 
@@ -345,9 +434,7 @@ export const useApp = create<AppState>()((set, get) => {
 		});
 	}
 
-	async function call<T>(pid: string, fn: (handleId: string) => Promise<T>): Promise<T | undefined> {
-		const handleId = sliceOf(pid)?.handleId;
-		if (!handleId) return undefined;
+	async function call<T>(handleId: string, fn: (handleId: string) => Promise<T>): Promise<T | undefined> {
 		try {
 			return await fn(handleId);
 		} catch (error) {
@@ -356,47 +443,46 @@ export const useApp = create<AppState>()((set, get) => {
 		}
 	}
 
-	/** 对当前项目执行会话命令 */
+	/** 对当前显示的会话执行命令 */
 	function active<T>(fn: (handleId: string) => Promise<T>): Promise<T | undefined> {
-		const pid = get().activeProjectId;
-		return pid ? call(pid, fn) : Promise.resolve(undefined);
+		const handleId = get().handleId;
+		return handleId ? call(handleId, fn) : Promise.resolve(undefined);
 	}
 
-	async function reloadMessages(pid: string, state?: SessionState): Promise<void> {
-		const owner = sliceOf(pid);
-		if (!owner?.handleId) return;
-		if (state) patchSlice(pid, { state });
+	async function reloadMessages(handleId: string, state?: SessionState): Promise<void> {
+		const owner = sliceOfHandle(handleId);
+		if (!owner) return;
+		if (state) patchHandle(handleId, { state });
 		const file = (state ?? owner.state)?.sessionFile;
-		const messages = await call(pid, (h) => api.session(h, { type: "get_messages" }));
-		patchSlice(pid, (s) => s.handleId === owner.handleId && s.state?.sessionFile === file ? {
+		const messages = await call(handleId, (h) => api.session(h, { type: "get_messages" }));
+		patchHandle(handleId, (s) => s.handleId === handleId && s.state?.sessionFile === file ? {
 			messages: messages ?? [],
 			streaming: null,
 			toolArgsText: {},
 			toolRuns: {},
 			pendingApprovals: [],
 		} : null);
-		if (sliceOf(pid)?.handleId === owner.handleId && pid === get().activeProjectId && get().railVisible) void get().loadTree();
+		if (handleId === get().handleId && get().railVisible) void get().loadTree();
 	}
 
-	async function loadModelsFor(pid: string): Promise<void> {
-		const handleId = sliceOf(pid)?.handleId;
-		if (!handleId) return;
-		const models = await call(pid, (h) => api.session(h, { type: "get_available_models" }));
-		patchSlice(pid, (s) => s.handleId === handleId ? { models: models ?? [] } : null);
+	async function loadModelsFor(handleId: string): Promise<void> {
+		const models = await call(handleId, (h) => api.session(h, { type: "get_available_models" }));
+		patchHandle(handleId, (s) => s.handleId === handleId ? { models: models ?? [] } : null);
 	}
 
-	function handleEvent(pid: string, event: SessionEvent): void {
-		const isActive = pid === get().activeProjectId;
-		patchSlice(pid, (s) => reduceEvent(s, event));
-		const name = project(pid) ? projectName(project(pid) as Project) : "后台项目";
+	function handleEvent(handleId: string, event: SessionEvent): void {
+		const pid = projectByHandle(handleId);
+		const isActive = handleId === get().handleId;
+		patchHandle(handleId, (s) => reduceEvent(s, event));
+		const name = pid && project(pid) ? projectName(project(pid) as Project) : "会话";
 		switch (event.type) {
 			case "agent_settled":
-				void get().refreshProjectSessions(pid);
+				if (pid) void get().refreshProjectSessions(pid);
 				if (isActive) {
 					if (get().railVisible) void get().loadTree();
 					get().refreshFiles();
 				} else {
-					set((st) => ({ unread: { ...st.unread, [pid]: true } }));
+					if (pid) set((st) => ({ unread: { ...st.unread, [pid]: true } }));
 					get().pushNotice("info", `「${name}」的任务已${event.aborted ? "中断" : "完成"}`);
 				}
 				return;
@@ -407,10 +493,10 @@ export const useApp = create<AppState>()((set, get) => {
 				return;
 			}
 			case "session_info_changed":
-				void get().refreshProjectSessions(pid);
+				if (pid) void get().refreshProjectSessions(pid);
 				return;
 			case "session_changed":
-				void reloadMessages(pid, event.state);
+				void reloadMessages(handleId, event.state);
 				if (isActive) set((st) => ({ resourcesVersion: st.resourcesVersion + 1 }));
 				return;
 			case "notice":
@@ -455,6 +541,8 @@ export const useApp = create<AppState>()((set, get) => {
 		hostKeyRetry: null,
 		activeProjectId: null,
 		background: {},
+		projectHandles: {},
+		projectActive: {},
 		projectSessions: {},
 		sessionOperations: {},
 		expanded: storedExpanded(),
@@ -481,10 +569,10 @@ export const useApp = create<AppState>()((set, get) => {
 			let everOpened = false;
 			api.onStatus((connection) => {
 				set({ connection });
-				// 网页版断线重连后，后端已关闭所有会话：清空后台项目，重新打开当前项目
+				// 网页版断线重连后，后端已关闭所有会话：清空后台会话，重新打开当前项目
 				if (connection === "open" && everOpened) {
 					const pid = get().activeProjectId;
-					set({ background: {}, ...emptySlice() , activeProjectId: null });
+					set({ background: {}, projectHandles: {}, projectActive: {}, ...emptySlice(), activeProjectId: null });
 					if (pid) void get().openProject(pid);
 				}
 				if (connection === "open") everOpened = true;
@@ -598,75 +686,145 @@ export const useApp = create<AppState>()((set, get) => {
 
 		async openProject(pid, sessionPath) {
 			const target = project(pid);
-			if (!target || (sessionPath && get().sessionOperation(pid, sessionPath))) return;
+			if (!target) return;
+			if (sessionPath && get().sessionOperation(pid, sessionPath)) return;
+			if (pid === get().activeProjectId && get().connecting) return;
 			const prevId = get().activeProjectId;
 			if (prevId && prevId !== pid) advanceProject(prevId);
 			advanceProject(pid);
-			if (prevId === pid && get().connecting) return;
 			set({ view: "chat" });
-			if (pid !== get().activeProjectId || !get().handleId) {
-				if (target.missing) {
-					get().pushNotice("error", `文件夹不存在：${target.path}`);
+
+			// 指定会话：已打开就切过去，否则新开一个（不替换当前会话）
+			if (sessionPath) {
+				const existing = owners(target.path, sessionPath)[0];
+				if (existing) {
+					get().activateSession(existing[0]);
 					return;
 				}
-				// 当前项目移入后台（保留 pi 进程）
-				const prevId = get().activeProjectId;
-				const prev = pickSlice(get());
-				const background = { ...get().background };
-				if (prevId && prevId !== pid && prev.handleId) background[prevId] = prev;
-				const restored = background[pid];
-				delete background[pid];
-				set({
-					...(restored ?? { ...emptySlice(target.path), connecting: true }),
-					background,
-					activeProjectId: pid,
-					unread: { ...get().unread, [pid]: false },
-				});
+				await get().openSessionIn(pid, sessionPath);
+				return;
+			}
+
+			// 项目已有打开中的会话：切回上次查看的那个
+			const handles = get().projectHandles[pid] ?? [];
+			if (handles.length > 0) {
+				const handleId = get().projectActive[pid] ?? handles[0];
+				if (handleId) get().activateSession(handleId);
 				localStorage.setItem(LAST_PROJECT_KEY, pid);
 				void api.projects.touch(pid).then((projects) => set({ projects })).catch(() => undefined);
-				if (!restored) {
-					try {
-						// 未指定会话时继续该项目最近的会话
-						let initialSession = sessionPath;
-						if (!initialSession) {
-							const sessions = await api.service({ type: "list_sessions", cwd: target.path }).catch(() => []);
-							set((st) => ({ projectSessions: { ...st.projectSessions, [pid]: sessions } }));
-							initialSession = sessions[0]?.path;
-						}
-						const { handleId, state } = await api.openSession(target.path, get().approvalMode, initialSession);
-						if (get().activeProjectId !== pid) {
-							// 打开过程中用户已切走：作为后台项目保留
-							set((st) => ({ background: { ...st.background, [pid]: { ...emptySlice(target.path), handleId, state } } }));
-						} else set({ handleId, state, connecting: false });
-						await Promise.all([reloadMessages(pid), loadModelsFor(pid)]);
-					} catch (error) {
-						if (get().activeProjectId === pid) set({ connecting: false });
-						get().pushNotice("error", `打开项目失败：${errorText(error)}`);
-						return;
-					}
-				}
 				void get().refreshProjectSessions(pid);
+				return;
 			}
-			if (sessionPath && get().state?.sessionFile !== sessionPath) await get().switchSession(sessionPath);
+
+			// 项目还没打开过任何会话：继续最近的会话
+			if (target.missing) {
+				get().pushNotice("error", `文件夹不存在：${target.path}`);
+				return;
+			}
+			const sessions = await api.service({ type: "list_sessions", cwd: target.path }).catch(() => []);
+			set((st) => ({ projectSessions: { ...st.projectSessions, [pid]: sessions } }));
+			await get().openSessionIn(pid, sessions[0]?.path);
+		},
+
+		async openSessionIn(pid, sessionPath) {
+			const target = project(pid);
+			if (!target) return;
+			if (target.missing) {
+				get().pushNotice("error", `文件夹不存在：${target.path}`);
+				return;
+			}
+			// 当前项目正在连接中：避免重复打开
+			if (pid === get().activeProjectId && get().connecting) return;
+			// 同一个历史会话已经打开：直接切过去
+			if (sessionPath) {
+				const existing = owners(target.path, sessionPath)[0];
+				if (existing) {
+					get().activateSession(existing[0]);
+					return;
+				}
+			}
+			const epoch = advanceProject(pid);
+			// 把当前显示的会话收回后台，腾出顶层
+			moveActiveToBackground();
+			set({ ...emptySlice(target.path), connecting: true, activeProjectId: pid, view: "chat", unread: { ...get().unread, [pid]: false } });
+			localStorage.setItem(LAST_PROJECT_KEY, pid);
+			void api.projects.touch(pid).then((projects) => set({ projects })).catch(() => undefined);
+			try {
+				const { handleId, state } = await api.openSession(target.path, get().approvalMode, sessionPath);
+				if (projectEpochs.get(pid) !== epoch) {
+					await api.closeSession(handleId).catch(() => undefined);
+					return;
+				}
+				registerHandle(pid, handleId, { ...emptySlice(target.path), handleId, state });
+				if (get().activeProjectId === pid) get().activateSession(handleId);
+				await Promise.all([reloadMessages(handleId), loadModelsFor(handleId)]);
+			} catch (error) {
+				if (get().activeProjectId === pid && projectEpochs.get(pid) === epoch) set({ connecting: false });
+				get().pushNotice("error", `打开会话失败：${errorText(error)}`);
+				return;
+			}
+			void get().refreshProjectSessions(pid);
+		},
+
+		activateSession(handleId) {
+			const pid = projectByHandle(handleId);
+			if (!pid) return;
+			set((st) => {
+				if (st.handleId === handleId) {
+					return st.activeProjectId === pid
+						? { unread: { ...st.unread, [pid]: false } }
+						: { activeProjectId: pid, unread: { ...st.unread, [pid]: false } };
+				}
+				const incoming = st.background[handleId];
+				if (!incoming) return st;
+				const background = { ...st.background };
+				delete background[handleId];
+				if (st.handleId) background[st.handleId] = pickSlice(st);
+				return {
+					...incoming,
+					background,
+					activeProjectId: pid,
+					projectActive: { ...st.projectActive, [pid]: handleId },
+					unread: { ...st.unread, [pid]: false },
+				};
+			});
+			set({ view: "chat" });
+			localStorage.setItem(LAST_PROJECT_KEY, pid);
+			void api.projects.touch(pid).then((projects) => set({ projects })).catch(() => undefined);
+			if (get().railVisible) void get().loadTree();
+			get().refreshFiles();
+		},
+
+		async closeSession(handleId) {
+			const slice = sliceOfHandle(handleId);
+			if (slice?.isRunning && !(await askConfirm({ title: "关闭会话", message: "该会话有任务正在运行，关闭后任务会中断。继续？", confirmLabel: "关闭", danger: true }))) return;
+			try {
+				await api.closeSession(handleId);
+			} catch (error) {
+				get().pushNotice("error", `关闭会话失败：${errorText(error)}`);
+				return;
+			}
+			clearOwner(handleId);
 		},
 
 		async stopProject(pid) {
-			const slice = sliceOf(pid);
-			if (slice?.isRunning && !(await askConfirm({ title: "停止项目", message: "该项目有任务正在运行，停止后任务会中断。继续？", confirmLabel: "停止", danger: true }))) return;
+			const handles = [...(get().projectHandles[pid] ?? [])];
+			const running = handles.some((h) => sliceOfHandle(h)?.isRunning);
+			if (running && !(await askConfirm({ title: "停止项目", message: "该项目有任务正在运行，停止后任务会中断。继续？", confirmLabel: "停止", danger: true }))) return;
 			// 项目被关闭时连同它的终端一起释放；收起面板、切项目只是隐藏终端实例
 			const target = project(pid);
 			if (target) disposeTerminal(target.path, target.hostId);
 			const epoch = advanceProject(pid);
-			if (slice?.handleId) {
+			for (const handleId of handles) {
 				try {
-					await api.closeSession(slice.handleId);
+					await api.closeSession(handleId);
 				} catch (error) {
 					get().pushNotice("error", `停止项目失败：${errorText(error)}`);
 					return;
 				}
-				clearOwner(pid, slice.handleId);
+				clearOwner(handleId);
 			}
-			if (pid === get().activeProjectId && projectEpochs.get(pid) === epoch && !get().handleId) {
+			if (pid === get().activeProjectId && projectEpochs.get(pid) === epoch && !(get().projectHandles[pid] ?? []).length && !get().handleId) {
 				set({ ...emptySlice(), activeProjectId: null });
 			}
 		},
@@ -741,32 +899,14 @@ export const useApp = create<AppState>()((set, get) => {
 			if (!(await askConfirm({ title: "删除会话", message: `永久删除会话「${summary?.name || summary?.firstMessage || "（空会话）"}」？\n只删除该会话记录，不删除项目文件，也不删除分叉会话。此操作无法撤销。`, confirmLabel: "删除", danger: true }))) return;
 			const key = operationKey(p.path, path);
 			const targetOwners = owners(p.path, path);
-			const current = targetOwners.find(([ownerPid]) => ownerPid === get().activeProjectId);
-			const epoch = projectEpochs.get(pid) ?? 0;
+			const wasOpen = targetOwners.length > 0;
 			set((st) => ({ sessionOperations: { ...st.sessionOperations, [key]: "delete" } }));
 			try {
 				await api.sessions.delete(p.path, path);
-				for (const [ownerPid, owner] of targetOwners) {
-					if (owner.handleId && matchesFile(sliceOf(ownerPid), p.path, path)) clearOwner(ownerPid, owner.handleId);
-				}
+				for (const [handleId] of targetOwners) clearOwner(handleId);
 				void refreshHistory(p.path);
-				if (!current || current[0] !== pid || get().activeProjectId !== pid || (projectEpochs.get(pid) ?? 0) !== epoch ||
-					normalizedPath(project(pid)?.path ?? "") !== normalizedPath(p.path) || get().handleId || get().connecting || get().state) return;
-				const openingEpoch = advanceProject(pid);
-				set({ connecting: true });
-				try {
-					const { handleId, state } = await api.openSession(p.path, get().approvalMode);
-					if (get().activeProjectId !== pid || projectEpochs.get(pid) !== openingEpoch || get().handleId ||
-						normalizedPath(project(pid)?.path ?? "") !== normalizedPath(p.path)) {
-						await api.closeSession(handleId).catch(() => undefined);
-						return;
-					}
-					set({ ...emptySlice(p.path), handleId, state, view: "chat" });
-					await Promise.all([reloadMessages(pid), loadModelsFor(pid)]);
-				} catch (error) {
-					if (get().activeProjectId === pid && projectEpochs.get(pid) === openingEpoch) set({ connecting: false });
-					get().pushNotice("error", `会话已删除，但新会话打开失败：${errorText(error)}`);
-				}
+				// 删掉的正好是该项目最后一个打开的会话 → 补一个新会话，避免留下空窗
+				if (wasOpen && pid === get().activeProjectId && !(get().projectHandles[pid] ?? []).length) await get().openSessionIn(pid);
 			} catch (error) {
 				get().pushNotice("error", `删除会话失败：${errorText(error)}；原记录保留，可重新打开`);
 			} finally {
@@ -775,18 +915,26 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		projectStatus(pid) {
-			const s = sliceOf(pid);
-			return {
-				open: !!s?.handleId,
-				running: !!s?.isRunning,
-				waiting: s ? waitingCount(s) : 0,
-				unread: !!get().unread[pid],
-			};
+			const handles = get().projectHandles[pid] ?? [];
+			let running = false;
+			let waiting = 0;
+			for (const handleId of handles) {
+				const s = sliceOfHandle(handleId);
+				if (!s) continue;
+				if (s.isRunning) running = true;
+				waiting += waitingCount(s);
+			}
+			return { open: handles.length > 0, running, waiting, unread: !!get().unread[pid] };
 		},
 
 		async newSessionIn(pid) {
-			await get().openProject(pid);
-			if (get().activeProjectId === pid) await get().newSession();
+			const hasHandles = (get().projectHandles[pid] ?? []).length > 0;
+			if (hasHandles) {
+				await get().openProject(pid);
+				if (get().activeProjectId === pid) await get().newSession();
+			} else {
+				await get().openSessionIn(pid);
+			}
 			get().toggleExpanded(pid, true);
 		},
 
@@ -798,33 +946,20 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		async loadModels() {
-			const pid = get().activeProjectId;
-			if (pid) await loadModelsFor(pid);
+			const handleId = get().handleId;
+			if (handleId) await loadModelsFor(handleId);
 		},
 
 		async newSession() {
 			const pid = get().activeProjectId;
-			const handleId = get().handleId;
-			if (!pid || !handleId) return;
-			const epoch = advanceProject(pid);
-			const state = await active((h) => api.session(h, { type: "new_session" }));
-			if (state && sliceOf(pid)?.handleId === handleId && projectEpochs.get(pid) === epoch) await reloadMessages(pid, state);
-			if (get().activeProjectId === pid) set({ view: "chat" });
-			await get().refreshProjectSessions(pid);
+			if (!pid) return;
+			await get().openSessionIn(pid);
 		},
 
 		async switchSession(path) {
 			const pid = get().activeProjectId;
-			const handleId = get().handleId;
-			if (!pid || !handleId || get().sessionOperation(pid, path)) return;
-			if (get().isRunning) {
-				get().pushNotice("warning", "当前会话正在运行，请先等待结束或按 Esc 中断");
-				return;
-			}
-			const epoch = advanceProject(pid);
-			const state = await active((h) => api.session(h, { type: "switch_session", sessionPath: path }));
-			if (state && sliceOf(pid)?.handleId === handleId && projectEpochs.get(pid) === epoch) await reloadMessages(pid, state);
-			if (get().activeProjectId === pid) set({ view: "chat" });
+			if (!pid || get().sessionOperation(pid, path)) return;
+			await get().openSessionIn(pid, path);
 		},
 
 		async sendPrompt(text, images, streamingBehavior) {
@@ -863,9 +998,8 @@ export const useApp = create<AppState>()((set, get) => {
 		async setApprovalMode(mode) {
 			localStorage.setItem(APPROVAL_KEY, mode);
 			set({ approvalMode: mode });
-			// 审批模式对所有已打开的项目生效
-			const pids = [get().activeProjectId, ...Object.keys(get().background)].filter((p): p is string => !!p);
-			await Promise.all(pids.map((pid) => call(pid, (h) => api.session(h, { type: "set_approval_mode", mode }))));
+			// 审批模式对所有已打开的会话生效
+			await Promise.all(allSlices().map(([handleId]) => call(handleId, (h) => api.session(h, { type: "set_approval_mode", mode }))));
 		},
 
 		async respondExtUI(id, response) {
@@ -981,15 +1115,13 @@ export const useApp = create<AppState>()((set, get) => {
 		applyPush(push) {
 			switch (push.type) {
 				case "session_event": {
-					const pid = projectByHandle(push.handleId);
-					if (pid) handleEvent(pid, push.event);
+					handleEvent(push.handleId, push.event);
 					return;
 				}
 				case "session_exit": {
 					const pid = projectByHandle(push.handleId);
-					if (!pid) return;
-					const name = project(pid) ? projectName(project(pid) as Project) : "项目";
-					clearOwner(pid, push.handleId);
+					const name = pid && project(pid) ? projectName(project(pid) as Project) : "会话";
+					clearOwner(push.handleId);
 					if (!push.expected) get().pushNotice("error", `「${name}」的 pi 进程已退出（code ${push.code}），重新点击项目即可再次打开`);
 					return;
 				}
@@ -998,10 +1130,9 @@ export const useApp = create<AppState>()((set, get) => {
 					return;
 				case "config_changed": {
 					set((s) => ({ configVersion: s.configVersion + 1 }));
-					const pids = [get().activeProjectId, ...Object.keys(get().background)].filter((p): p is string => !!p);
-					for (const pid of pids) {
-						void loadModelsFor(pid);
-						void call(pid, (h) => api.session(h, { type: "get_state" })).then((state) => state && patchSlice(pid, { state }));
+					for (const [handleId] of allSlices()) {
+						void loadModelsFor(handleId);
+						void call(handleId, (h) => api.session(h, { type: "get_state" })).then((state) => state && patchHandle(handleId, { state }));
 					}
 					return;
 				}

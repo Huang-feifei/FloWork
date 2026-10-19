@@ -414,7 +414,24 @@ function PromptInput() {
 	return (
 		<div className="fw-float relative rounded-[22px] focus-within:ring-2 focus-within:ring-primary/20">
 			<SlashMenu menu={menu} onPick={(c) => pickCommand(c.name)} />
-			<div className="grid grid-cols-[2ch_1fr] gap-x-2 px-5 pt-4 pb-1">
+			{images.length > 0 && (
+				<div className="flex flex-wrap gap-2 px-5 pt-4 pb-1">
+					{images.map((image, i) => (
+						<div key={i} className="relative">
+							<ImageThumb image={image} alt={`待发送图片 ${i + 1}`} thumbClassName="h-16 max-w-[160px]" />
+							<button
+								type="button"
+								onClick={() => setImages((prev) => prev.filter((_, index) => index !== i))}
+								title="移除这张图片"
+								className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-panel-2 text-[11px] leading-none text-muted hover:bg-highlight hover:text-fg"
+							>
+								×
+							</button>
+						</div>
+					))}
+				</div>
+			)}
+			<div className={`grid grid-cols-[2ch_1fr] gap-x-2 px-5 pb-1 ${images.length > 0 ? "pt-2" : "pt-4"}`}>
 				<span className="text-[14px] leading-[1.6] font-semibold text-primary">❯</span>
 				<textarea
 					ref={ref}
@@ -457,23 +474,6 @@ function PromptInput() {
 					className="min-h-[1.6em] w-full resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-muted/70"
 				/>
 			</div>
-			{images.length > 0 && (
-				<div className="flex flex-wrap gap-2 px-5 pb-1.5">
-					{images.map((image, i) => (
-						<div key={i} className="relative">
-							<ImageThumb image={image} alt={`待发送图片 ${i + 1}`} thumbClassName="h-16 max-w-[160px]" />
-							<button
-								type="button"
-								onClick={() => setImages((prev) => prev.filter((_, index) => index !== i))}
-								title="移除这张图片"
-								className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-panel-2 text-[11px] leading-none text-muted hover:bg-highlight hover:text-fg"
-							>
-								×
-							</button>
-						</div>
-					))}
-				</div>
-			)}
 			<ComposerToolbar
 				canSend={ready && (text.trim().length > 0 || images.length > 0)}
 				onSend={submit}

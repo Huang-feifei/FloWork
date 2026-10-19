@@ -15,6 +15,9 @@ flowork-desktop.vetd/
 # Playwright CLI 的临时输出（页面快照、控制台日志）
 .playwright-cli/
 
+# 本地截图 / 临时设置等草稿文件
+.tmp-settings/
+
 # 打包时绕开文件锁用的备用输出目录
 release-new/
 release-build/

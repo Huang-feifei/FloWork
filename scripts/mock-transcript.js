@@ -26,6 +26,40 @@
 		cwd,
 		handleId: "demo-handle",
 		connecting: false,
+		// 同一个项目里同时打开多个会话：当前显示的 + 一个后台运行中的
+		projectHandles: { [demo.id]: ["demo-handle", "demo-handle-2"] },
+		projectActive: { [demo.id]: "demo-handle" },
+		background: {
+			"demo-handle-2": {
+				cwd,
+				handleId: "demo-handle-2",
+				state: {
+					sessionId: "demo2",
+					sessionFile: "s2",
+					cwd,
+					sessionName: "侧边栏拖拽顺序",
+					thinkingLevel: "medium",
+					availableThinkingLevels: [],
+					isStreaming: true,
+					messageCount: 14,
+				},
+				messages: [],
+				streaming: null,
+				toolArgsText: {},
+				toolRuns: {},
+				isRunning: true,
+				models: [],
+				connecting: false,
+				pendingApprovals: [],
+				tree: [],
+				leafId: null,
+				preview: null,
+				previewHostId: null,
+				extDialogs: [],
+				extStatus: {},
+				extWidgets: {},
+			},
+		},
 		projects: {
 			projects: [demo, second],
 			groups: [{ id: "demo-group", name: "客户项目", collapsed: false, order: 0 }],
@@ -51,7 +85,7 @@
 			messageCount: 6,
 		},
 		messages: [
-			{ role: "user", content: [{ type: "text", text: "看一下 src/renderer/src/lib/format.ts，relativeTime 对未来时间的处理有问题，帮我修一下并跑一下类型检查" }], timestamp: t, entryId: "n1" },
+			{ role: "user", content: [{ type: "text", text: "看一下 src/renderer/src/lib/format.ts，relativeTime 对未来时间的处理有问题，帮我修一下并跑一下类型检查" }], timestamp: t - 186_000, entryId: "n1" },
 			a(
 				[
 					{ type: "thinking", thinking: "先读文件，确认 relativeTime 的实现。\n未来时间 diff 为负数，会落到“刚刚”分支。" },

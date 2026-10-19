@@ -80,7 +80,7 @@ function LogsTab() {
 		["配置目录", info?.agentDir ?? "…"],
 		["当前项目", project?.path ?? "—"],
 		["会话文件", state?.sessionFile ?? "—"],
-		["后台项目", Object.keys(background).length > 0 ? Object.keys(background).length + " 个" : "—"],
+		["后台会话", Object.keys(background).length > 0 ? Object.keys(background).length + " 个" : "—"],
 	];
 
 	return (

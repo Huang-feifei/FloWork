@@ -11,10 +11,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ContentBlock, ImageAttachment } from "@shared/protocol";
 import { parseSkillInvocation } from "@shared/skill-text";
+import { buildTurns, turnChangedFiles, turnKey, type Turn } from "../../lib/session-turns";
+import type { SessionFile } from "../../lib/session-files";
 import { useApp } from "../../store";
 import { ImageThumb } from "./ImageThumb";
 import { Markdown } from "./Markdown";
 import { ToolBlock } from "./ToolBlock";
+import { TurnFooter } from "./TurnFooter";
 
 type ToolResultMap = Map<string, { content: ContentBlock[]; details?: unknown; isError: boolean }>;
 type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
@@ -181,11 +184,14 @@ const AssistantBlocks = memo(function AssistantBlocks({
 	toolResults,
 	live,
 	foldProcess,
+	foldOverride,
 }: {
 	message: AssistantMessage;
 	toolResults: ToolResultMap;
 	live: boolean;
 	foldProcess: boolean;
+	/** 本轮显式指定的折叠状态；undefined 表示跟随全局设置 */
+	foldOverride?: boolean;
 }) {
 	const segments = useMemo(() => segmentsOf(message.content), [message.content]);
 	// 流式光标跟在最后一段正文后面
@@ -193,7 +199,7 @@ const AssistantBlocks = memo(function AssistantBlocks({
 	segments.forEach((seg, i) => {
 		if (seg.kind === "text") lastText = i;
 	});
-	const folded = foldProcess && !live;
+	const folded = (foldOverride ?? foldProcess) && !live;
 
 	return (
 		<>
@@ -228,16 +234,26 @@ const MessageView = memo(function MessageView({
 	message,
 	toolResults,
 	foldProcess,
+	foldOverride,
 }: {
 	message: ChatMessage;
 	toolResults: ToolResultMap;
 	foldProcess: boolean;
+	foldOverride?: boolean;
 }) {
 	switch (message.role) {
 		case "user":
 			return <UserLine message={message} />;
 		case "assistant":
-			return <AssistantBlocks message={message} toolResults={toolResults} live={false} foldProcess={foldProcess} />;
+			return (
+				<AssistantBlocks
+					message={message}
+					toolResults={toolResults}
+					live={false}
+					foldProcess={foldProcess}
+					foldOverride={foldOverride}
+				/>
+			);
 		case "toolResult":
 			// 工具结果合并显示在对应的工具调用下方
 			return null;
@@ -314,17 +330,40 @@ export function Transcript() {
 	const messages = useApp((s) => s.messages);
 	const streaming = useApp((s) => s.streaming);
 	const foldProcess = useApp((s) => s.foldProcess);
+	const isRunning = useApp((s) => s.isRunning);
+	const cwd = useApp((s) => s.cwd);
 	const sessionKey = useApp((s) => s.state?.sessionId ?? "");
 	const [rows, setRows] = useState(INITIAL_ROWS);
+	/** 每轮过程折叠状态的显式覆盖：key 为轮次 key，未设置时跟随全局 foldProcess */
+	const [turnFold, setTurnFold] = useState<Record<string, boolean>>({});
 
-	// 切换会话时回到只显示最近的一段
+	// 切换会话时回到只显示最近的一段，并清掉上一会话的折叠覆盖
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在会话变化时重置
-	useEffect(() => setRows(INITIAL_ROWS), [sessionKey]);
+	useEffect(() => {
+		setRows(INITIAL_ROWS);
+		setTurnFold({});
+	}, [sessionKey]);
 
 	const start = useMemo(() => windowStart(messages, rows), [messages, rows]);
 	const hidden = useMemo(() => countRows(messages, start), [messages, start]);
 	const showMore = useCallback(() => setRows((n) => n + MORE_ROWS), []);
 	const showAll = useCallback(() => setRows(Number.POSITIVE_INFINITY), []);
+
+	// 每轮汇总条挂在「本轮最后一条会单独成行的消息」之后
+	const turns = useMemo(() => buildTurns(messages), [messages]);
+	const turnByRow = useMemo(() => {
+		const map = new Map<number, Turn>();
+		for (const turn of turns) map.set(turn.lastRowIndex, turn);
+		return map;
+	}, [turns]);
+	const lastTurn = turns[turns.length - 1];
+	const live = isRunning || !!streaming;
+	// 本轮修改过的文件：既用于文件 chip，也用于决定是否显示汇总条
+	const turnChanges = useMemo(() => {
+		const map = new Map<string, SessionFile[]>();
+		for (const turn of turns) map.set(turnKey(turn), turnChangedFiles(turn, cwd));
+		return map;
+	}, [turns, cwd]);
 
 	const toolResults = useMemo(() => {
 		const map: ToolResultMap = new Map();
@@ -337,16 +376,36 @@ export function Transcript() {
 	return (
 		<div className="flex flex-col gap-4">
 			{hidden > 0 && <LoadEarlier hidden={hidden} onMore={showMore} onAll={showAll} />}
-			{messages.map((m, i) =>
+			{messages.map((m, i) => {
 				// 窗口之前的消息不挂载；工具结果不单独成行，不需要 data-entry-id
-				i < start || m.role === "toolResult" ? null : (
+				if (i < start || m.role === "toolResult") return null;
+				const turn = turnByRow.get(i);
+				const key = turn ? turnKey(turn) : "";
+				const effectiveFold = turn ? (turnFold[key] ?? foldProcess) : foldProcess;
+				const changed = turn ? (turnChanges.get(key) ?? []) : [];
+				// 正在运行的最后一轮不显示；其余只在「最后一轮」或「本轮改过文件」时显示，避免长会话里太密
+				const showFooter = !!turn && !(turn === lastTurn && live) && (turn === lastTurn || changed.length > 0);
+				return (
 					// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
 					// data-entry-id 让会话树窄轨知道哪条消息在屏幕上
 					<div key={i} data-entry-id={m.entryId}>
-						<MessageView message={m} toolResults={toolResults} foldProcess={foldProcess} />
+						<MessageView
+							message={m}
+							toolResults={toolResults}
+							foldProcess={foldProcess}
+							foldOverride={turn ? turnFold[key] : undefined}
+						/>
+						{showFooter && turn && (
+							<TurnFooter
+								turn={turn}
+								changed={changed}
+								foldOpen={!effectiveFold}
+								onToggleFold={() => setTurnFold((f) => ({ ...f, [key]: !effectiveFold }))}
+							/>
+						)}
 					</div>
-				),
-			)}
+				);
+			})}
 			{streaming && <AssistantBlocks message={streaming} toolResults={toolResults} live foldProcess={foldProcess} />}
 		</div>
 	);
