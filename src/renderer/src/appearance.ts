@@ -28,7 +28,7 @@ export interface Appearance {
 	codeSize: CodeSize;
 	/** 窗口背景：跟随系统壁纸 / 纯色 / 图片 */
 	bg: BgMode;
-	/** 自定义背景图（data URL），bg = image 时生效 */
+	/** 自定义背景图：本次会话的 object URL（blob:…），图片本体存在 IndexedDB，bg = image 时生效 */
 	bgImage: string;
 	/** 背景模糊（px，0–40） */
 	bgBlur: number;
@@ -99,9 +99,6 @@ export const DEFAULT_APPEARANCE: Appearance = {
 	largeSidebarIcons: false,
 };
 
-/** 自定义背景图的上限：localStorage 只有几 MB，超过就提示换一张小的 */
-export const MAX_BG_IMAGE_BYTES = 2 * 1024 * 1024;
-
 const STORAGE_KEY = "flowork.appearance";
 
 const ACCENT_IDS = ACCENTS.map((a) => a.id);
@@ -150,10 +147,18 @@ export function storedAppearance(): Appearance {
 
 export function storeAppearance(appearance: Appearance): void {
 	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(appearance));
+		// bgImage 是本次会话的 object URL，不能落盘；图片本体存在 IndexedDB（见 background-image.ts）
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...appearance, bgImage: "" }));
 	} catch {
 		/* 存储不可用时忽略：本次会话仍然生效 */
 	}
+}
+
+/** 上一次应用的背景图 URL：换图时释放旧的 object URL，避免内存泄漏 */
+let lastBgImageUrl = "";
+
+function revokeObjectUrl(url: string): void {
+	if (url.startsWith("blob:")) URL.revokeObjectURL(url);
 }
 
 /** 把外观写到 <html>：data-* 走样式钩子，连续量走 CSS 变量；返回实际生效的对象 */
@@ -170,13 +175,17 @@ export function applyAppearance(appearance: Appearance): Appearance {
 	set("mono", next.mono === "default" ? undefined : next.mono);
 	set("scale", next.scale === "normal" ? undefined : next.scale);
 	set("codeSize", next.codeSize === DEFAULT_APPEARANCE.codeSize ? undefined : String(next.codeSize));
-	set("bg", next.bg === "system" ? undefined : next.bg);
+	// 图片还没从 IndexedDB 读出来时先退回系统壁纸，读到后再切到图片
+	set("bg", next.bg === "image" ? (next.bgImage ? "image" : undefined) : next.bg === "solid" ? "solid" : undefined);
 	set("contrast", next.contrast ? "high" : undefined);
 	set("motion", next.reducedMotion ? "reduced" : undefined);
 	set("sidebarIcons", next.largeSidebarIcons ? "lg" : undefined);
 
+	const previousUrl = lastBgImageUrl;
+	lastBgImageUrl = next.bgImage;
 	if (next.bg === "image" && next.bgImage) root.style.setProperty("--app-bg-image", `url("${next.bgImage}")`);
 	else root.style.removeProperty("--app-bg-image");
+	if (previousUrl !== next.bgImage) revokeObjectUrl(previousUrl);
 	root.style.setProperty("--app-bg-blur", `${next.bgBlur}px`);
 	root.style.setProperty("--app-bg-opacity", String(next.bgOpacity));
 

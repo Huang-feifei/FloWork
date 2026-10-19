@@ -10,7 +10,6 @@ import {
 	BG_MODES,
 	CODE_SIZES,
 	FONTS,
-	MAX_BG_IMAGE_BYTES,
 	MONOS,
 	SCALES,
 	type AccentId,
@@ -20,6 +19,7 @@ import {
 	type MonoId,
 	type ScaleId,
 } from "../../appearance";
+import { MAX_BG_IMAGE_BYTES, clearStoredImage, prepareBackgroundImage, saveStoredImage } from "../../background-image";
 import { useApp } from "../../store";
 import type { ThemeMode } from "../../theme";
 import { Button, Field, Segmented, Select, Toggle } from "../ui";
@@ -147,19 +147,20 @@ export function AppearanceTab() {
 	const fileRef = useRef<HTMLInputElement>(null);
 	const [imageError, setImageError] = useState<string | null>(null);
 
-	const pickImage = (file: File | undefined) => {
+	const pickImage = async (file: File | undefined) => {
 		if (!file) return;
 		if (file.size > MAX_BG_IMAGE_BYTES) {
 			setImageError(`图片 ${(file.size / 1024 / 1024).toFixed(1)} MB，超过 ${MAX_BG_IMAGE_BYTES / 1024 / 1024} MB 上限，请换一张小的。`);
 			return;
 		}
-		const reader = new FileReader();
-		reader.onload = () => {
+		try {
+			const blob = await prepareBackgroundImage(file);
+			await saveStoredImage(blob);
 			setImageError(null);
-			setAppearance({ bgImage: String(reader.result ?? ""), bg: "image" });
-		};
-		reader.onerror = () => setImageError("读取图片失败，请换一张试试。");
-		reader.readAsDataURL(file);
+			setAppearance({ bgImage: URL.createObjectURL(blob), bg: "image" });
+		} catch {
+			setImageError("保存图片失败，请换一张试试。");
+		}
 	};
 
 	return (
@@ -309,7 +310,14 @@ export function AppearanceTab() {
 								选择图片…
 							</Button>
 							{appearance.bgImage && (
-								<Button size="sm" variant="ghost" onClick={() => setAppearance({ bgImage: "", bg: "system" })}>
+								<Button
+									size="sm"
+									variant="ghost"
+									onClick={() => {
+										void clearStoredImage();
+										setAppearance({ bgImage: "", bg: "system" });
+									}}
+								>
 									清除
 								</Button>
 							)}
@@ -347,7 +355,7 @@ export function AppearanceTab() {
 						{appearance.bg !== "system" && (
 							<div className="mt-3 text-[12px] leading-5 text-faint">
 								{appearance.bg === "image" && !appearance.bgImage
-									? "先选一张图片；图片保存在本机，不会上传。"
+									? "先选一张图片；图片保存在本机（IndexedDB），不会上传。"
 									: "模糊与不透明度对三种背景模式都生效。"}
 							</div>
 						)}

@@ -7,6 +7,7 @@
  * - 一个项目可以同时打开多个会话（标签式）；「新会话」会新起一个 worker，点开历史会话也新开一个，可分别关闭。
  */
 import { create } from "zustand";
+import { displayUserText } from "@shared/skill-text";
 import {
 	type AppInfo,
 	type ApprovalDecision,
@@ -47,6 +48,7 @@ import {
 	storedAppearance,
 	type Appearance,
 } from "./appearance";
+import { loadStoredImage, saveStoredImage } from "./background-image";
 
 export type { ExtWidget, PendingApproval, ToolRun } from "./session-slice";
 export { waitingCount } from "./session-slice";
@@ -279,9 +281,13 @@ export interface OpenSession {
 
 export function selectOpenSession(s: AppState, handleId: string): OpenSession {
 	const slice: SessionSlice | undefined = s.handleId === handleId ? s : s.background[handleId];
+	const first = slice?.messages.find((m) => m.role === "user");
+	const firstPrompt = first?.role === "user"
+		? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 80)
+		: "";
 	return {
 		handleId,
-		name: slice?.state?.sessionName ?? "",
+		name: slice?.state?.sessionName || firstPrompt,
 		running: !!slice?.isRunning,
 		waiting: slice ? waitingCount(slice) : 0,
 		active: s.handleId === handleId,
@@ -300,6 +306,21 @@ let initialized = false;
 export function hostKeyChangedHost(text: string): string | null {
 	const m = /FLOWORK_HOST_KEY_CHANGED:([\w-]+)/.exec(text);
 	return m ? (m[1] ?? null) : null;
+}
+
+/** 启动时把 IndexedDB 里的背景图读出来换成 object URL；顺带迁移旧版存在 localStorage 的 data URL */
+async function restoreBackgroundImage(): Promise<void> {
+	const current = useApp.getState().appearance;
+	// 旧版把图片以 data URL 存进 localStorage：搬到 IndexedDB 后，storeAppearance 会顺手清掉它
+	if (current.bgImage.startsWith("data:")) {
+		try {
+			await saveStoredImage(await (await fetch(current.bgImage)).blob());
+		} catch {
+			/* 迁移失败就继续沿用旧值，不丢用户的图 */
+		}
+	}
+	const blob = await loadStoredImage();
+	if (blob) useApp.getState().setAppearance({ bgImage: URL.createObjectURL(blob) });
 }
 
 export const useApp = create<AppState>()((set, get) => {
@@ -567,6 +588,7 @@ export const useApp = create<AppState>()((set, get) => {
 		async init() {
 			if (initialized) return;
 			initialized = true;
+			void restoreBackgroundImage();
 			api.onPush((push) => get().applyPush(push));
 			let everOpened = false;
 			api.onStatus((connection) => {
