@@ -199,7 +199,7 @@ export function TitleBar() {
 	}, []);
 
 	return (
-		<header className="app-drag relative flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 select-none">
+		<header className="relative flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 select-none">
 			<button
 				type="button"
 				title={`应用菜单：${MENUS.join(" / ")}`}
@@ -214,20 +214,25 @@ export function TitleBar() {
 				<Icon name="menu" className="size-4" />
 			</button>
 
-			{/* 窗口标题：真正居中 */}
-			<div className="pointer-events-none absolute inset-x-0 flex justify-center">
-				<button
-					type="button"
-					title="工作台"
-					onClick={() => useApp.getState().setView(useApp.getState().projects.projects.length === 0 ? "welcome" : "chat")}
-					className="pointer-events-auto flex max-w-[420px] min-w-0 items-center gap-1.5"
-				>
-					<span className="shrink-0 text-[13px] leading-none text-primary">✻</span>
-					<Location />
-				</button>
-			</div>
+			{/*
+			 * 可拖拽区只给标题左右两块空白：实测把 drag 放在整条 header 上时，
+			 * 靠左的按钮即使计算样式是 no-drag，真实鼠标点击仍会被拖拽区吃掉（不进渲染进程）。
+			 * 因此所有按钮一律不落在拖拽区里。
+			 */}
+			<div className="app-drag min-w-0 flex-1 self-stretch" />
 
-			<div className="flex flex-1" />
+			{/* 窗口标题：靠左右两块等宽拖拽区夹在中间 */}
+			<button
+				type="button"
+				title="工作台"
+				onClick={() => useApp.getState().setView(useApp.getState().projects.projects.length === 0 ? "welcome" : "chat")}
+				className="flex max-w-[420px] min-w-0 shrink-0 items-center gap-1.5"
+			>
+				<span className="shrink-0 text-[13px] leading-none text-primary">✻</span>
+				<Location />
+			</button>
+
+			<div className="app-drag min-w-0 flex-1 self-stretch" />
 
 			<button
 				type="button"
