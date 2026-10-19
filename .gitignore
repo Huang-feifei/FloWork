@@ -9,6 +9,9 @@ Thumbs.db
 .env
 .env.*
 
+# 独立内核发行私钥，绝不能提交或打包
+.kernel-keys/
+
 # 设计工具的工程文件，不进版本库
 flowork-desktop.vetd/
 

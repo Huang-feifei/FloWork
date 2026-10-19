@@ -5,6 +5,34 @@ import { useAuth } from "../../authStore";
 import { useApp } from "../../store";
 import { Badge, Button, Input, Segmented, Select } from "../ui";
 
+/** 从供应商列表及各分类计数中隐藏；不删除已有凭据和模型配置。 */
+const HIDDEN_PROVIDERS = new Set([
+	"groq",
+	"cerebras",
+	"fireworks",
+	"together",
+	"baseten",
+	"nvidia",
+	"huggingface",
+	"amazon-bedrock",
+	"azure",
+	"google-vertex",
+	"cloudflare-ai-gateway",
+	"cloudflare-workers-ai",
+	"vercel-ai-gateway",
+	"moonshotai",
+	"moonshotai-cn",
+	"minimax",
+	"minimax-cn",
+	"qwen-token-plan",
+	"qwen-token-plan-individual",
+	"zai",
+	"xiaomi",
+	"xiaomi-token-plan-ams",
+	"xiaomi-token-plan-sgp",
+	"ant-ling",
+]);
+
 /** 国内可直接使用的内置供应商 */
 const DOMESTIC = new Set([
 	"deepseek",
@@ -202,8 +230,8 @@ export function ProvidersTab() {
 	/** 常用视图：主流供应商 + 已配置的（含自定义端点） */
 	const isCommon = (p: ProviderInfo) => COMMON.has(p.id) || p.configured;
 
-	/** 没有可用登录方式且未配置的供应商不展示（例如只剩订阅登录的 OpenAI Codex legacy） */
-	const isUsable = (p: ProviderInfo) => usableAuthMethods(p).length > 0 || p.configured;
+	/** 排除已隐藏项，以及没有可用登录方式且未配置的供应商（例如 OpenAI Codex legacy）。 */
+	const isUsable = (p: ProviderInfo) => !HIDDEN_PROVIDERS.has(p.id) && (usableAuthMethods(p).length > 0 || p.configured);
 
 	const visible = useMemo(() => {
 		const q = query.trim().toLowerCase();

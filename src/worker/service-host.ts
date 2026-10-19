@@ -3,6 +3,7 @@
  * 由后端启动的常驻 service worker 承载。
  */
 import { randomUUID } from "node:crypto";
+import { KERNEL_PROTOCOL_VERSION } from "@shared/kernel";
 import { existsSync } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -61,7 +62,7 @@ export class ServiceHost {
 	async handle(command: ServiceCommand): Promise<CommandResultMap[ServiceCommand["type"]]> {
 		switch (command.type) {
 			case "ping":
-				return { pid: process.pid, versions: { ...process.versions }, agentDir: getAgentDir() };
+				return { pid: process.pid, versions: { ...process.versions }, agentDir: getAgentDir(), protocolVersion: KERNEL_PROTOCOL_VERSION };
 			case "list_sessions":
 				return this.listSessions(command.cwd, command.sessionDir);
 			case "validate_session":

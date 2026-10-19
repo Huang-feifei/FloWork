@@ -3,11 +3,14 @@ import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, nativeTheme, safeStorage, shell } from "electron";
+import kernelConfig from "../../kernel.config.json";
+import appPackage from "../../package.json";
 import { Backend } from "../core/backend";
+import { KernelUpdater } from "../core/kernel-updater";
 import { BrowserManager } from "./browser";
 import { registerIpc } from "./ipc";
 import { runSmokeTest } from "./smoke";
-import { spawnUtilityWorker } from "./spawn";
+import { bundledWorkerEntry, createUtilitySpawner, probeUtilityKernel } from "./spawn";
 
 const isSmoke = process.argv.includes("--smoke");
 let mainWindow: BrowserWindow | undefined;
@@ -51,10 +54,37 @@ function isAppUrl(url: string): boolean {
 	}
 }
 
+const kernelUpdates = new KernelUpdater({
+	directory: () => join(app.getPath("userData"), "kernels"),
+	repository: kernelConfig.repository,
+	publicKey: kernelConfig.publicKey,
+	appVersion: app.getVersion(),
+	nodeVersion: process.versions.node,
+	electronVersion: process.versions.electron,
+	platform: process.platform,
+	arch: process.arch,
+	bundled: { version: kernelConfig.bundledVersion, piVersion: appPackage.dependencies["@earendil-works/pi-coding-agent"], entry: bundledWorkerEntry },
+	probe: probeUtilityKernel,
+});
+
 const backend = new Backend({
 	shell: "electron",
 	version: app.getVersion(),
-	spawnWorker: spawnUtilityWorker,
+	spawnWorker: (options) => createUtilitySpawner(kernelUpdates.workerEntry)(options),
+	kernelUpdates,
+	restartForKernel: async () => {
+		const options = {
+			type: "question" as const,
+			buttons: ["取消", "重启并应用内核"], defaultId: 0, cancelId: 0,
+			message: "重启 FloWork 以切换内核？",
+			detail: "打开的会话将关闭，终端连接与尚未完成的登录会中断。已保存的会话记录和配置不会删除。",
+		};
+		const result = mainWindow ? await dialog.showMessageBox(mainWindow, options) : await dialog.showMessageBox(options);
+		if (result.response !== 1) return;
+		if (backend.workers.hasBusySessions()) throw new Error("有会话正在运行，请先结束或中断任务");
+		// 先让 IPC 返回；before-quit 会统一释放 worker 与终端。
+		setTimeout(() => { app.relaunch(); app.quit(); }, 200);
+	},
 	pickFolder: async () => {
 		const options = { properties: ["openDirectory" as const] };
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
@@ -156,6 +186,7 @@ function createWindow(show = true): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+	await kernelUpdates.initialize();
 	registerIpc(backend, () => mainWindow, (win) => browsers.get(win), isAppUrl);
 	mainWindow = createWindow(!isSmoke);
 

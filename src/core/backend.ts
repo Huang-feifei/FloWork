@@ -16,6 +16,7 @@ import {
 	type SshHost,
 	type SshTestResult,
 } from "@shared/protocol";
+import type { KernelUpdateController } from "@shared/kernel";
 import { isDirectory, listDirs } from "./fs";
 import { probeHostMonitor } from "./host-monitor";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -47,6 +48,9 @@ export interface BackendHost {
 	shell: AppInfo["shell"];
 	version: string;
 	spawnWorker: WorkerSpawner;
+	/** 独立内核更新仅由桌面外壳提供。 */
+	kernelUpdates?: KernelUpdateController;
+	restartForKernel?: () => Promise<void>;
 	/** 系统原生文件夹对话框；网页版不提供 */
 	pickFolder?: () => Promise<string | null>;
 	/** 系统原生文件夹对话框（多选）；网页版不提供 */
@@ -84,6 +88,7 @@ export class Backend {
 	private readonly preview = new PreviewServer();
 
 	constructor(private readonly host: BackendHost) {
+		host.kernelUpdates?.onChange((status) => this.push({ type: "kernel_update", status }));
 		this.hosts = new HostStore(undefined, host.secrets);
 		this.workers = new WorkerManager(host.spawnWorker, (event) => this.push({ type: "auth", event }));
 		this.terminals = new TerminalManager(
@@ -140,12 +145,28 @@ export class Backend {
 			case "app.info":
 				return {
 					version: this.host.version,
-					versions: { ...process.versions },
+					versions: { ...process.versions, pi: this.host.kernelUpdates?.status().current.piVersion },
 					agentDir: getPiAgentDir(),
 					shell: this.host.shell,
 					nativeDialogs: this.host.pickFolder !== undefined,
 					ssh: sshBinary(),
 				} satisfies AppInfo;
+			case "kernel.status":
+			case "kernel.check":
+			case "kernel.install":
+			case "kernel.useBundled": {
+				const updates = this.host.kernelUpdates;
+				if (!updates) throw new Error("独立内核更新仅支持桌面版");
+				if (method === "kernel.status") return updates.status();
+				if (method === "kernel.check") return updates.check();
+				if (method === "kernel.install") return updates.install();
+				return updates.useBundled();
+			}
+			case "kernel.restart":
+				if (!this.host.restartForKernel || !this.host.kernelUpdates?.status().pending) throw new Error("没有待生效的内核更新");
+				if (this.workers.hasBusySessions()) throw new Error("有会话正在运行或等待交互，请先结束或中断任务再重启");
+				await this.host.restartForKernel();
+				return null;
 			case "app.pickFolder":
 				if (!this.host.pickFolder) throw new Error("当前外壳不支持系统文件夹对话框");
 				return this.host.pickFolder();

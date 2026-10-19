@@ -377,7 +377,7 @@ export interface CommandResultMap {
 	reload_resources: { deferred: boolean };
 	get_commands: SlashCommand[];
 	refresh_config: SessionState;
-	ping: { pid: number; versions: Record<string, string | undefined>; agentDir: string };
+	ping: { pid: number; versions: Record<string, string | undefined>; agentDir: string; protocolVersion: number };
 	list_sessions: SessionSummary[];
 	validate_session: SessionSummary;
 	rename_session: null;
@@ -722,6 +722,11 @@ export interface DiscoveredProject {
 
 export interface BackendMethods {
 	"app.info": { params: undefined; result: AppInfo };
+	"kernel.status": { params: undefined; result: import("./kernel").KernelUpdateStatus };
+	"kernel.check": { params: undefined; result: import("./kernel").KernelUpdateStatus };
+	"kernel.install": { params: undefined; result: import("./kernel").KernelUpdateStatus };
+	"kernel.useBundled": { params: undefined; result: import("./kernel").KernelUpdateStatus };
+	"kernel.restart": { params: undefined; result: null };
 	"app.pickFolder": { params: undefined; result: string | null };
 	/** 系统对话框多选文件夹（仅桌面版） */
 	"app.pickFolders": { params: undefined; result: string[] };
@@ -821,6 +826,7 @@ export interface BackendMethods {
 export type BackendMethod = keyof BackendMethods;
 
 export type BackendPush =
+	| { type: "kernel_update"; status: import("./kernel").KernelUpdateStatus }
 	| { type: "session_event"; handleId: string; event: SessionEvent }
 	| { type: "session_exit"; handleId: string; code: number; expected?: boolean }
 	| { type: "sessions_changed"; cwd: string }

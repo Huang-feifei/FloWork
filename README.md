@@ -133,6 +133,20 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - **内置浏览器**：网页运行在独立隔离 session（独立 partition、禁缓存），权限请求、设备权限、屏幕共享与下载一律拒绝；只允许 HTTP(S)，`will-frame-navigate` / `will-redirect` 拦截非白名单导航与重定向；禁止访问 FloWork 应用自身地址与控制端口，避免页面回连本地控制服务；弹窗需用户手势（1 秒内点击 / 回车）才开新标签，否则拒绝。
 - **凭据**：hosts.json 里的 SSH 密码在桌面版经 Electron `safeStorage`（Windows 上为 DPAPI，绑定当前系统用户）加密后落盘为 `passwordEnc`，旧的明文密码在首次读取时自动迁移；网页版没有系统加密接口，仍为明文，且无法解密桌面版保存的密码（需要重新填写）。auth.json 由 pi SDK 直接读写，目前仍是明文，见路线图。
 
+## 独立内核更新（桌面版）
+
+用户可在 **设置 → 内核更新** 从 GitHub Releases 检查、下载经过签名且兼容当前应用的内核，重启后生效，无需重新安装 FloWork；支持恢复内置内核，启动自检失败自动回退。
+
+首次发行前需配置 `kernel.config.json` 的公开仓库和 Ed25519 公钥，并发布一次包含更新器的应用。发布包包含 Pi SDK、Worker 适配层与固定运行依赖，不是直接安装 npm 最新版。
+
+配置密钥、构建内核与 GitHub Actions 发布步骤见 **[独立内核更新指南](docs/kernel-updates.md)**。
+
+```bash
+npm run kernel:keygen                         # 首次生成发行密钥（私钥已加入忽略目录）
+npm run kernel:build -- --version 1.0.1 --key .kernel-keys/signing-private.pem
+node scripts/test-kernel.mjs                   # 离线更新回归，不调用模型
+```
+
 ## 已实现
 
 - 对话：流式输出、思考过程、终端式工具调用展示、Markdown 渲染

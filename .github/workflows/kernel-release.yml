@@ -1,0 +1,44 @@
+name: Publish kernel
+
+on:
+  push:
+    tags:
+      - 'kernel-v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kernel-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-x64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Validate publication configuration
+        shell: pwsh
+        run: |
+          node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('kernel.config.json','utf8')); if(c.repository.toLowerCase()!==process.env.GITHUB_REPOSITORY.toLowerCase() || !c.publicKey) throw new Error('Configure kernel.config.json repository/publicKey first');"
+      - name: Run regression tests
+        run: npm test
+      - name: Build signed Windows kernel
+        shell: pwsh
+        env:
+          FLOWORK_KERNEL_SIGNING_KEY: ${{ secrets.FLOWORK_KERNEL_SIGNING_KEY }}
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^kernel-v', ''
+          npm run kernel:build -- --version $version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish immutable release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME release/kernels/*.tar.gz release/kernels/*.json --verify-tag --title "FloWork Kernel $env:GITHUB_REF_NAME" --generate-notes

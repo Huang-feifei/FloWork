@@ -7,6 +7,7 @@ import { Icon, type IconName } from "../Icon";
 import { AppearanceTab } from "./AppearanceTab";
 import { CustomProvidersTab } from "./CustomProvidersTab";
 import { PreferencesTab } from "./PreferencesTab";
+import { KernelTab } from "./KernelTab";
 import { ProvidersTab } from "./ProvidersTab";
 import { RawConfigTab } from "./RawConfigTab";
 import { ResourcesTab } from "./ResourcesTab";
@@ -18,6 +19,7 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: IconName; desc: string
 	{ id: "preferences", label: "偏好设置", icon: "settings", desc: "默认模型、工具、Shell、代理等 pi 设置，写入 settings.json。" },
 	{ id: "appearance", label: "外观", icon: "palette", desc: "主题、强调色、字体与窗口背景；只保存在本机，不改变会话与模型行为。" },
 	{ id: "raw", label: "配置文件", icon: "file-json", desc: "直接编辑 settings.json 与 models.json。" },
+	{ id: "kernel", label: "内核更新", icon: "cpu", desc: "通过 GitHub Releases 独立更新 Pi 内核，无需重新安装 FloWork。" },
 ];
 
 export function SettingsView() {
@@ -82,6 +84,7 @@ export function SettingsView() {
 						{tab === "preferences" && <PreferencesTab />}
 						{tab === "appearance" && <AppearanceTab />}
 						{tab === "raw" && <RawConfigTab />}
+						{tab === "kernel" && <KernelTab />}
 					</div>
 				</div>
 			</div>

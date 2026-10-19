@@ -392,6 +392,10 @@ export class WorkerManager {
 		});
 	}
 
+	hasBusySessions(): boolean {
+		return [...this.sessions.values()].some((owner) => this.busy(owner));
+	}
+
 	shutdownAll(): Promise<void> {
 		this.shuttingDown = true;
 		return this.coordinate(async () => {

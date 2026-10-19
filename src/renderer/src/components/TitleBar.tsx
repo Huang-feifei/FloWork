@@ -2,7 +2,7 @@
  * 自绘窗口标题栏（桌面版 titleBarStyle: hidden）：
  * 左侧应用菜单按钮（文件 / 编辑 / 视图 / 会话 / 终端 / 帮助 六个菜单都收在这个按钮里，
  * 不再在窗口里排成一排 Windows 式菜单条），中间是窗口标题（当前项目 / 会话），
- * 右侧是搜索入口、布局开关与系统风格的窗口按钮（macOS 用系统自带红绿灯）。整条栏为拖拽区。
+ * 右侧是布局开关与系统风格的窗口按钮（macOS 用系统自带红绿灯）。
  */
 import { useEffect, useState } from "react";
 import { displayUserText } from "@shared/skill-text";
@@ -233,17 +233,6 @@ export function TitleBar() {
 			</button>
 
 			<div className="app-drag min-w-0 flex-1 self-stretch" />
-
-			<button
-				type="button"
-				onClick={() => useApp.getState().setPalette(true)}
-				title="搜索文件、会话、命令"
-				className="flex h-8 shrink-0 items-center gap-2 rounded-full bg-panel-2 px-3.5 text-muted hover:text-fg"
-			>
-				<Icon name="search" className="size-3.5 text-faint" />
-				<span className="text-[13px]">搜索</span>
-				<span className="text-[11.5px] text-faint">{isMac ? "⌘K" : "Ctrl+K"}</span>
-			</button>
 
 			<div className="flex items-center gap-0.5">
 				<LayoutToggle

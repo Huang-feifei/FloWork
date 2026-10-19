@@ -62,7 +62,7 @@ export interface Notice {
 
 export type View = "welcome" | "chat" | "review" | "settings";
 export type RightPanel = "files" | "session" | "server" | "services" | "browser";
-export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw";
+export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw" | "kernel";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
 /** 底部面板的页签 */

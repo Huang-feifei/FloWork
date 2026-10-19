@@ -18,6 +18,13 @@ function call<M extends BackendMethod>(method: M, params: BackendMethods[M]["par
 
 export const api = {
 	info: () => call("app.info", undefined),
+	kernel: {
+		status: () => call("kernel.status", undefined),
+		check: () => call("kernel.check", undefined),
+		install: () => call("kernel.install", undefined),
+		useBundled: () => call("kernel.useBundled", undefined),
+		restart: () => call("kernel.restart", undefined),
+	},
 	pickFolder: () => call("app.pickFolder", undefined),
 	pickFolders: () => call("app.pickFolders", undefined),
 	projects: {

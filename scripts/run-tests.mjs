@@ -17,6 +17,7 @@ const filters = args.filter((a) => !a.startsWith("--"));
 
 /** 不依赖构建产物的脚本排在前面，尽早暴露问题 */
 const SUITES = [
+	{ name: "kernel", file: "scripts/test-kernel.mjs", needsBuild: false },
 	{ name: "hosts", file: "scripts/test-hosts.mjs", needsBuild: false },
 	{ name: "command-risk", file: "scripts/test-command-risk.mjs", needsBuild: false },
 	{ name: "planning", file: "scripts/test-planning.mjs", needsBuild: false },
