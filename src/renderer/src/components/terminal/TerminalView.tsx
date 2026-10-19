@@ -3,7 +3,7 @@
  * 窗口级的标题栏与状态栏在 App 中。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ApprovalMode, ImageAttachment, ThinkingLevel } from "@shared/protocol";
+import type { ApprovalMode, ImageAttachment, ThinkingLevel, WorkMode } from "@shared/protocol";
 import { useApp, waitingCount } from "../../store";
 import { Icon } from "../Icon";
 import { ApprovalPanel } from "./ApprovalPanel";
@@ -340,6 +340,7 @@ function PromptInput() {
 	const [images, setImages] = useState<ImageAttachment[]>([]);
 	const isRunning = useApp((s) => s.isRunning);
 	const ready = useApp((s) => s.handleId !== null);
+	const planning = useApp((s) => s.state?.workMode === "plan");
 	const pushNotice = useApp((s) => s.pushNotice);
 	const { sendPrompt, abort } = useApp.getState();
 	const ref = useRef<HTMLTextAreaElement>(null);
@@ -470,7 +471,7 @@ function PromptInput() {
 							void abort();
 						}
 					}}
-					placeholder={ready ? (isRunning ? "运行中：Enter 排队，Ctrl+Enter 插话" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
+					placeholder={ready ? (isRunning ? "运行中：Enter 排队，Ctrl+Enter 插话" : planning ? "描述需求，先讨论计划，确认后再执行" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
 					className="min-h-[1.6em] w-full resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-muted/70"
 				/>
 			</div>
@@ -489,7 +490,9 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	const isRunning = useApp((s) => s.isRunning);
 	const approvalMode = useApp((s) => s.approvalMode);
 	const isOps = useApp((s) => !!s.state?.ops);
-	const { setModel, setThinkingLevel, setApprovalMode, abort } = useApp.getState();
+	const waiting = useApp((s) => waitingCount(s));
+	const workMode = state?.workMode ?? "execute";
+	const { setModel, setThinkingLevel, setApprovalMode, setWorkMode, abort } = useApp.getState();
 	const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : "";
 	/** 审批选项：ops 会话用运维语汇，普通会话用工具语汇（文案与原 select 一致） */
 	const approvalItems: { value: ApprovalMode; title: string }[] = isOps
@@ -513,13 +516,26 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	}));
 
 	return (
-		<div className="flex items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
+		<div className="flex flex-wrap items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
 			<Picker
-				label={approvalLabel}
+				label={workMode === "plan" ? "计划模式 · 只读" : "执行模式"}
+				title={isRunning || waiting > 0 ? "请先结束或中断当前运行，再切换模式" : "计划模式先讨论并确认方案，执行模式允许实施"}
+				items={[
+					{ value: "plan", title: "计划模式：只读分析，提问并确认方案" },
+					{ value: "execute", title: "执行模式：允许修改和运行命令" },
+				]}
+				value={workMode}
+				tone={workMode === "plan" ? "warn" : "muted"}
+				disabled={!state || isRunning || waiting > 0}
+				onSelect={(next) => void setWorkMode(next as WorkMode)}
+			/>
+			<Picker
+				label={workMode === "plan" ? "审批：计划限制优先" : approvalLabel}
 				title={isOps ? "命令审批（高危命令始终需要确认）" : "工具审批"}
 				items={approvalItems}
 				value={approvalMode}
 				tone={approvalMode === "auto" ? "warn" : "muted"}
+				disabled={workMode === "plan"}
 				onSelect={(next) => void setApprovalMode(next as ApprovalMode)}
 			/>
 			{state &&

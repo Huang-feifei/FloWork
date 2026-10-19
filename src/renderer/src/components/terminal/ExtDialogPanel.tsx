@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ExtUIRequest } from "@shared/protocol";
 import { type ExtWidget, useApp } from "../../store";
+import { Markdown } from "./Markdown";
 
 type Respond = (response: { value?: string; confirmed?: boolean } | null) => void;
 
@@ -90,7 +91,9 @@ function ConfirmBody({ request, active, respond }: { request: ExtUIRequest; acti
 				e.stopPropagation();
 			}}
 		>
-			{request.message && <div className="my-1 border-l-2 border-accent/30 pl-3 whitespace-pre-wrap">{request.message}</div>}
+			{request.message && (request.purpose === "plan"
+				? <div className="my-2 max-h-[50vh] overflow-y-auto rounded-lg border border-border bg-panel p-3"><Markdown text={request.message} /></div>
+				: <div className="my-1 border-l-2 border-accent/30 pl-3 whitespace-pre-wrap">{request.message}</div>)}
 			<div className="flex flex-wrap gap-2 pt-1">
 				<button
 					ref={ref}
@@ -98,14 +101,14 @@ function ConfirmBody({ request, active, respond }: { request: ExtUIRequest; acti
 					onClick={() => respond({ confirmed: true })}
 					className="rounded border border-ok/50 bg-ok-soft px-2 text-ok outline-none hover:bg-ok/20 focus:ring-2 focus:ring-ok/30"
 				>
-					[y] 确定
+					[y] {request.confirmLabel ?? "确定"}
 				</button>
 				<button
 					type="button"
 					onClick={() => respond({ confirmed: false })}
 					className={KEY_HINT}
 				>
-					[n] 取消
+					[n] {request.cancelLabel ?? "取消"}
 				</button>
 			</div>
 		</div>
@@ -183,7 +186,7 @@ function ExtDialogItem({ request, active }: { request: ExtUIRequest; active: boo
 			<div className="min-w-0">
 				<div className="flex items-baseline gap-2">
 					<span className="font-bold whitespace-pre-wrap">{request.title}</span>
-					<span className="text-faint">扩展</span>
+					<span className="text-faint">{request.purpose === "plan" ? "计划审批" : request.purpose === "question" ? "需要你决策" : "扩展"}</span>
 					<span className="flex-1" />
 					{remaining !== null && (
 						<span

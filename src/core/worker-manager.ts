@@ -239,6 +239,7 @@ export class WorkerManager {
 				owner.state = event.state;
 				break;
 			case "session_info_changed": owner.state.sessionName = event.name; break;
+			case "work_mode_changed": owner.state.workMode = event.mode; break;
 			case "agent_start": owner.state.isStreaming = true; break;
 			case "agent_settled": owner.state.isStreaming = false; break;
 			case "approval_request": owner.approvals.add(event.toolCallId); break;

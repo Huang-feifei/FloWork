@@ -184,6 +184,8 @@ export function reduceEvent(s: SessionSlice, event: SessionEvent): Partial<Sessi
 					},
 				},
 			};
+		case "work_mode_changed":
+			return s.state ? { state: { ...s.state, workMode: event.mode } } : null;
 		case "session_info_changed":
 			return s.state ? { state: { ...s.state, sessionName: event.name } } : null;
 		case "thinking_level_changed":

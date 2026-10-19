@@ -137,7 +137,11 @@ export interface SessionQueue {
 	followUp: string[];
 }
 
+/** 计划模式只读探索；确认计划后进入执行模式，工具审批设置仍然生效。 */
+export type WorkMode = "plan" | "execute";
+
 export interface SessionState {
+	workMode?: WorkMode;
 	sessionId: string;
 	sessionFile?: string;
 	sessionName?: string;
@@ -313,6 +317,7 @@ export type SessionCommand =
 	| { type: "switch_session"; sessionPath: string }
 	| { type: "set_session_name"; name: string }
 	| { type: "set_approval_mode"; mode: ApprovalMode }
+	| { type: "set_work_mode"; mode: WorkMode }
 	| { type: "respond_approval"; toolCallId: string; decision: ApprovalDecision }
 	/** 应答扩展对话框：select / input / editor 传 value，confirm 传 confirmed，取消传 cancelled */
 	| { type: "respond_ext_ui"; id: string; value?: string; confirmed?: boolean; cancelled?: boolean }
@@ -365,6 +370,7 @@ export interface CommandResultMap {
 	switch_session: SessionState;
 	set_session_name: null;
 	set_approval_mode: null;
+	set_work_mode: SessionState;
 	respond_approval: null;
 	respond_ext_ui: null;
 	set_project_trust: SessionState;
@@ -418,6 +424,10 @@ export type BlockKind = "text" | "thinking" | "toolCall";
 export interface ExtUIRequest {
 	id: string;
 	method: "select" | "confirm" | "input" | "editor";
+	/** 内置决策工具的展示信息；未设置时为第三方扩展对话框。 */
+	purpose?: "question" | "plan";
+	confirmLabel?: string;
+	cancelLabel?: string;
 	title: string;
 	/** confirm 的正文 */
 	message?: string;
@@ -453,6 +463,7 @@ export type SessionEvent =
 	  }
 	| { type: "queue_update"; steering: string[]; followUp: string[] }
 	| { type: "session_info_changed"; name?: string }
+	| { type: "work_mode_changed"; mode: WorkMode }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| { type: "notice"; level: "info" | "warning" | "error"; text: string }
 	| { type: "approval_request"; toolCallId: string; toolName: string; args: unknown; risk?: ApprovalRisk }

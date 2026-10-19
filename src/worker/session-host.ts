@@ -29,6 +29,7 @@ import {
 	type SessionState,
 	type SlashCommand,
 	type SshHost,
+	type WorkMode,
 } from "@shared/protocol";
 import { toChatMessage, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
 import { ExtensionUI } from "./extension-ui";
@@ -36,6 +37,7 @@ import { type ApprovalRequest, createFloworkExtension } from "./flowork-extensio
 import { BackupLog, createOpsExtension, type OpsTarget, probeHostProfile } from "./ops-tools";
 import { getProjectTrust, isProjectTrusted, setProjectTrust } from "./trust";
 import { validateSession } from "./session-files";
+import { allowedInPlan, createPlanningExtension, DECISION_TOOLS, restoredWorkMode, WORK_MODE_ENTRY } from "./planning";
 
 interface PendingApproval {
 	toolName: string;
@@ -70,6 +72,7 @@ export class SessionHost {
 	private runtime: AgentSessionRuntime | undefined;
 	private unsubscribe: (() => void) | undefined;
 	private approvalMode: ApprovalMode;
+	private workMode: WorkMode = "execute";
 	/** 本会话中用户选择“始终允许”的工具 */
 	private readonly allowedTools = new Set<string>();
 	private readonly pendingApprovals = new Map<string, PendingApproval>();
@@ -115,7 +118,20 @@ export class SessionHost {
 	/** 每次新建 / 切换 / 分叉会话时 pi 都会调用它重建服务，FloWork 扩展随之注入 */
 	private readonly createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
 		const ops = this.ops;
-		const extensionFactories = [createFloworkExtension({ approve: (req, signal) => this.approve(req, signal), skipWriteDiff: !!ops })];
+		const extensionFactories = [
+			createFloworkExtension({ approve: (req, signal) => this.approve(req, signal), skipWriteDiff: !!ops }),
+			createPlanningExtension({
+				getMode: () => this.workMode,
+				askUser: (question, options, signal) => this.extUI.askUser(question, options, signal),
+				reviewPlan: (plan, signal) => this.extUI.reviewPlan(plan, signal),
+				acceptPlan: (sessionId, signal) => {
+					if (signal?.aborted || this.session.sessionManager.getSessionId() !== sessionId || this.workMode !== "plan") {
+						throw new Error("计划确认已失效，请重新提交计划");
+					}
+					this.setWorkMode("execute");
+				},
+			}),
+		];
 		if (ops) extensionFactories.push(createOpsExtension(ops.target, () => this.opsProfile, ops.backups));
 		const services = await createAgentSessionServices({
 			cwd,
@@ -125,7 +141,11 @@ export class SessionHost {
 			resourceLoaderOptions: { extensionFactories },
 		});
 		return {
-			...(await createAgentSessionFromServices({ services, sessionManager, sessionStartEvent })),
+			...(await createAgentSessionFromServices({
+				services, sessionManager, sessionStartEvent,
+				// 计划阶段不能用 Shell 搜索，补齐本地专用只读工具；运维会话不能误用本地目录。
+				tools: ops ? undefined : ["+grep", "+find", "+ls"],
+			})),
 			services,
 			diagnostics: services.diagnostics,
 		};
@@ -165,6 +185,7 @@ export class SessionHost {
 		this.unsubscribe?.();
 		this.extUI.cancelAll();
 		const session = this.session;
+		this.workMode = restoredWorkMode(session.sessionManager.getBranch());
 		const runtime = this.requireRuntime();
 		await session.bindExtensions({
 			uiContext: this.extUI.createContext(),
@@ -174,8 +195,12 @@ export class SessionHost {
 				newSession: (options) => runtime.newSession(options),
 				fork: async (entryId, options) => ({ cancelled: (await runtime.fork(entryId, options)).cancelled }),
 				navigateTree: async (targetId, options) => {
+					this.extUI.cancelAll();
 					const result = await this.session.navigateTree(targetId, options);
-					if (!result.cancelled) this.changed();
+					if (!result.cancelled) {
+						this.workMode = restoredWorkMode(this.session.sessionManager.getBranch());
+						this.changed();
+					}
 					return { cancelled: result.cancelled };
 				},
 				// 扩展代码本身在本机运行，其传入的会话路径不经过界面，交给 pi 校验即可
@@ -201,7 +226,7 @@ ${err.extensionPath}` });
 
 	private stateOf(): SessionState {
 		const session = this.session;
-		const state: SessionState = { ...toSessionState(session), trust: getProjectTrust(session.sessionManager.getCwd()) };
+		const state: SessionState = { ...toSessionState(session), workMode: this.workMode, trust: getProjectTrust(session.sessionManager.getCwd()) };
 		if (this.ops) {
 			state.ops = { ...this.ops.info };
 			// 运维会话不需要项目信任（占位目录里没有项目配置）
@@ -214,6 +239,13 @@ ${err.extensionPath}` });
 		const state = this.stateOf();
 		this.emit({ type: "session_changed", state });
 		return state;
+	}
+
+	private setWorkMode(mode: WorkMode): void {
+		if (mode !== "plan" && mode !== "execute") throw new Error("无效的工作模式");
+		this.session.sessionManager.appendCustomEntry(WORK_MODE_ENTRY, { mode });
+		this.workMode = mode;
+		this.emit({ type: "work_mode_changed", mode });
 	}
 
 	// ----- 工具审批 -----
@@ -243,6 +275,12 @@ ${err.extensionPath}` });
 	}
 
 	private approve(request: ApprovalRequest, signal: AbortSignal | undefined): Promise<string | null> {
+		// 计划限制优先于自动审批及「本会话始终允许」，未知工具一律禁止。
+		if (this.workMode === "plan" && !allowedInPlan(request.toolName)) {
+			return Promise.resolve("计划模式禁止此工具。只能只读探索、ask_user 提问和 submit_plan 提交计划；须用户确认计划后才能修改或运行命令。");
+		}
+		// 决策工具本身会等待用户应答，无需再套一层工具执行审批。
+		if (DECISION_TOOLS.has(request.toolName)) return Promise.resolve(null);
 		const risk = this.assess(request);
 		if (!this.needsApproval(request.toolName, risk)) return Promise.resolve(null);
 		if (signal?.aborted) return Promise.resolve("运行已中断");
@@ -321,8 +359,12 @@ ${err.extensionPath}` });
 					leafId: session.sessionManager.getLeafId(),
 				};
 			case "navigate_tree": {
+				this.extUI.cancelAll();
 				const result = await session.navigateTree(command.entryId, { summarize: command.summarize });
-				if (!result.cancelled) this.changed();
+				if (!result.cancelled) {
+					this.workMode = restoredWorkMode(session.sessionManager.getBranch());
+					this.changed();
+				}
 				return { cancelled: result.cancelled, editorText: result.editorText };
 			}
 			case "fork": {
@@ -358,6 +400,10 @@ ${err.extensionPath}` });
 			case "set_session_name":
 				session.setSessionName(command.name.trim());
 				return null;
+			case "set_work_mode":
+				if (session.isStreaming || this.extUI.hasPending || this.pendingApprovals.size > 0) throw new Error("请先结束当前运行或中断，再切换工作模式");
+				this.setWorkMode(command.mode);
+				return this.stateOf();
 			case "set_approval_mode":
 				this.approvalMode = command.mode;
 				// 切换到自动模式时，放行正在等待的请求（高危操作除外）

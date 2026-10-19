@@ -79,6 +79,31 @@ export class ExtensionUI {
 		});
 	}
 
+	get hasPending(): boolean {
+		return this.pending.size > 0;
+	}
+
+	async askUser(question: string, options: string[], signal?: AbortSignal): Promise<string | undefined> {
+		const value = (r: ExtUIResponse) => r.cancelled ? undefined : r.value;
+		if (options.length > 0) {
+			let other = "其他（自行填写）";
+			while (options.includes(other)) other += "…";
+			const choice = await this.dialog({ method: "select", purpose: "question", title: question, options: [...options, other] }, undefined, signal, value);
+			if (choice === undefined) return undefined;
+			if (options.includes(choice)) return choice;
+			if (choice !== other) throw new Error("无效的决策选项");
+		}
+		const answer = await this.dialog({ method: "input", purpose: "question", title: question, placeholder: "输入你的决定或补充要求" }, undefined, signal, value);
+		return answer?.trim() || undefined;
+	}
+
+	reviewPlan(plan: string, signal?: AbortSignal): Promise<boolean> {
+		return this.dialog({
+			method: "confirm", purpose: "plan", title: "确认实施计划", message: plan,
+			confirmLabel: "确认计划并执行", cancelLabel: "暂不执行，继续讨论",
+		}, undefined, signal, (r) => !r.cancelled && r.confirmed === true);
+	}
+
 	createContext(): ExtensionUIContext {
 		const value = (r: ExtUIResponse) => (r.cancelled ? undefined : r.value);
 		const ctx = {

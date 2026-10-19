@@ -22,6 +22,7 @@ import {
 	type SessionSummary,
 	type SshHost,
 	type ThinkingLevel,
+	type WorkMode,
 } from "@shared/protocol";
 import { api, errorText, setHostKeyChangedHandler } from "./api/client";
 import type { ConnectionStatus } from "./api/transport";
@@ -187,6 +188,7 @@ interface AppState extends SessionSlice {
 	setModel(model: ModelInfo): Promise<void>;
 	setThinkingLevel(level: ThinkingLevel): Promise<void>;
 	setApprovalMode(mode: ApprovalMode): Promise<void>;
+	setWorkMode(mode: WorkMode): Promise<void>;
 	respondApproval(toolCallId: string, decision: ApprovalDecision): Promise<void>;
 	/** 应答扩展对话框；response 为空表示取消 */
 	respondExtUI(id: string, response: { value?: string; confirmed?: boolean } | null): Promise<void>;
@@ -993,6 +995,13 @@ export const useApp = create<AppState>()((set, get) => {
 		async setThinkingLevel(level) {
 			const state = await active((h) => api.session(h, { type: "set_thinking_level", level }));
 			if (state) set({ state });
+		},
+
+		async setWorkMode(mode) {
+			const handleId = get().handleId;
+			if (!handleId) return;
+			const state = await call(handleId, (h) => api.session(h, { type: "set_work_mode", mode }));
+			if (state) patchHandle(handleId, { state });
 		},
 
 		async setApprovalMode(mode) {
