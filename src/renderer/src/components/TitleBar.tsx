@@ -1,8 +1,8 @@
 /**
- * 自绘窗口标题栏（桌面版 titleBarStyle: hidden），外观按 Apple 体系重设：
- * 左侧交通灯 + 应用菜单按钮（文件 / 编辑 / 视图 / 会话 / 终端 / 帮助 六个菜单都收在这个按钮里，
+ * 自绘窗口标题栏（桌面版 titleBarStyle: hidden）：
+ * 左侧应用菜单按钮（文件 / 编辑 / 视图 / 会话 / 终端 / 帮助 六个菜单都收在这个按钮里，
  * 不再在窗口里排成一排 Windows 式菜单条），中间是窗口标题（当前项目 / 会话），
- * 右侧是搜索入口与布局开关。整条栏为拖拽区。
+ * 右侧是搜索入口、布局开关与系统风格的窗口按钮（macOS 用系统自带红绿灯）。整条栏为拖拽区。
  */
 import { useEffect, useState } from "react";
 import { displayUserText } from "@shared/skill-text";
@@ -15,23 +15,23 @@ const MENUS = ["文件", "编辑", "视图", "会话", "终端", "帮助"] as co
 type MenuName = (typeof MENUS)[number];
 
 /**
- * 交通灯：12px 的圆点视觉，但外面套 20px 的按钮——旧版窗口按钮是 46px 宽，
- * 而 12px 的点击目标很难命中，偏一点就落到拖拽区变成拖窗口。
- * 悬停时显示符号（✕ / − / ⤢），与 macOS 行为一致。
+ * Windows 风格窗口按钮：贴窗口右上角，宽 46px、满高（与系统按钮一致），
+ * 命中区比之前 20px 的圆点大一个量级；关闭键悬停变红。
  */
-function TrafficLight({ tone, title, glyph, onClick }: { tone: string; title: string; glyph: string; onClick: () => void }) {
+function WindowButton({ icon, title, close, onClick }: { icon: IconName; title: string; close?: boolean; onClick: () => void }) {
 	return (
 		<button
 			type="button"
 			title={title}
 			onClick={onClick}
-			className="group flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-panel-2"
+			className={`app-no-drag flex w-[46px] shrink-0 items-center justify-center self-stretch text-muted hover:text-fg ${
+				close ? "hover:bg-win-close hover:text-white" : "hover:bg-panel-2"
+			}`}
 		>
-			<span
-				className={`flex size-3 items-center justify-center rounded-full text-[8px] leading-none font-bold text-black/45 ${tone}`}
-			>
-				<span className="opacity-0 group-hover:opacity-100">{glyph}</span>
-			</span>
+			<Icon
+				name={icon}
+				className={icon === "square" ? "size-3" : "size-4"}
+			/>
 		</button>
 	);
 }
@@ -200,14 +200,6 @@ export function TitleBar() {
 
 	return (
 		<header className="app-drag relative flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 select-none">
-			{isDesktop && !isMac && (
-				<div className="flex items-center gap-0.5">
-					<TrafficLight tone="bg-traffic-close" title="关闭" glyph="✕" onClick={() => void window.floworkWindow?.close()} />
-					<TrafficLight tone="bg-traffic-min" title="最小化" glyph="−" onClick={() => void window.floworkWindow?.minimize()} />
-					<TrafficLight tone="bg-traffic-max" title="最大化" glyph="⤢" onClick={() => void window.floworkWindow?.toggleMaximize()} />
-				</div>
-			)}
-
 			<button
 				type="button"
 				title={`应用菜单：${MENUS.join(" / ")}`}
@@ -274,6 +266,15 @@ export function TitleBar() {
 					onClick={() => useApp.getState().setRightPanel(rightPanel ? null : "session")}
 				/>
 			</div>
+
+			{/* Windows / Linux：系统风格的窗口按钮，贴右上角；macOS 用系统自带的红绿灯 */}
+			{isDesktop && !isMac && (
+				<div className="-mr-4 flex shrink-0 items-stretch self-stretch">
+					<WindowButton icon="minus" title="最小化" onClick={() => void window.floworkWindow?.minimize()} />
+					<WindowButton icon="square" title="最大化" onClick={() => void window.floworkWindow?.toggleMaximize()} />
+					<WindowButton icon="x" title="关闭" close onClick={() => void window.floworkWindow?.close()} />
+				</div>
+			)}
 
 			{open &&
 				(open.name === "root" ? (

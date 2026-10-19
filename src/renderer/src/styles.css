@@ -63,12 +63,9 @@
 	--color-diff-del: rgb(255 59 48 / 0.13);
 	--color-diff-del-fg: #a8071a;
 
-	/* ---------- 遮罩与窗口按钮（交通灯） ---------- */
+	/* ---------- 遮罩与窗口关闭按钮 ---------- */
 	--color-scrim: rgb(0 0 0 / 0.28);
 	--color-win-close: #ff5f57;
-	--color-traffic-close: #ff5f57;
-	--color-traffic-min: #febc2e;
-	--color-traffic-max: #28c840;
 
 	/* ---------- 不透明表面、投影与行内代码 ---------- */
 	--color-window: #f5f5f7;
