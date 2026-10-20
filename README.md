@@ -260,3 +260,7 @@ node scripts/test-host-key.mjs      # 主机密钥变化的检测与更新（另
 - **M3**：内置终端与内置浏览器；转为桌面版发布。electron-builder 打包、收紧 CSP 与 SSH 密码加密已完成（见「桌面版发布」）。
 - **auth.json 加密**：pi 的 `ModelRuntime.create({ credentials })` 允许注入自定义 CredentialStore，但 `AuthStorage` 未从包入口导出，且 service worker、各 session worker 与扩展都可能创建运行时；需要自行实现带跨进程锁的加密 CredentialStore，并处理 OAuth 刷新写回与 `!command` 形式的 key，风险较高，单独排期。
 - **运维会话后续**：常驻 SSH 连接以降低每条命令的握手延迟（Windows 自带 OpenSSH 不支持 ControlMaster）；操作记录面板；Windows Server（PowerShell）主机；常见运维场景的技能与从备份一键回滚。
+
+## 许可证
+
+本项目采用 [MIT License](LICENSE) 开源。

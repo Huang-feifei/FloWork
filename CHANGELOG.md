@@ -4,6 +4,7 @@
 
 ## 1.0.9 — 2026-10-20
 
+- 项目开源协议改为 MIT License
 - 数据库 / SSH 连接强制逐次确认：即使审批设为「关闭（自动执行）」，AI 执行 `psql`、`mysql`、`sqlite3`、`ssh`、`scp`、`redis-cli` 等连接命令也必须先获确认，且不能「本会话始终允许」；子代理内部的连接命令同样会请求确认
 - 新增内置子代理：支持 single / parallel / chain，拥有独立上下文窗口；agent 可放在用户级 `~/.flowork/agent/agents/` 或项目级 `.pi/agents/`，`subagent` 工具整体审批一次，内部工具自动放行；计划模式禁用，运维会话不启用
 - 子代理增加「设置 → 子代理」可视化配置：总开关、parallel 最大任务数 / 并发数、默认模型；写入 settings.json 的 `flowork.subagent`，agent 文件中的 `model` 优先，新会话或切换会话后生效

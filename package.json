@@ -2,6 +2,7 @@
   "name": "flowork",
   "version": "1.0.9",
   "private": true,
+  "license": "MIT",
   "description": "FloWork — 以 pi coding agent 为内核、以对话为中心的桌面应用",
   "type": "module",
   "main": "./out/main/index.js",
