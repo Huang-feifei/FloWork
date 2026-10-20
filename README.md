@@ -40,6 +40,38 @@ npm run dev:web       # 页面：http://127.0.0.1:5173/（Vite 热更新），�
 
 这是对模型工具调用的工作流限制，不是扩展代码或本机程序的安全沙箱。运维会话仍使用远程工具，不会为计划模式启用本地目录搜索。
 
+## 子代理
+
+把任务委派给拥有独立上下文窗口的子会话，适合代码侦察、独立审查、并行调查等不需要占用主会话上下文的场景。
+
+agent 定义放在：
+
+- 用户级：`~/.flowork/agent/agents/*.md`
+- 项目级：`<项目>/.pi/agents/*.md`（项目未受信任时先确认）
+
+```md
+---
+name: reviewer
+description: 代码审查
+tools: read, grep, find, ls
+model: provider/model-id
+---
+
+你是一个代码审查代理……
+```
+
+`model` 省略时继承当前会话的模型和思考等级；`tools` 省略时使用内置工具（`read` / `bash` / `edit` / `write` / `grep` / `find` / `ls`）。项目级 agent 与用户级同名时，项目级优先。
+
+`subagent` 支持三种模式：
+
+- `single`：一个 `agent` + 一个 `task`
+- `parallel`：最多 8 个任务，最多 4 个并发
+- `chain`：按顺序执行，后续任务可用 `{previous}` 引用上一步输出
+
+审批边界：`subagent` 工具本身按当前审批策略确认一次（默认 / 全部确认模式会弹窗，自动审批模式不弹）；批准后，子代理内部的工具调用自动执行，不再逐个弹审批。请在批准前确认 agent 与任务范围。子代理在独立上下文中运行，结果显示在父会话的工具块中，运行中可看到流式进度。
+
+限制：子代理只在本地会话可用，运维（SSH）会话不注册；计划模式下 `subagent` 会被阻止；子会话不落盘，父会话中断会同时中止子代理；单个任务输出上限 50KB。
+
 ## 架构
 
 ```text
@@ -74,6 +106,11 @@ src/
   worker/                   pi worker
     session-host.ts         承载 pi 会话
     service-host.ts         供应商、登录、测试连接、配置文件
+    flowork-extension.ts    工具审批与 write diff
+    planning.ts             计划 / 执行模式、ask_user、submit_plan
+    subagent.ts             内置子代理（single / parallel / chain）
+    trust.ts                项目信任
+    ops-tools.ts            SSH 运维工具
     session-files.ts        历史会话的校验、重命名与删除
     config-file.ts          settings.json / models.json 的串行写入与原子替换
     adapter.ts              pi → FloWork 数据适配
@@ -88,7 +125,7 @@ scripts/                    网页版构建、开发、启动脚本，以及自�
 
 ## pi 配置目录
 
-默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。
+默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/、agents/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。
 
 FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）、hosts.json（SSH 主机；桌面版的密码经系统加密后保存）、databases.json（数据库连接、历史与收藏；桌面版密码优先系统加密）、trust.json（项目信任决定）、hosts/（运维会话的本地占位目录，pi 按它归档会话记录，不存放服务器文件）。设置页中的所有修改都写入 pi 配置目录：
 
@@ -160,6 +197,7 @@ node scripts/test-kernel.mjs                   # 离线更新回归，不调用�
 - 运行中投递：任务运行中继续输入时，Enter 排队（当前轮结束后执行）、Ctrl+Enter 插话（在工具调用之间插入送达）；输入框上方显示待发送队列，可拖拽或 ↑↓ 调整顺序，也可一键取回输入框
 - 工具审批：修改与命令前确认（默认）/ 全部确认 / 关闭；可“本会话始终允许”某个工具；拒绝原因会告诉模型
 - 计划与共同决策：按会话切换计划/执行模式，只读限制、交互提问、计划确认后执行；拒绝或中断不授权
+- 子代理：`subagent` 支持 single / parallel / chain，子会话拥有独立上下文；agent 可放在用户级 `~/.flowork/agent/agents/` 或项目级 `.pi/agents/`，项目级需要信任；`subagent` 整体审批一次，内部工具自动放行；计划模式禁用，运维会话不启用
 - 修改 diff：edit 使用 pi 自带的 diff；write 由 FloWork 扩展在执行前快照、执行后生成 diff
 - 会话树窄轨：会话区右缘一条竖轨，每个用户消息一条横条（屏幕上可见的最亮、当前分支上其余淡亮、其他分支最暗，当前位置加粗，分叉点带竖线与缩进）；悬停弹出节点卡片，可回到任意节点继续（用户消息会填回输入框以便修改重发）、分叉为新会话、节点标签。命令面板与标题栏「会话」菜单可隐藏 / 显示窄轨（默认显示，选择记在 localStorage）
 - 会话输出滚动：默认跟随最新输出（内容长高即贴底，不做滚动动画，避免流式输出时追不上）；上滚查看历史后停止跟随，并浮出「回到最新」按钮。长会话分段渲染：打开时只挂最近 80 条消息，滚到顶部自动再加载 80 条，也可一键全部显示
@@ -173,8 +211,8 @@ node scripts/test-kernel.mjs                   # 离线更新回归，不调用�
 - 代码查看与编辑：CodeMirror 语法高亮、查找；编辑后 Ctrl+S 保存，文件已被 AI 或外部修改时拒绝保存以免覆盖；对话中的代码块同样高亮
 - 内置浏览器（仅桌面版）：右侧面板的「浏览器」标签内嵌网页，与聊天并排。多标签（最多 32 个）、前进 / 后退 / 刷新 / 停止、地址栏（Ctrl+L 聚焦），面板宽度可拖拽调整并记忆。网页由主进程的 `WebContentsView` 承载，跟随面板位置、窗口缩放与遮挡自动重排；标签属于窗口，不随聊天会话切换而关闭。网页内 Ctrl+L / Ctrl+K 会把焦点交回应用。Web 版无法可靠嵌入任意网站，只提供「在外部浏览器打开」
 - 技能与扩展：按项目列出技能、扩展、提示模板与 pi 包（含已禁用的）；导入本地文件夹（全局或仅当前项目）、启用 / 禁用、删除导入的副本、安装 npm / git pi 包；变更后各会话自动重新加载。输入框输入 / 时补全 /skill:名称、提示模板与扩展命令
-- 第三方扩展界面：扩展的 select / confirm / input / editor 对话框以终端提示的形式出现在会话末尾（键盘操作，带超时倒计时，后台项目等待时侧边栏与状态栏计入“待确认”）；setStatus 显示在状态栏，setWidget 显示在输入框上下方，notify 显示为通知，setEditorText 填入输入框。依赖终端界面的能力（自定义组件、页眉页脚、主题切换）不支持
-- 项目信任：项目含 .pi/ 配置或项目内 .agents/skills 时，未经确认不加载（pi SDK 默认会直接信任）；决定保存在 trust.json
+- 决策与扩展界面：工具审批、内置 ask_user / submit_plan、扩展的 select / confirm / input / editor 对话框统一为输入框上方的决策卡片（键盘操作，带超时倒计时；多个请求只显示队首，其余提示排队；后台项目等待时侧边栏与状态栏计入“待确认”）；setStatus 显示在状态栏，setWidget 显示在输入框上下方，notify 显示为通知，setEditorText 填入输入框。依赖终端界面的能力（自定义组件、页眉页脚、主题切换）不支持
+- 项目信任：项目含 .pi/ 配置（扩展、技能、提示词、主题、agents 等）或项目内 .agents/skills 时，未经确认不加载（pi SDK 默认会直接信任）；决定保存在 trust.json
 - 版本更新提示：启动时发现版本与上次运行不同，弹窗显示 CHANGELOG.md 里当前版本的更新内容（首次运行只记录版本、不打扰）；帮助菜单与命令面板可随时重新查看
 - 服务器目录：远程项目时右侧多一个「服务器目录」面板，可浏览服务器上的任意目录（可输入路径跳转、返回上一级、回到 home），上传本地文件（选择或拖拽）、下载到本地、新建 / 重命名 / 删除 / 移动，双击文件在预览面板里打开并可编辑。与「项目文件」（限定项目根）并存，命令面板可一键打开
 - 服务状态：远程项目时右侧多一个「服务状态」面板（只读监控）——资源概览（负载 / 内存 / 各挂载点用量）、systemd 服务单元列表（可过滤，失败项置顶高亮）、监听端口与对应进程、失败单元与最近的错误日志；支持手动刷新与自动刷新（10 秒，可关），面板关闭即停
@@ -184,7 +222,7 @@ node scripts/test-kernel.mjs                   # 离线更新回归，不调用�
   - 自定义端点按模型逐个配置：显示名、上下文窗口、最大输出、思考、图片输入、价格，以及思考等级映射（`thinkingLevelMap`）等其余字段；留空的字段不写入 models.json
   - 配置保存前校验磁盘文件是否被外部修改（mtime），不一致时提示重新加载或明确覆盖，避免静默覆盖别人的改动
 
-FloWork 对 pi 的扩展集中在 `src/worker/flowork-extension.ts`（以内联扩展方式注入，不修改 pi 本身）。
+FloWork 的内置扩展均以内联方式注入，不修改 pi 本身：`flowork-extension.ts`（审批与 write diff）、`planning.ts`（计划模式与共同决策）、`subagent.ts`（子代理）、`ops-tools.ts`（SSH 运维工具）。
 
 ## 开发辅助脚本
 
@@ -197,6 +235,9 @@ node scripts/shoot-ui.mjs <输出目录>                                  # 对 
 # 不写真实配置目录、不调用模型，断言失败时返回非零退出码。需要先 npm run build:web（npm test 会自动构建并全部运行）。
 node scripts/test-database.mjs    # 真实 SQLite + SQL/只读/写入确认/取消/凭据回归；可选 Docker PostgreSQL/MySQL（不需要构建）
 node scripts/test-hosts.mjs       # SSH 主机口令加密与迁移（不需要构建）
+node scripts/test-planning.mjs    # 计划模式、ask_user、submit_plan
+node scripts/test-subagent.mjs    # 子代理发现、信任、注册与计划模式拦截
+node scripts/test-preview.mjs     # 本地 HTML / SVG 预览
 node scripts/test-sessions.mjs    # 会话重命名与删除
 node scripts/test-projects.mjs    # 项目注册表
 node scripts/test-resources.mjs   # 技能 / 扩展 / 提示模板与包管理
@@ -214,4 +255,4 @@ node scripts/test-host-key.mjs      # 主机密钥变化的检测与更新（另
 
 - **M3**：内置终端与内置浏览器；转为桌面版发布。electron-builder 打包、收紧 CSP 与 SSH 密码加密已完成（见「桌面版发布」）。
 - **auth.json 加密**：pi 的 `ModelRuntime.create({ credentials })` 允许注入自定义 CredentialStore，但 `AuthStorage` 未从包入口导出，且 service worker、各 session worker 与扩展都可能创建运行时；需要自行实现带跨进程锁的加密 CredentialStore，并处理 OAuth 刷新写回与 `!command` 形式的 key，风险较高，单独排期。
-- **运维会话后续**（设计见 `.context/remote-ai-session-design.md`）：常驻 SSH 连接以降低每条命令的握手延迟（Windows 自带 OpenSSH 不支持 ControlMaster）；操作记录面板；Windows Server（PowerShell）主机；常见运维场景的技能与从备份一键回滚。
+- **运维会话后续**：常驻 SSH 连接以降低每条命令的握手延迟（Windows 自带 OpenSSH 不支持 ControlMaster）；操作记录面板；Windows Server（PowerShell）主机；常见运维场景的技能与从备份一键回滚。

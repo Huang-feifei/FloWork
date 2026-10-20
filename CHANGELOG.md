@@ -2,6 +2,12 @@
 
 按版本倒序记录。应用在检测到版本与上次运行不同时，会弹窗显示当前版本的条目（见 `src/renderer/src/components/UpdateDialog.tsx`）。
 
+## 未发布
+
+- 新增内置子代理：支持 single / parallel / chain，拥有独立上下文窗口；agent 可放在用户级 `~/.flowork/agent/agents/` 或项目级 `.pi/agents/`，`subagent` 工具整体审批一次，内部工具自动放行；计划模式禁用，运维会话不启用
+- 工具审批、`ask_user` / `submit_plan` 与第三方扩展对话框统一为输入框上方的决策卡片，不再插入会话流；多个请求只显示队首并提示排队数量
+- 项目级 `.pi/agents` 纳入项目信任检查
+
 ## 1.0.8 — 2026-10-19
 
 - 新增数据库工作台：支持 SQLite、PostgreSQL、MySQL 连接、表结构与分页浏览、SQL 查询、历史与收藏、CSV 导出；默认只读，写入逐次确认，网络数据库可复用 SSH 隧道
