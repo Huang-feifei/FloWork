@@ -108,7 +108,8 @@ src/
     service-host.ts         供应商、登录、测试连接、配置文件
     flowork-extension.ts    工具审批与 write diff
     planning.ts             计划 / 执行模式、ask_user、submit_plan
-    subagent.ts             内置子代理（single / parallel / chain）
+    subagent.ts             内置子代理入口（工具注册、项目确认）
+    subagent/               子代理发现、执行、编排与格式化
     trust.ts                项目信任
     ops-tools.ts            SSH 运维工具
     session-files.ts        历史会话的校验、重命名与删除
@@ -236,7 +237,7 @@ node scripts/shoot-ui.mjs <输出目录>                                  # 对 
 node scripts/test-database.mjs    # 真实 SQLite + SQL/只读/写入确认/取消/凭据回归；可选 Docker PostgreSQL/MySQL（不需要构建）
 node scripts/test-hosts.mjs       # SSH 主机口令加密与迁移（不需要构建）
 node scripts/test-planning.mjs    # 计划模式、ask_user、submit_plan
-node scripts/test-subagent.mjs    # 子代理发现、信任、注册与计划模式拦截
+node scripts/test-subagent.mjs    # 子代理发现、信任、single/parallel/chain 编排与计划模式拦截
 node scripts/test-preview.mjs     # 本地 HTML / SVG 预览
 node scripts/test-sessions.mjs    # 会话重命名与删除
 node scripts/test-projects.mjs    # 项目注册表
