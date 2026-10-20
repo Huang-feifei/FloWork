@@ -524,7 +524,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	}));
 
 	return (
-		<div className="flex min-w-0 items-center gap-1 overflow-hidden px-3.5 pt-1 pb-3 whitespace-nowrap">
+		<div className="flex min-w-0 items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
 			<Picker
 				label={workMode === "plan" ? "计划模式 · 只读" : "执行模式"}
 				title={isRunning || waiting > 0 ? "请先结束或中断当前运行，再切换模式" : "计划模式先讨论并确认方案，执行模式允许实施"}

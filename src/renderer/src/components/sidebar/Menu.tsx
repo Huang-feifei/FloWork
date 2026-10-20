@@ -1,5 +1,5 @@
 /** 轻量弹出菜单：点击外部或按 Esc 关闭。Apple 体系下是白色圆角浮层 + 内缩圆角项。 */
-import { type ReactNode, useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useBrowserOcclusion } from "../../lib/browser";
 
 export interface MenuItem {
@@ -23,6 +23,7 @@ export function Menu({
 	onClose: () => void;
 }) {
 	const ref = useRef<HTMLDivElement>(null);
+	const [placed, setPlaced] = useState(position);
 	useBrowserOcclusion();
 
 	useEffect(() => {
@@ -40,14 +41,33 @@ export function Menu({
 		};
 	}, [onClose]);
 
-	// 避免超出窗口底部
-	const top = Math.min(position.y, window.innerHeight - 24 - items.length * 36);
+	// 菜单靠近窗口右侧或底部时，优先翻到鼠标左侧 / 上方；仍不够则贴边。
+	useLayoutEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const place = () => {
+			const rect = el.getBoundingClientRect();
+			const margin = 8;
+			let left = position.x;
+			let top = position.y;
+			if (left + rect.width > window.innerWidth - margin) {
+				left = Math.max(margin, position.x - rect.width);
+			}
+			if (top + rect.height > window.innerHeight - margin) {
+				top = Math.max(margin, position.y - rect.height);
+			}
+			setPlaced({ x: left, y: top });
+		};
+		place();
+		window.addEventListener("resize", place);
+		return () => window.removeEventListener("resize", place);
+	}, [position.x, position.y]);
 
 	return (
 		<div
 			ref={ref}
 			className="fw-float fixed z-50 min-w-44 rounded-2xl border border-border py-1.5 text-[13.5px]"
-			style={{ left: position.x, top: Math.max(8, top) }}
+			style={{ left: placed.x, top: placed.y, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}
 		>
 			{items.map((item, i) =>
 				item.separator ? (
