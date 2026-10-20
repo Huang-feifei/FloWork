@@ -13,6 +13,8 @@
 // 基础数据
 // ---------------------------------------------------------------------------
 
+import type { DatabaseMethods } from "./database";
+
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -720,7 +722,37 @@ export interface DiscoveredProject {
 	exists: boolean;
 }
 
-export interface BackendMethods {
+export interface ImageModelInfo {
+	/** provider/id，例如 relay-openai/gpt-image-1 */
+	key: string;
+	provider: string;
+	id: string;
+	name: string;
+	/** 支持的尺寸，例如 ["1024x1024", "1536x1024"] */
+	sizes: string[];
+	/** 是否支持参考图（走 /images/edits） */
+	edits: boolean;
+	/** 每张价格（元），用于生成前的预估 */
+	price?: number;
+}
+
+/** 一次生成的记录；图片本体存在本机缓存目录里，这里只有元数据 */
+export interface GeneratedImage {
+	/** 缓存文件名，也是读取与删除的标识 */
+	id: string;
+	prompt: string;
+	/** provider/id */
+	model: string;
+	/** 例如 1024x1024 */
+	size: string;
+	quality: "standard" | "hd";
+	bytes: number;
+	createdAt: number;
+	/** 是否用了参考图生成 */
+	edited: boolean;
+}
+
+export interface BackendMethods extends DatabaseMethods {
 	"app.info": { params: undefined; result: AppInfo };
 	"kernel.status": { params: undefined; result: import("./kernel").KernelUpdateStatus };
 	"kernel.check": { params: undefined; result: import("./kernel").KernelUpdateStatus };
@@ -821,6 +853,31 @@ export interface BackendMethods {
 	"terminal.write": { params: { terminalId: string; data: string }; result: null };
 	"terminal.resize": { params: { terminalId: string; cols: number; rows: number }; result: null };
 	"terminal.close": { params: { terminalId: string }; result: null };
+	// ---------------------------------------------------------------------
+	// 图片生成（OpenAI 兼容的 /images/generations 与 /images/edits）
+	// ---------------------------------------------------------------------
+	/** 已配置的图片模型（models.json 里各供应商声明的 imageModels） */
+	"images.models": { params: undefined; result: ImageModelInfo[] };
+	/** 生成图片；结果写入本机缓存目录并返回这次的记录 */
+	"images.generate": {
+		params: {
+			model?: string;
+			prompt: string;
+			size?: string;
+			quality?: "standard" | "hd";
+			count?: number;
+			/** 参考图（base64，不带前缀）；传了就走图生图 */
+			reference?: { dataBase64: string; mimeType: string };
+		};
+		result: GeneratedImage[];
+	};
+	/** 生成历史（新→旧） */
+	"images.list": { params: undefined; result: GeneratedImage[] };
+	/** 读取图片内容（base64），用于界面显示与插入会话 */
+	"images.read": { params: { id: string }; result: { id: string; mimeType: string; dataBase64: string; bytes: number } };
+	"images.remove": { params: { id: string }; result: null };
+	/** 清空缓存；已经插入会话的附件不受影响 */
+	"images.clear": { params: undefined; result: { removed: number } };
 }
 
 export type BackendMethod = keyof BackendMethods;

@@ -47,9 +47,10 @@ export function KernelTab() {
 					{status && <Badge tone={status.phase === "error" ? "err" : status.pending ? "warn" : "muted"}>{PHASE_LABELS[status.phase]}</Badge>}
 				</div>
 				<dl className="mt-4 grid grid-cols-[100px_1fr] gap-y-2 text-[13.5px]">
-					<dt className="text-muted">内核版本</dt><dd className="font-mono">{status?.current.version ?? "…"}</dd>
+					<dt className="text-muted">更新批次</dt><dd className="font-mono">{status?.current.version ?? "…"}</dd>
 					<dt className="text-muted">Pi 版本</dt><dd className="font-mono">{status?.current.piVersion ?? "…"}</dd>
-					<dt className="text-muted">更新来源</dt><dd className="break-all">{status?.repository ? `GitHub · ${status.repository}` : "尚未配置"}</dd>
+					<dt className="text-muted">兼容清单</dt><dd className="break-all">{status?.repository ? `GitHub · ${status.repository}` : "尚未配置"}</dd>
+					<dt className="text-muted">内核来源</dt><dd>官方 npm · registry.npmjs.org</dd>
 				</dl>
 				{status?.message && <p className="mt-4 text-[13px] leading-6 text-muted">{status.message}</p>}
 				{(error || status?.error) && <div role="alert" className="mt-4 rounded-xl bg-err-soft px-4 py-3 text-[13px] text-err">{error || status?.error}</div>}
@@ -63,7 +64,7 @@ export function KernelTab() {
 					<Button disabled={!status?.configured || busy} onClick={() => void run(api.kernel.check)}>检查更新</Button>
 					{status?.latest && (
 						<Button variant="primary" disabled={busy || status.pending?.version === status.latest.version} onClick={() => void run(api.kernel.install)}>
-							下载并更新至 {status.latest.version}
+							下载并更新 Pi {status.latest.piVersion}
 						</Button>
 					)}
 					{status?.pending && <Button variant="primary" disabled={busy} onClick={() => void run(api.kernel.restart)}>重启并应用</Button>}
@@ -82,7 +83,7 @@ export function KernelTab() {
 					<a className="mt-3 inline-block text-[13px] text-primary hover:underline" href={status.latest.releaseUrl} target="_blank" rel="noreferrer">在 GitHub 查看发布详情</a>
 				</Card>
 			)}
-			<p className="text-[12.5px] leading-6 text-faint">更新包包含 Pi SDK、FloWork Worker 适配层和运行依赖。只安装经过签名且兼容当前应用的版本，不会直接安装 npm 上的任意最新版。启动自检失败会回退旧内核；更新不会删除会话与配置。运行中或等待交互的会话需先结束再重启。</p>
+			<p className="text-[12.5px] leading-6 text-faint">仅显示维护者测试并签名放行的 Pi 版本；Pi SDK 与固定依赖从官方 npm 下载，不自动追随官方最新版。继续使用当前应用内置的 Worker 适配层，不从网络替换适配代码。启动自检失败会回退旧内核；更新不会删除会话与配置。运行中或等待交互的会话需先结束再重启。</p>
 		</div>
 	);
 }

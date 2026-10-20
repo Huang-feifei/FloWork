@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 
 const PATHS = {
+	database: (<><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5v14a9 3 0 0 0 18 0V5M3 12a9 3 0 0 0 18 0" /></>),
 	/* 活动栏 / 侧栏 */
 	messages: (
 		<>
@@ -120,6 +121,37 @@ const PATHS = {
 		</>
 	),
 	check: <path d="M20 6 9 17l-5-5" />,
+	image: (
+		<>
+			<rect width="18" height="18" x="3" y="3" rx="2" />
+			<circle cx="9" cy="9" r="2" />
+			<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+		</>
+	),
+	sparkles: (
+		<>
+			<path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275Z" />
+			<path d="M5 3v4" />
+			<path d="M19 17v4" />
+			<path d="M3 5h4" />
+			<path d="M17 19h4" />
+		</>
+	),
+	"trash-2": (
+		<>
+			<path d="M3 6h18" />
+			<path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+			<path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+			<path d="M10 11v6" />
+			<path d="M14 11v6" />
+		</>
+	),
+	"corner-down-left": (
+		<>
+			<path d="m9 10-5 5 5 5" />
+			<path d="M20 4v7a4 4 0 0 1-4 4H4" />
+		</>
+	),
 	x: (
 		<>
 			<path d="M18 6 6 18" />

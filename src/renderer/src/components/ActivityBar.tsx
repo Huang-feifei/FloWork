@@ -48,6 +48,19 @@ export function ActivityBar() {
 				badge={waiting > 0 ? String(waiting) : undefined}
 				onClick={() => setView("review")}
 			/>
+			<ActivityItem
+				icon="sparkles"
+				label="图片生成"
+				active={view === "imagegen"}
+				onClick={() => setView("imagegen")}
+			/>
+			<ActivityItem
+				icon="image"
+				label="图片库"
+				active={view === "gallery"}
+				onClick={() => setView("gallery")}
+			/>
+			<ActivityItem icon="database" label="数据库" active={view === "database"} onClick={() => setView("database")} />
 			{/* 上面切换主视图，下面打开工具面板 / 对话框 */}
 			<div className="my-1.5 h-px w-6 bg-border" />
 			<ActivityItem

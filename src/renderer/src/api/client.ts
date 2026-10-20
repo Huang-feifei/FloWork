@@ -18,6 +18,23 @@ function call<M extends BackendMethod>(method: M, params: BackendMethods[M]["par
 
 export const api = {
 	info: () => call("app.info", undefined),
+	database: {
+		list: () => call("database.list", undefined),
+		save: (input: import("@shared/database").DatabaseInput, id?: string) => call("database.save", { input, id }),
+		remove: (id: string) => call("database.remove", { id }),
+		test: (input: import("@shared/database").DatabaseInput, id?: string) => call("database.test", { input, id }),
+		pickFile: () => call("database.pickFile", undefined),
+		tables: (connectionId: string) => call("database.tables", { connectionId }),
+		browse: (params: import("@shared/database").DatabaseBrowseParams) => call("database.browse", params),
+		query: (params: import("@shared/database").DatabaseQueryParams) => call("database.query", params),
+		prepareWrite: (connectionId: string, sql: string) => call("database.prepareWrite", { connectionId, sql }),
+		cancel: () => call("database.cancel", undefined),
+		history: (connectionId: string) => call("database.history", { connectionId }),
+		clearHistory: (connectionId: string) => call("database.clearHistory", { connectionId }),
+		saved: (connectionId: string) => call("database.saved", { connectionId }),
+		saveQuery: (connectionId: string, name: string, sql: string) => call("database.saveQuery", { connectionId, name, sql }),
+		removeQuery: (id: string) => call("database.removeQuery", { id }),
+	},
 	kernel: {
 		status: () => call("kernel.status", undefined),
 		check: () => call("kernel.check", undefined),
@@ -108,6 +125,15 @@ export const api = {
 
 	onPush: (listener: (push: BackendPush) => void) => transport.onPush(listener),
 	onStatus: transport.onStatus.bind(transport),
+	/** 图片生成：模型来自 models.json 里各供应商声明的 imageModels */
+	images: {
+		models: () => call("images.models", undefined),
+		generate: (params: BackendMethods["images.generate"]["params"]) => call("images.generate", params),
+		list: () => call("images.list", undefined),
+		read: (id: string) => call("images.read", { id }),
+		remove: (id: string) => call("images.remove", { id }),
+		clear: () => call("images.clear", undefined),
+	},
 };
 
 /** 主机密钥变化的错误：返回 hostId（错误文本以内部前缀开头） */

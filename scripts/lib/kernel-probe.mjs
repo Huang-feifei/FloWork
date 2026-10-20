@@ -1,4 +1,4 @@
-/** 发行前验证真实运行包：无用户配置、无网络模型请求的 service/session IPC 回归。 */
+/** 放行前验证官方 Pi + 内置适配层：无用户配置、无模型请求的 service/session IPC 回归。 */
 import { fork } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -47,7 +47,7 @@ export async function probeKernel(entry, protocolVersion) {
 					if (!ready.state?.sessionId) throw new Error("发行包不能创建会话");
 					await exchange(child, { kind: "command", id: "probe", command: { type: "get_state" } }, (r) => r.kind === "response" && r.id === "probe");
 				}
-				console.log(`✓ 内核运行包 ${role} 自检通过（${runtime.label}）`);
+				console.log(`✓ 官方 Pi / 当前适配层 ${role} 自检通过（${runtime.label}）`);
 			} finally {
 				const timer = setTimeout(() => child.kill(), 5_000);
 				try { if (child.connected) child.send({ kind: "shutdown" }, () => undefined); await exit; }

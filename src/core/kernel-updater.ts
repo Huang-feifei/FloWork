@@ -1,19 +1,22 @@
-/** GitHub Releases 独立内核更新：下载/验签/自检/暂存，下一次启动才切换。 */
+/** GitHub 只发布维护者签名的兼容清单；Pi 与固定依赖从官方 npm 拉取。 */
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { KernelManifest, KernelUpdateController, KernelUpdateStatus, KernelVersion, SignedKernelManifest } from "@shared/kernel";
 import {
-	compareVersions, extractKernel, incompatibility, isVersion, validateInstalledLayout, validateRepository, verifyManifest,
+	compareVersions, incompatibility, isVersion, MAX_MANIFEST_BYTES, validateInstalledLayout, validateRepository, verifyManifest,
 	type KernelEnvironment,
 } from "./kernel-package";
+import { installApprovedRuntime } from "./kernel-npm";
 
 interface ReleaseAsset { name: string; browser_download_url: string }
 interface Release { tag_name: string; draft: boolean; prerelease: boolean; body: string | null; assets: ReleaseAsset[] }
 interface Selection { active: string | null; previous: string | null; pending?: string | null }
-interface Candidate { manifest: KernelManifest; envelope: SignedKernelManifest; url: string; notes: string; releaseUrl: string }
+interface Candidate { manifest: KernelManifest; envelope: SignedKernelManifest; notes: string; releaseUrl: string }
 
-export interface KernelUpdaterOptions extends KernelEnvironment {
+export interface KernelUpdaterOptions extends Omit<KernelEnvironment, "adapterSha256"> {
+	/** 来自应用自身，不从网络下载或替换。 */
+	adapterEntry: string;
 	directory: () => string;
 	repository: string;
 	publicKey: string;
@@ -31,6 +34,8 @@ export class KernelUpdater implements KernelUpdateController {
 	private readonly listeners = new Set<(status: KernelUpdateStatus) => void>();
 	private readonly state: KernelUpdateStatus;
 	private entry: string;
+	private adapterSha256 = "";
+	private environment(): KernelEnvironment { return { ...this.options, adapterSha256: this.adapterSha256 }; }
 
 	constructor(private readonly options: KernelUpdaterOptions) {
 		this.entry = options.bundled.entry;
@@ -41,7 +46,7 @@ export class KernelUpdater implements KernelUpdateController {
 		this.state = {
 			supported: true, configured, repository: options.repository, current: this.bundled(),
 			phase: "idle", downloadedBytes: 0, totalBytes: 0,
-			...(!configured ? { message: "尚未配置 GitHub 发布仓库和 Ed25519 公钥；请先配置 kernel.config.json 并重新构建应用。" } : {}),
+			...(!configured ? { message: "尚未配置维护者的 GitHub 兼容清单仓库和 Ed25519 公钥；请先配置 kernel.config.json 并重新构建应用。" } : {}),
 		};
 	}
 
@@ -77,7 +82,7 @@ export class KernelUpdater implements KernelUpdateController {
 		const dir = this.directory(version);
 		const { manifest } = verifyManifest(JSON.parse(await readFile(join(dir, "installed.json"), "utf8")), this.options.publicKey);
 		if (manifest.version !== version) throw new Error("已安装的内核版本与目录不一致");
-		const reason = incompatibility(manifest, this.options);
+		const reason = incompatibility(manifest, this.environment());
 		if (reason) throw new Error(reason);
 		await validateInstalledLayout(dir, manifest);
 		return manifest;
@@ -94,10 +99,12 @@ export class KernelUpdater implements KernelUpdateController {
 	/** 在创建任何实际 worker 之前执行；同一次应用运行不再切换入口，避免混用内核。 */
 	async initialize(): Promise<void> {
 		if (this.initialized) return;
-		try { await mkdir(this.options.directory(), { recursive: true }); }
-		catch (error) {
+		try {
+			await mkdir(this.options.directory(), { recursive: true });
+			this.adapterSha256 = createHash("sha256").update(await readFile(this.options.adapterEntry)).digest("hex");
+		} catch (error) {
 			this.initialized = true;
-			this.publish({ supported: false, configured: false, phase: "error", error: `内核目录不可写，已使用内置内核：${errorText(error)}` });
+			this.publish({ supported: false, configured: false, phase: "error", error: `内核目录或应用内置适配层不可用，已使用内置内核：${errorText(error)}` });
 			return;
 		}
 		let warning: string | undefined;
@@ -202,7 +209,7 @@ export class KernelUpdater implements KernelUpdateController {
 
 	check(): Promise<KernelUpdateStatus> {
 		return this.operation(async () => {
-			if (!this.state.configured) throw new Error("请先配置 kernel.config.json 的发布仓库与签名公钥");
+			if (!this.state.configured) throw new Error("请先配置 kernel.config.json 的兼容清单仓库与签名公钥");
 			this.publish({ phase: "checking", latest: undefined, message: undefined });
 			this.candidate = undefined;
 			const releases = await this.json(`https://api.github.com/repos/${this.options.repository}/releases?per_page=100`, 4 * 1024 * 1024);
@@ -214,21 +221,19 @@ export class KernelUpdater implements KernelUpdateController {
 			const base = this.state.pending?.source === "downloaded" ? this.state.pending.version : this.state.current.version;
 			for (const release of candidates) {
 				if (compareVersions(release.tag_name.slice(8), base) <= 0) continue;
-				const asset = release.assets?.find((a) => a.name === `flowork-kernel-${this.options.platform}-${this.options.arch}.json`);
+				const asset = release.assets?.find((a) => a.name === `flowork-pi-approval-${this.options.platform}-${this.options.arch}.json`);
 				if (!asset) continue;
-				const verified = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), 64 * 1024), this.options.publicKey);
+				const verified = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), MAX_MANIFEST_BYTES), this.options.publicKey);
 				const m = verified.manifest;
 				if (`kernel-v${m.version}` !== release.tag_name) throw new Error("内核版本与 Release 标签不一致");
-				const incompatible = incompatibility(m, this.options);
+				const incompatible = incompatibility(m, this.environment());
 				if (incompatible) { reason ??= incompatible; continue; }
-				const archive = release.assets.find((a) => a.name === m.archive);
-				if (!archive) throw new Error("Release 缺少签名清单指定的内核包");
 				const releaseUrl = `https://github.com/${this.options.repository}/releases/tag/${release.tag_name}`;
-				this.candidate = { ...verified, url: this.assetUrl(archive, release.tag_name), notes: (release.body ?? "").slice(0, 20_000), releaseUrl };
+				this.candidate = { ...verified, notes: (release.body ?? "").slice(0, 20_000), releaseUrl };
 				this.publish({ latest: { version: m.version, piVersion: m.piVersion, source: "downloaded", notes: this.candidate.notes, releaseUrl } });
 				break;
 			}
-			this.publish({ phase: this.state.pending ? "ready" : "idle", message: this.candidate ? "发现可用的新内核" : reason ?? "暂无更新的兼容内核" });
+			this.publish({ phase: this.state.pending ? "ready" : "idle", message: this.candidate ? "发现维护者已测试并批准的 Pi 更新，将从官方 npm 源下载" : reason ?? "暂无维护者已批准的 Pi 更新" });
 		});
 	}
 
@@ -237,34 +242,22 @@ export class KernelUpdater implements KernelUpdateController {
 			const candidate = this.candidate;
 			if (!candidate) throw new Error("请先检查更新并选择兼容的内核版本");
 			const { manifest, envelope } = candidate;
-			this.publish({ phase: "downloading", downloadedBytes: 0, totalBytes: manifest.size, message: undefined });
+			// 安装前再次确认维护者没有撤回或更换这次放行；已安装版本仍可离线启动。
+			const release = await this.json(`https://api.github.com/repos/${this.options.repository}/releases/tags/kernel-v${manifest.version}`, 4 * 1024 * 1024) as Release;
+			if (!release || release.draft || release.prerelease || release.tag_name !== `kernel-v${manifest.version}`) throw new Error("该 Pi 放行已被撤回，请重新检查更新");
+			const asset = release.assets?.find((a) => a.name === `flowork-pi-approval-${this.options.platform}-${this.options.arch}.json`);
+			if (!asset) throw new Error("该 Pi 放行清单已被撤回，请重新检查更新");
+			const fresh = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), MAX_MANIFEST_BYTES), this.options.publicKey);
+			if (fresh.envelope.manifest !== envelope.manifest) throw new Error("该批次放行内容已变更，请重新检查更新；维护者应使用新的批次号");
+			this.publish({ phase: "downloading", downloadedBytes: 0, totalBytes: manifest.packages.reduce((sum, p) => sum + p.size, 0), message: undefined });
 			const stage = await mkdtemp(join(this.options.directory(), ".download-"));
 			try {
-				const archive = join(stage, "kernel.tar.gz");
-				const response = await this.request(candidate.url, AbortSignal.timeout(5 * 60_000));
-				if (!response.body) throw new Error("内核下载响应为空");
-				const hash = createHash("sha256");
-				const output = await open(archive, "wx");
-				let size = 0;
-				let lastProgress = 0;
-				try {
-					for await (const chunk of response.body) {
-						size += chunk.byteLength;
-						if (size > manifest.size) throw new Error("下载的内核大小超出签名清单限制");
-						hash.update(chunk);
-						await output.writeFile(chunk);
-						if (Date.now() - lastProgress > 150) {
-							this.publish({ downloadedBytes: size });
-							lastProgress = Date.now();
-						}
-					}
-				} finally { await output.close(); }
-				if (size !== manifest.size || hash.digest("hex") !== manifest.sha256) throw new Error("内核下载不完整或 SHA-256 校验失败");
-				this.publish({ phase: "verifying", downloadedBytes: size });
 				const unpacked = join(stage, "runtime");
-				await mkdir(unpacked);
-				await extractKernel(archive, unpacked);
-				await validateInstalledLayout(unpacked, manifest);
+				await installApprovedRuntime({
+					manifest, adapterEntry: this.options.adapterEntry, destination: unpacked, archiveDirectory: join(stage, "tarballs"), fetch: this.options.fetch,
+					onProgress: (downloadedBytes) => { this.publish({ downloadedBytes }); },
+					onVerifying: () => { this.publish({ phase: "verifying" }); },
+				});
 				await this.options.probe(join(unpacked, "pi-worker.js"));
 				await writeFile(join(unpacked, "installed.json"), JSON.stringify(envelope));
 				const destination = this.directory(manifest.version);
@@ -272,8 +265,9 @@ export class KernelUpdater implements KernelUpdateController {
 				catch (error) {
 					if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
 					// 内核版本不可覆盖，尤其不能修改仍被本次运行使用的文件。
-					const existing = await this.installed(manifest.version);
-					if (existing.sha256 !== manifest.sha256) throw new Error("同一内核版本的内容已发生变化，请发行新版本号");
+					await this.installed(manifest.version);
+					const existing = JSON.parse(await readFile(join(destination, "installed.json"), "utf8")) as SignedKernelManifest;
+					if (existing.manifest !== envelope.manifest) throw new Error("同一放行批次的内容已发生变化，请发行新版本号");
 					await this.options.probe(join(destination, "pi-worker.js"));
 				}
 				const previousSelection = { ...this.selection };

@@ -108,28 +108,50 @@ export function incompatibility(m: KernelManifest, env: KernelEnvironment): stri
 
 export interface ExtractionBudget { files: number; bytes: number }
 
-/** npm 标准 package/ 前缀；完整检查后再解包。绝不运行 lifecycle 脚本或建立 bin 链接。 */
+/** npm tarball 的单层根目录（通常 package/，@types 包可能用包名）；完整检查后再解包。 */
 export async function extractNpmPackage(archive: string, destination: string, budget: ExtractionBudget = { files: 0, bytes: 0 }): Promise<void> {
 	let error: string | undefined;
-	const paths = new Set<string>();
+	let archiveRoot: string | undefined;
+	const paths = new Map<string, Array<{ path: string; type: string; size: number; mode: number | undefined; digest: string }>>();
 	await tar.t({
 		file: archive, strict: true,
 		onReadEntry(entry) {
 			const path = entry.path.replace(/\/$/, "");
 			const parts = path.split("/");
-			if (isAbsolute(path) || /[\\:\x00-\x1f]/.test(path) || parts[0] !== "package" ||
-				parts.some((p) => !p || p === "." || p === ".." || /[. ]$/.test(p) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p)) ||
-				parts.slice(1).includes("node_modules")) error ??= "npm 包包含不安全的路径或未列入清单的捆绑依赖";
+			archiveRoot ??= parts[0];
+			if (isAbsolute(path) || /[\\:\x00-\x1f]/.test(path) || parts[0] === "." || parts[0] !== archiveRoot ||
+				parts.some((p) => p !== "." && (!p || p === ".." || /[. ]$/.test(p) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(p))) ||
+				parts.slice(1).includes("node_modules")) error ??= `npm 包包含不安全的路径或未列入清单的捆绑依赖：${path}`;
 			if (entry.type !== "File" && entry.type !== "Directory") error ??= "npm 包不允许包含链接或特殊文件";
-			const canonical = path.toLowerCase();
-			if (paths.has(canonical)) error ??= "npm 包包含重复路径";
-			paths.add(canonical);
+			const canonical = parts.filter((p) => p !== ".").join("/").toLowerCase();
+			const record = { path: parts.filter((p) => p !== ".").join("/"), type: entry.type, size: entry.size, mode: entry.mode, digest: "" };
+			const records = paths.get(canonical) ?? [];
+			records.push(record); paths.set(canonical, records);
+			if (entry.type === "File") {
+				const hash = createHash("sha256");
+				entry.on("data", (chunk) => { hash.update(chunk); });
+				entry.on("end", () => { record.digest = hash.digest("hex"); });
+			}
 			budget.bytes += entry.size;
 			if (++budget.files > 150_000 || budget.bytes > 2 * 1024 * 1024 * 1024) error ??= "npm 包解压总量超出限制";
 		},
 	});
+	// 少数官方包同时包含 dist/x.js 与 ./dist/x.js（如 agent-base）。
+	// 仅允许规范化后完全相同、内容及模式也相同的副本；提取时只写入一次。
+	for (const records of paths.values()) {
+		const first = records[0]!;
+		if (records.some((r) => r.path !== first.path || r.type !== first.type || r.mode !== first.mode || r.size !== first.size || r.digest !== first.digest)) error ??= "npm 包包含冲突的重复路径";
+	}
 	if (error) throw new Error(error);
-	await tar.x({ file: archive, cwd: destination, strip: 1, strict: true, preservePaths: false, preserveOwner: false, noMtime: true });
+	const extracted = new Set<string>();
+	await tar.x({
+		file: archive, cwd: destination, strip: 1, strict: true, preservePaths: false, preserveOwner: false, noMtime: true,
+		filter(path) {
+			const canonical = path.replace(/\/$/, "").split("/").filter((p) => p !== ".").join("/").toLowerCase();
+			if (extracted.has(canonical)) return false;
+			extracted.add(canonical); return true;
+		},
+	});
 }
 
 export async function validateInstalledLayout(directory: string, manifest: KernelManifest): Promise<void> {

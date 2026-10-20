@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "./store";
 import { FolderPicker } from "./components/FolderPicker";
 import { Notices } from "./components/Notices";
@@ -20,6 +20,9 @@ import { BottomPanel } from "./components/terminal/BottomPanel";
 import { TerminalView } from "./components/terminal/TerminalView";
 import { TitleBar } from "./components/TitleBar";
 import { WelcomeView } from "./components/welcome/WelcomeView";
+import { DatabaseView } from "./components/database/DatabaseView";
+import { ImageStudio } from "./components/imagegen/ImageStudio";
+import { ImageLibrary } from "./components/imagegen/ImageLibrary";
 import { RightPanel } from "./components/panels/RightPanel";
 
 function EmptyState() {
@@ -56,6 +59,8 @@ export function App() {
 	const activeProjectId = useApp((s) => s.activeProjectId);
 	const sidebarOpen = useApp((s) => s.sidebarOpen);
 	const rightPanel = useApp((s) => s.rightPanel);
+	const [databaseOpened, setDatabaseOpened] = useState(view === "database");
+	useEffect(() => { if (view === "database") setDatabaseOpened(true); }, [view]);
 
 	useEffect(() => {
 		void useApp.getState().init();
@@ -78,12 +83,20 @@ export function App() {
 					<>
 						<div className="flex min-h-0 flex-1">
 							<ActivityBar />
-							{sidebarOpen && <Sidebar />}
+							{sidebarOpen && view !== "database" && <Sidebar />}
 							{/* 底部面板位于会话内容之下、状态栏之上，与设计稿的层次一致 */}
 							<div className="flex min-w-0 flex-1 flex-col">
 								<main className="relative flex min-h-0 flex-1 flex-col">
+									{/* 切换到会话/设置时保留数据库结果和进行中的操作，不因导航中止写入。 */}
+									{(databaseOpened || view === "database") && <div className={view === "database" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><DatabaseView /></div>}
 									{view === "settings" ? (
 										<SettingsView />
+									) : view === "database" ? (
+										null
+									) : view === "imagegen" ? (
+										<ImageStudio />
+									) : view === "gallery" ? (
+										<ImageLibrary />
 									) : view === "review" ? (
 										<ReviewView />
 									) : activeProjectId ? (

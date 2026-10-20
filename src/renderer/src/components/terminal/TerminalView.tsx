@@ -337,7 +337,9 @@ function QueueList() {
 function PromptInput() {
 	const [text, setText] = useState("");
 	/** 已选好、随下一条消息发送的图片 */
-	const [images, setImages] = useState<ImageAttachment[]>([]);
+	// 待发送的图片放在 store 里：图片生成模块也会往里放
+	const images = useApp((s) => s.pendingImages);
+	const setImages = useApp((s) => s.setPendingImages);
 	const isRunning = useApp((s) => s.isRunning);
 	const ready = useApp((s) => s.handleId !== null);
 	const planning = useApp((s) => s.state?.workMode === "plan");
@@ -385,7 +387,7 @@ function PromptInput() {
 				pushNotice("error", error instanceof Error ? error.message : "读取图片失败");
 			}
 		}
-		if (accepted.length > 0) setImages((prev) => [...prev, ...accepted]);
+		if (accepted.length > 0) setImages([...images, ...accepted]);
 	};
 
 	/** 剪贴板里有图片时接管粘贴（Ctrl+V / 截图后直接粘贴）；纯文本粘贴走浏览器默认行为 */
@@ -422,7 +424,7 @@ function PromptInput() {
 							<ImageThumb image={image} alt={`待发送图片 ${i + 1}`} thumbClassName="h-16 max-w-[160px]" />
 							<button
 								type="button"
-								onClick={() => setImages((prev) => prev.filter((_, index) => index !== i))}
+								onClick={() => setImages(images.filter((_, index) => index !== i))}
 								title="移除这张图片"
 								className="absolute -top-1.5 -right-1.5 flex size-4 items-center justify-center rounded-full bg-panel-2 text-[11px] leading-none text-muted hover:bg-highlight hover:text-fg"
 							>

@@ -10,7 +10,7 @@ import { KernelUpdater } from "../core/kernel-updater";
 import { BrowserManager } from "./browser";
 import { registerIpc } from "./ipc";
 import { runSmokeTest } from "./smoke";
-import { bundledWorkerEntry, createUtilitySpawner, probeUtilityKernel } from "./spawn";
+import { bundledAdapterEntry, bundledWorkerEntry, createUtilitySpawner, probeUtilityKernel } from "./spawn";
 
 const isSmoke = process.argv.includes("--smoke");
 let mainWindow: BrowserWindow | undefined;
@@ -64,6 +64,7 @@ const kernelUpdates = new KernelUpdater({
 	platform: process.platform,
 	arch: process.arch,
 	bundled: { version: kernelConfig.bundledVersion, piVersion: appPackage.dependencies["@earendil-works/pi-coding-agent"], entry: bundledWorkerEntry },
+	adapterEntry: bundledAdapterEntry,
 	probe: probeUtilityKernel,
 });
 
@@ -83,7 +84,10 @@ const backend = new Backend({
 		if (result.response !== 1) return;
 		if (backend.workers.hasBusySessions()) throw new Error("有会话正在运行，请先结束或中断任务");
 		// 先让 IPC 返回；before-quit 会统一释放 worker 与终端。
-		setTimeout(() => { app.relaunch(); app.quit(); }, 200);
+		setTimeout(() => {
+			if (backend.workers.hasBusySessions()) return; // IPC 返回后若又开始了任务，不打断新任务。
+			app.relaunch(); app.quit();
+		}, 200);
 	},
 	pickFolder: async () => {
 		const options = { properties: ["openDirectory" as const] };
@@ -101,6 +105,11 @@ const backend = new Backend({
 			properties: ["openFile" as const],
 			filters: [{ name: "私钥", extensions: ["pem", "key", "ppk", "*"] }],
 		};
+		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
+		return result.canceled ? null : (result.filePaths[0] ?? null);
+	},
+	pickDatabaseFile: async () => {
+		const options = { properties: ["openFile" as const], filters: [{ name: "SQLite 数据库", extensions: ["db", "sqlite", "sqlite3", "db3"] }, { name: "所有文件", extensions: ["*"] }] };
 		const result = mainWindow ? await dialog.showOpenDialog(mainWindow, options) : await dialog.showOpenDialog(options);
 		return result.canceled ? null : (result.filePaths[0] ?? null);
 	},

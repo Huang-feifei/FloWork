@@ -14,7 +14,9 @@ import {
 	type ApprovalMode,
 	type BackendPush,
 	DEFAULT_APPROVAL_MODE,
+	type GeneratedImage,
 	type ImageAttachment,
+	type ImageModelInfo,
 	type ModelInfo,
 	type Project,
 	type ProjectsState,
@@ -60,7 +62,7 @@ export interface Notice {
 	text: string;
 }
 
-export type View = "welcome" | "chat" | "review" | "settings";
+export type View = "welcome" | "chat" | "review" | "settings" | "imagegen" | "gallery" | "database";
 export type RightPanel = "files" | "session" | "server" | "services" | "browser";
 export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw" | "kernel";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
@@ -88,6 +90,14 @@ interface AppState extends SessionSlice {
 	resolvedTheme: ResolvedTheme;
 	/** 外观偏好：字体与字号 / 强调色 / 窗口背景 / 辅助功能 */
 	appearance: Appearance;
+	/** 图片生成：已配置的图片模型（models.json 里的 imageModels） */
+	imageModels: ImageModelInfo[];
+	/** 生成历史（新→旧）；图片本体在本机缓存目录，这里只有元数据 */
+	images: GeneratedImage[];
+	/** 正在生成 */
+	imageBusy: boolean;
+	/** 输入框里待发送的图片；图片生成模块会把生成的图片放进这里 */
+	pendingImages: ImageAttachment[];
 	/** 配置变更计数，设置页据此刷新 */
 	configVersion: number;
 	/** 网页版文件夹选择器；mode = add 时导入为项目 */
@@ -152,6 +162,24 @@ interface AppState extends SessionSlice {
 	setTheme(mode: ThemeMode): void;
 	/** 更新外观偏好（字体与字号 / 强调色 / 窗口背景 / 辅助功能），立即生效并持久化 */
 	setAppearance(patch: Partial<Appearance>): void;
+
+	// 图片生成
+	/** 重新读取图片模型与生成历史 */
+	loadImages(): Promise<void>;
+	/** 生成图片：走 models.json 里该供应商的 OpenAI 兼容图片接口 */
+	generateImages(input: {
+		model?: string;
+		prompt: string;
+		size?: string;
+		quality?: "standard" | "hd";
+		count?: number;
+		reference?: { dataBase64: string; mimeType: string };
+	}): Promise<GeneratedImage[]>;
+	removeImage(id: string): Promise<void>;
+	clearImages(): Promise<void>;
+	/** 把缓存里的图片放进输入框，作为下一条消息的附件 */
+	attachImage(id: string): Promise<void>;
+	setPendingImages(images: ImageAttachment[]): void;
 
 	// 项目
 	importProjects(): Promise<void>;
@@ -554,6 +582,10 @@ export const useApp = create<AppState>()((set, get) => {
 		settingsTab: "providers",
 		theme: storedTheme(),
 		appearance: storedAppearance(),
+		imageModels: [],
+		images: [],
+		imageBusy: false,
+		pendingImages: [],
 		resolvedTheme: resolveTheme(storedTheme()),
 		configVersion: 0,
 		folderPicker: { open: false },
@@ -647,6 +679,42 @@ export const useApp = create<AppState>()((set, get) => {
 			const next = applyAppearance(normalizeAppearance({ ...get().appearance, ...patch }));
 			storeAppearance(next);
 			set({ appearance: next });
+		},
+
+		async loadImages() {
+			const [imageModels, images] = await Promise.all([api.images.models(), api.images.list()]);
+			set({ imageModels, images });
+		},
+
+		async generateImages(input) {
+			set({ imageBusy: true });
+			try {
+				const created = await api.images.generate(input);
+				set({ images: await api.images.list() });
+				return created;
+			} finally {
+				set({ imageBusy: false });
+			}
+		},
+
+		async removeImage(id) {
+			await api.images.remove(id);
+			set({ images: await api.images.list() });
+		},
+
+		async clearImages() {
+			await api.images.clear();
+			set({ images: [] });
+		},
+
+		async attachImage(id) {
+			const file = await api.images.read(id);
+			const image: ImageAttachment = { type: "image", mimeType: file.mimeType, data: file.dataBase64 };
+			set({ pendingImages: [...get().pendingImages, image] });
+		},
+
+		setPendingImages(images) {
+			set({ pendingImages: images });
 		},
 
 		// ----- 项目 -----

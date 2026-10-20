@@ -75,6 +75,7 @@ export function CommandPalette() {
 				{ icon: "search", label: "快速打开文件…", key: "Ctrl+P", when: s.activeProjectId !== null, run: () => s.setQuickOpen(true) },
 				{ icon: "cpu", label: "切换模型…", key: "Ctrl+M", when: s.activeProjectId !== null, run: () => s.setView("settings", "providers") },
 				{ icon: "square-terminal", label: "切换终端面板", key: "Ctrl+`", when: true, run: () => s.setTerminalPanel(!s.terminalPanel) },
+				{ icon: "database", label: "打开数据库工作台", when: true, run: () => s.setView("database") },
 				{ icon: "settings", label: "打开设置", when: true, run: () => s.setView("settings") },
 				{ icon: "messages", label: "回到会话", when: true, run: () => s.setView("chat") },
 				{ icon: "globe", label: "打开内置浏览器", when: true, run: () => { s.setView("chat"); s.setRightPanel("browser"); } },

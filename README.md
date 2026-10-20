@@ -23,6 +23,12 @@ npm run start:web     # 启动并打开浏览器：http://127.0.0.1:17321/
 npm run dev:web       # 页面：http://127.0.0.1:5173/（Vite 热更新），后端代码变更后自动重启
 ```
 
+## 数据库工作台
+
+活动栏 **数据库**（欢迎页也有入口）支持 SQLite、PostgreSQL、MySQL 的真实连接、表/视图浏览、字段结构、筛选/排序/分页、SQL 编辑与运行、历史/收藏和 CSV 导出。网络数据库可复用已有 SSH 主机建立本地隧道。
+
+新连接默认只读，读查询由数据库只读连接/事务限制；写操作需关闭只读并逐次确认。查询默认 30 秒超时、最多 5,000 行，可取消；取消/超时不保证写入未生效，不自动重试。使用方式、凭据存储、安全边界及真实数据库集成验证见 **[数据库工作台](docs/database.md)**。
+
 ## 计划与共同决策
 
 输入框下方的 **执行模式** 下拉菜单可切换为 **计划模式 · 只读**（每个会话独立保存，新会话默认执行模式）：
@@ -84,7 +90,7 @@ scripts/                    网页版构建、开发、启动脚本，以及自�
 
 默认使用 `~/.flowork/agent`，与 pi CLI 的 `~/.pi/agent` 隔离，其中存放 auth.json、models.json、settings.json、sessions/、skills/ 等。可以通过环境变量 `FLOWORK_PI_AGENT_DIR` 覆盖。
 
-FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）、hosts.json（SSH 主机；桌面版的密码经系统加密后保存）、trust.json（项目信任决定）、hosts/（运维会话的本地占位目录，pi 按它归档会话记录，不存放服务器文件）。设置页中的所有修改都写入 pi 配置目录：
+FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）、hosts.json（SSH 主机；桌面版的密码经系统加密后保存）、databases.json（数据库连接、历史与收藏；桌面版密码优先系统加密）、trust.json（项目信任决定）、hosts/（运维会话的本地占位目录，pi 按它归档会话记录，不存放服务器文件）。设置页中的所有修改都写入 pi 配置目录：
 
 | 设置页 | 写入 |
 | --- | --- |
@@ -135,20 +141,21 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 
 ## 独立内核更新（桌面版）
 
-用户可在 **设置 → 内核更新** 从 GitHub Releases 检查、下载经过签名且兼容当前应用的内核，重启后生效，无需重新安装 FloWork；支持恢复内置内核，启动自检失败自动回退。
+用户可在 **设置 → 内核更新** 安装维护者本地测试并签名批准的官方 Pi 版本，重启后生效，无需重新安装 FloWork。官方发布新版不代表自动放行；支持恢复内置内核，启动自检失败自动回退。
 
-首次发行前需配置 `kernel.config.json` 的公开仓库和 Ed25519 公钥，并发布一次包含更新器的应用。发布包包含 Pi SDK、Worker 适配层与固定运行依赖，不是直接安装 npm 最新版。
+GitHub Releases **只存放兼容放行清单**；Pi SDK 与全部固定依赖直接从官方 npm（`registry.npmjs.org`）下载。继续使用当前应用内置的 Worker 适配层，不从网络替换适配代码，也不在用户机器执行 npm。首次发行前配置 `kernel.config.json` 的公开清单仓库和 Ed25519 公钥，再发布一次包含更新器的应用。
 
-配置密钥、构建内核与 GitHub Actions 发布步骤见 **[独立内核更新指南](docs/kernel-updates.md)**。
+配置密钥、本地测试与批准官方版本、GitHub Actions 发布步骤见 **[独立内核更新指南](docs/kernel-updates.md)**。
 
 ```bash
 npm run kernel:keygen                         # 首次生成发行密钥（私钥已加入忽略目录）
-npm run kernel:build -- --version 1.0.1 --key .kernel-keys/signing-private.pem
+npm run kernel:approve -- --version 1.0.1 --key .kernel-keys/signing-private.pem
 node scripts/test-kernel.mjs                   # 离线更新回归，不调用模型
 ```
 
 ## 已实现
 
+- 数据库：SQLite / PostgreSQL / MySQL 连接管理、SSH 隧道、表/视图与字段结构、筛选/排序/分页、SQL 高亮/格式化/运行、历史/收藏、CSV 导出；默认只读、逐次写入确认、超时/取消与结果上限
 - 对话：流式输出、思考过程、终端式工具调用展示、Markdown 渲染
 - 运行中投递：任务运行中继续输入时，Enter 排队（当前轮结束后执行）、Ctrl+Enter 插话（在工具调用之间插入送达）；输入框上方显示待发送队列，可拖拽或 ↑↓ 调整顺序，也可一键取回输入框
 - 工具审批：修改与命令前确认（默认）/ 全部确认 / 关闭；可“本会话始终允许”某个工具；拒绝原因会告诉模型
@@ -188,6 +195,7 @@ node scripts/shoot-ui.mjs <输出目录>                                  # 对 
 
 # 回归脚本：各自启动隔离后端（独立 FLOWORK_DATA_DIR / FLOWORK_PI_AGENT_DIR），
 # 不写真实配置目录、不调用模型，断言失败时返回非零退出码。需要先 npm run build:web（npm test 会自动构建并全部运行）。
+node scripts/test-database.mjs    # 真实 SQLite + SQL/只读/写入确认/取消/凭据回归；可选 Docker PostgreSQL/MySQL（不需要构建）
 node scripts/test-hosts.mjs       # SSH 主机口令加密与迁移（不需要构建）
 node scripts/test-sessions.mjs    # 会话重命名与删除
 node scripts/test-projects.mjs    # 项目注册表

@@ -18,7 +18,10 @@ import {
 } from "@shared/protocol";
 import type { KernelUpdateController } from "@shared/kernel";
 import { isDirectory, listDirs } from "./fs";
+import { DatabaseManager } from "./database";
+import type { DatabaseBrowseParams, DatabaseInput, DatabaseQueryParams } from "@shared/database";
 import { probeHostMonitor } from "./host-monitor";
+import { clearImages, generateImages, listImageModels, listImages, readImage, removeImage } from "./image-gen";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { acceptHostKey, inspectHostKey } from "./host-key";
@@ -63,6 +66,8 @@ export interface BackendHost {
 	openTerminal?: (absDir: string) => void;
 	/** 系统原生文件选择对话框（挑选 SSH 私钥）；网页版不提供 */
 	pickFile?: () => Promise<string | null>;
+	/** SQLite 文件选择，与 SSH 私钥过滤器分开。 */
+	pickDatabaseFile?: () => Promise<string | null>;
 	/** 系统「保存到」对话框（下载远端文件用）；网页版不提供（退回浏览器下载） */
 	pickSavePath?: (defaultName?: string) => Promise<string | null>;
 	/** 系统级加密（Windows DPAPI / macOS 钥匙串 / libsecret），用于落盘的 SSH 密码；网页版不提供（退回明文） */
@@ -75,6 +80,7 @@ export class Backend {
 	readonly workers: WorkerManager;
 	readonly projects = new ProjectStore();
 	readonly hosts: HostStore;
+	readonly databases: DatabaseManager;
 	/** 真终端按 cwd 归属，不随客户端断线关闭 */
 	readonly terminals: TerminalManager;
 	private readonly listeners = new Set<PushListener>();
@@ -90,6 +96,7 @@ export class Backend {
 	constructor(private readonly host: BackendHost) {
 		host.kernelUpdates?.onChange((status) => this.push({ type: "kernel_update", status }));
 		this.hosts = new HostStore(undefined, host.secrets);
+		this.databases = new DatabaseManager(this.hosts, host.secrets);
 		this.workers = new WorkerManager(host.spawnWorker, (event) => this.push({ type: "auth", event }));
 		this.terminals = new TerminalManager(
 			(push) => this.push(push),
@@ -496,6 +503,42 @@ export class Backend {
 				const params = rawParams as BackendMethods["terminal.close"]["params"];
 				return this.terminals.close(params);
 			}
+			case "database.list": return this.databases.list();
+			case "database.save": { const p = rawParams as { id?: string; input: DatabaseInput }; return this.databases.save(p.id, p.input); }
+			case "database.remove": return this.databases.remove((rawParams as { id: string }).id);
+			case "database.test": { const p = rawParams as { id?: string; input: DatabaseInput }; return this.databases.test(p.id, p.input, clientId); }
+			case "database.pickFile":
+				if (!this.host.pickDatabaseFile) throw new Error("当前外壳不支持文件选择，请填写服务器上的 SQLite 绝对路径");
+				return this.host.pickDatabaseFile();
+			case "database.tables": return this.databases.tables((rawParams as { connectionId: string }).connectionId, clientId);
+			case "database.browse": return this.databases.browse(rawParams as DatabaseBrowseParams, clientId);
+			case "database.query": return this.databases.query(rawParams as DatabaseQueryParams, clientId);
+			case "database.prepareWrite": return this.databases.prepareWrite(rawParams as { connectionId: string; sql: string }, clientId);
+			case "database.cancel": return this.databases.cancel(clientId);
+			case "database.history": return this.databases.history((rawParams as { connectionId: string }).connectionId);
+			case "database.clearHistory": return this.databases.clearHistory((rawParams as { connectionId: string }).connectionId);
+			case "database.saved": return this.databases.saved((rawParams as { connectionId: string }).connectionId);
+			case "database.saveQuery": { const p = rawParams as { connectionId: string; name: string; sql: string }; return this.databases.saveQuery(p.connectionId, p.name, p.sql); }
+			case "database.removeQuery": return this.databases.removeQuery((rawParams as { id: string }).id);
+			case "images.models":
+				return listImageModels();
+			case "images.generate": {
+				const params = rawParams as BackendMethods["images.generate"]["params"];
+				return generateImages(params);
+			}
+			case "images.list":
+				return listImages();
+			case "images.read": {
+				const params = rawParams as BackendMethods["images.read"]["params"];
+				return readImage(params.id);
+			}
+			case "images.remove": {
+				const params = rawParams as BackendMethods["images.remove"]["params"];
+				await removeImage(params.id);
+				return null;
+			}
+			case "images.clear":
+				return clearImages();
 		}
 	}
 
@@ -555,6 +598,7 @@ export class Backend {
 
 	/** 客户端断开（网页标签关闭）时，关闭它打开的会话。终端不在此列：它按项目存在，刷新页面不该杀掉正在跑的命令 */
 	async releaseClient(clientId: string): Promise<void> {
+		this.databases.releaseClient(clientId);
 		const owned = this.clientSessions.get(clientId);
 		this.clientSessions.delete(clientId);
 		if (!owned) return;
@@ -566,6 +610,7 @@ export class Backend {
 	}
 
 	async shutdown(): Promise<void> {
+		this.databases.dispose();
 		this.terminals.closeAll();
 		this.preview.closeAll();
 		await this.workers.shutdownAll();

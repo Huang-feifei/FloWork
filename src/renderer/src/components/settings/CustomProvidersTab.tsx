@@ -4,8 +4,17 @@ import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
 import { thinkingLabel } from "../../lib/format";
-import { Badge, Button, Field, Input, Select } from "../ui";
+import { Badge, Button, Field, Input, Select, Toggle } from "../ui";
+import { Icon } from "../Icon";
 import { isMtimeConflict, parseObject, useConfigFile } from "./useConfigFile";
+import {
+	emptyImageModel,
+	ImageModelDialog,
+	toImageModelDraft,
+	toImageModelEntry,
+	validateImageModel,
+	type ImageModelDraft,
+} from "./ImageModelDialog";
 
 const API_TYPES = [
 	{ id: "openai-completions", label: "OpenAI Chat Completions（最常见）" },
@@ -51,9 +60,17 @@ interface Draft {
 	baseUrl: string;
 	apiKey: string;
 	models: ModelDraft[];
+	/** 是否在「图片生成」工作台里提供这个端点的图片模型 */
+	imageEnabled: boolean;
+	/** 图片模型：与聊天模型分开（走 /images/generations 与 /images/edits） */
+	imageModels: ImageModelDraft[];
 }
 
-type ProviderConfig = Record<string, unknown> & { models?: Array<Record<string, unknown>> };
+type ProviderConfig = Record<string, unknown> & {
+	models?: Array<Record<string, unknown>>;
+	imageEnabled?: boolean;
+	imageModels?: Array<Record<string, unknown>>;
+};
 
 /** 表格里单独编辑的字段，其余原样留在 advanced */
 const FORM_MODEL_KEYS = new Set(["id", "name", "contextWindow", "maxTokens", "reasoning", "input", "cost", "thinkingLevelMap"]);
@@ -341,6 +358,8 @@ function Editor({
 }) {
 	const [d, setD] = useState(draft);
 	const [fetched, setFetched] = useState<string[] | null>(null);
+	/** 正在编辑的图片模型：index = -1 表示新增 */
+	const [imageModel, setImageModel] = useState<{ index: number; draft: ImageModelDraft } | null>(null);
 	const [fetchFilter, setFetchFilter] = useState("");
 	const [bulk, setBulk] = useState("");
 	const [busy, setBusy] = useState(false);
@@ -507,6 +526,71 @@ function Editor({
 			{(error || invalid) && (
 				<div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[12.5px] text-err">{error ?? invalid}</div>
 			)}
+
+			<div className="space-y-2 border-t border-border pt-4">
+				<div className="flex items-center gap-2">
+					<span className="text-xs font-medium">图片生成（{d.imageModels.length} 个）</span>
+					<Badge tone={d.imageModels.length > 0 && d.imageEnabled ? "primary" : "muted"}>
+						{d.imageModels.length === 0 ? "未配置" : d.imageEnabled ? "已启用" : "已停用"}
+					</Badge>
+					<span className="text-[11px] text-muted">与聊天模型分开：纯生成走 /images/generations，带参考图走 /images/edits</span>
+					<div className="flex-1" />
+					<Toggle
+						on={d.imageEnabled}
+						onChange={(imageEnabled) => update({ imageEnabled })}
+						title="启用后这个端点会出现在图片生成工作台的模型列表里"
+					/>
+				</div>
+
+				{d.imageModels.length === 0 && (
+					<div className="rounded-xl bg-panel-2 px-3.5 py-3 text-[12px] leading-relaxed text-muted">
+						还没有图片模型。加一个之后，「图片生成」工作台就能用这个端点出图。
+					</div>
+				)}
+
+				{d.imageModels.map((m, index) => (
+					<div key={index} className="flex items-center gap-2 rounded-xl border border-border bg-panel-2/50 p-2">
+						<span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg">{m.id || "（未填 ID）"}</span>
+						<span className="min-w-0 flex-1 truncate text-[12px] text-muted">{m.name || "—"}</span>
+						<span className="shrink-0 font-mono text-[11px] text-faint">{m.sizes.join(" · ") || "—"}</span>
+						{m.edits && <Badge tone="muted">参考图</Badge>}
+						{m.price.trim() && <span className="shrink-0 font-mono text-[11px] tabular-nums text-faint">¥{m.price}/张</span>}
+						<Button size="sm" onClick={() => setImageModel({ index, draft: m })}>
+							编辑…
+						</Button>
+						<button
+							type="button"
+							title="删除这个图片模型"
+							onClick={() => update({ imageModels: d.imageModels.filter((_, i) => i !== index) })}
+							className="flex size-7 shrink-0 items-center justify-center rounded-full text-faint hover:bg-panel-2 hover:text-err"
+						>
+							<Icon name="trash-2" className="size-4" />
+						</button>
+					</div>
+				))}
+
+				<div className="flex items-center gap-2">
+					<Button size="sm" onClick={() => setImageModel({ index: -1, draft: emptyImageModel() })}>
+						<span className="icon-[lucide--plus] size-4" />
+						添加图片模型
+					</Button>
+					<span className="text-[11px] text-faint">保存后写入 models.json 的 imageModels</span>
+				</div>
+			</div>
+
+			{imageModel && (
+				<ImageModelDialog
+					initial={imageModel.draft}
+					onCancel={() => setImageModel(null)}
+					onSave={(next) => {
+						const list = [...d.imageModels];
+						if (imageModel.index >= 0) list[imageModel.index] = next;
+						else list.push(next);
+						update({ imageModels: list });
+						setImageModel(null);
+					}}
+				/>
+			)}
 			<div className="flex justify-end gap-2">
 				<Button onClick={onCancel}>取消</Button>
 				<Button
@@ -555,6 +639,8 @@ export function CustomProvidersTab() {
 		if (!parsed) throw new Error("models.json 无法解析，请先在“配置文件”页修复");
 		const invalid = validateModels(d.models);
 		if (invalid) throw new Error(invalid);
+		const invalidImage = d.imageModels.map(validateImageModel).find(Boolean);
+		if (invalidImage) throw new Error(invalidImage);
 		const nextProviders = { ...providers };
 		const existing: ProviderConfig = (d.originalKey ? nextProviders[d.originalKey] : undefined) ?? {};
 		if (d.originalKey && d.originalKey !== d.key) delete nextProviders[d.originalKey];
@@ -564,6 +650,14 @@ export function CustomProvidersTab() {
 			api: d.api,
 			models: d.models.map(toModelEntry),
 		};
+		const imageModels = d.imageModels.map(toImageModelEntry);
+		if (imageModels.length > 0) {
+			config.imageEnabled = d.imageEnabled;
+			config.imageModels = imageModels;
+		} else {
+			delete config.imageEnabled;
+			delete config.imageModels;
+		}
 		if (d.apiKey) config.apiKey = d.apiKey;
 		else delete config.apiKey;
 		nextProviders[d.key] = config;
@@ -592,6 +686,8 @@ export function CustomProvidersTab() {
 			baseUrl: typeof c.baseUrl === "string" ? c.baseUrl : "",
 			apiKey: typeof c.apiKey === "string" ? c.apiKey : "",
 			models: (c.models ?? []).map(toModelDraft),
+			imageEnabled: c.imageEnabled !== false,
+			imageModels: (c.imageModels ?? []).map(toImageModelDraft),
 		});
 	};
 
@@ -616,12 +712,12 @@ export function CustomProvidersTab() {
 						<Button
 							key={p.key}
 							size="sm"
-							onClick={() => setDraft({ key: p.key, api: p.api, baseUrl: p.baseUrl, apiKey: "", models: [] })}
+							onClick={() => setDraft({ key: p.key, api: p.api, baseUrl: p.baseUrl, apiKey: "", models: [], imageEnabled: true, imageModels: [] })}
 						>
 							+ {p.label}
 						</Button>
 					))}
-					<Button size="sm" variant="primary" onClick={() => setDraft({ key: "", api: "openai-completions", baseUrl: "", apiKey: "", models: [] })}>
+					<Button size="sm" variant="primary" onClick={() => setDraft({ key: "", api: "openai-completions", baseUrl: "", apiKey: "", models: [], imageEnabled: true, imageModels: [] })}>
 						+ 空白
 					</Button>
 				</div>

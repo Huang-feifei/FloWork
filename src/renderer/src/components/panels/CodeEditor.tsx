@@ -42,19 +42,21 @@ interface Props {
 	editable: boolean;
 	onChange?: (value: string) => void;
 	onSave?: () => void;
+	/** SQL 工作台运行查询（Ctrl/Cmd+Enter）。 */
+	onRun?: () => void;
 	/** 内容变化来自外部（重新加载）时递增，用于替换编辑器文档 */
 	revision: number;
 }
 
-export default function CodeEditor({ path, value, editable, onChange, onSave, revision }: Props) {
+export default function CodeEditor({ path, value, editable, onChange, onSave, onRun, revision }: Props) {
 	const host = useRef<HTMLDivElement>(null);
 	const view = useRef<EditorView | null>(null);
 	const editableComp = useRef(new Compartment());
 	const languageComp = useRef(new Compartment());
 	const highlightComp = useRef(new Compartment());
 	const resolvedTheme = useApp((s) => s.resolvedTheme);
-	const handlers = useRef({ onChange, onSave });
-	handlers.current = { onChange, onSave };
+	const handlers = useRef({ onChange, onSave, onRun });
+	handlers.current = { onChange, onSave, onRun };
 
 	// 主题切换：重配语法高亮配色（浅色底用深色高亮色）
 	useEffect(() => {
@@ -83,6 +85,7 @@ export default function CodeEditor({ path, value, editable, onChange, onSave, re
 					search({ top: true }),
 					highlightComp.current.of(syntaxHighlighting(useApp.getState().resolvedTheme === "dark" ? highlightStyle : lightHighlightStyle)),
 					keymap.of([
+						{ key: "Mod-Enter", run: () => { if (!handlers.current.onRun) return false; handlers.current.onRun(); return true; } },
 						{
 							key: "Mod-s",
 							preventDefault: true,

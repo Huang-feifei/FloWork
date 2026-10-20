@@ -128,6 +128,15 @@ function sshOptions(target: SshHost, { batch }: { batch: boolean }): string[] {
 	return options;
 }
 
+/** 数据库隧道复用同一套系统 SSH 认证、主机密钥和配置。仅监听本机回环地址。 */
+export function sshTunnelArgs(target: SshHost, localPort: number, host: string, port: number): { command: string; args: string[] } {
+	const command = sshBinary();
+	if (!command) throw new Error("未找到 ssh 可执行文件");
+	if (!/^[A-Za-z0-9_.:[\]-]+$/.test(host) || host.startsWith("-") || !Number.isInteger(port) || port < 1 || port > 65535) throw new Error("无效的数据库隧道地址");
+	const remote = host.includes(":") ? `[${host.replace(/^\[|\]$/g, "")}]` : host;
+	return { command, args: ["-N", "-T", ...sshOptions(target, { batch: true }), "-o", "ExitOnForwardFailure=yes", "-L", `127.0.0.1:${localPort}:${remote}:${port}`, destination(target)] };
+}
+
 export interface SshExecResult {
 	code: number;
 	stdout: string;
