@@ -22,6 +22,7 @@ const SUITES = [
 	{ name: "hosts", file: "scripts/test-hosts.mjs", needsBuild: false },
 	{ name: "command-risk", file: "scripts/test-command-risk.mjs", needsBuild: false },
 	{ name: "planning", file: "scripts/test-planning.mjs", needsBuild: false },
+	{ name: "subagent", file: "scripts/test-subagent.mjs", needsBuild: false },
 	// 需要测试主机：未设置 FLOWORK_TEST_SSH 时自动跳过
 	{ name: "ops-tools", file: "scripts/test-ops-tools.mjs", needsBuild: false },
 	// 还需要 FLOWORK_TEST_SSH_CONTAINER（会在容器里重新生成主机密钥）；未设置时跳过

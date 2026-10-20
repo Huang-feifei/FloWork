@@ -18,9 +18,15 @@ const PROJECT_CONFIG_ITEMS = [
 	"skills",
 	"prompts",
 	"themes",
+	"agents",
 	"SYSTEM.md",
 	"APPEND_SYSTEM.md",
 ];
+
+/** `.pi/agents` 也是仓库控制的提示词来源，应与扩展/技能一样先确认信任。 */
+function hasTrustRequiringItems(cwd: string): boolean {
+	return hasTrustRequiringProjectResources(cwd) || existsSync(join(cwd, ".pi", "agents"));
+}
 
 /** 列出项目中需要信任才会加载的配置（相对路径，用于界面说明） */
 function trustRequiringItems(cwd: string): string[] {
@@ -40,7 +46,7 @@ function trustRequiringItems(cwd: string): string[] {
 }
 
 export function getProjectTrust(cwd: string): ProjectTrust {
-	if (!hasTrustRequiringProjectResources(cwd)) return { state: "not_needed", decided: false, items: [] };
+	if (!hasTrustRequiringItems(cwd)) return { state: "not_needed", decided: false, items: [] };
 	const decision = new ProjectTrustStore(getAgentDir()).get(cwd);
 	return {
 		state: decision === true ? "trusted" : "untrusted",

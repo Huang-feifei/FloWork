@@ -36,6 +36,7 @@ import { ExtensionUI } from "./extension-ui";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
 import { BackupLog, createOpsExtension, type OpsTarget, probeHostProfile } from "./ops-tools";
 import { getProjectTrust, isProjectTrusted, setProjectTrust } from "./trust";
+import { createSubagentExtension } from "./subagent";
 import { validateSession } from "./session-files";
 import { allowedInPlan, createPlanningExtension, DECISION_TOOLS, restoredWorkMode, WORK_MODE_ENTRY } from "./planning";
 
@@ -133,6 +134,8 @@ export class SessionHost {
 			}),
 		];
 		if (ops) extensionFactories.push(createOpsExtension(ops.target, () => this.opsProfile, ops.backups));
+		// 子代理只在本地会话可用：运维会话的工具在远端，不能把本地子会话当作远程子代理。
+		else extensionFactories.push(createSubagentExtension({ getModelRuntime: () => this.session.modelRuntime }));
 		const services = await createAgentSessionServices({
 			cwd,
 			// SDK 默认信任所有项目；这里按用户的信任决定加载项目级配置（见 trust.ts）。

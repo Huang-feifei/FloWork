@@ -42,6 +42,18 @@ function describe(name: string, args: Record<string, unknown>, cwd: string | nul
 			return [s("pattern"), s("path") ? shortPath(s("path") as string, cwd) : undefined].filter(Boolean).join(", ");
 		case "ls":
 			return shortPath(s("path") ?? ".", cwd);
+		case "subagent": {
+			const agent = s("agent");
+			if (agent) {
+				const task = s("task") ?? "";
+				return task ? `${agent} · ${task.length > 60 ? `${task.slice(0, 60)}…` : task}` : agent;
+			}
+			const tasks = Array.isArray(args.tasks) ? args.tasks.length : 0;
+			if (tasks > 0) return `parallel · ${tasks} 个任务`;
+			const chain = Array.isArray(args.chain) ? args.chain.length : 0;
+			if (chain > 0) return `chain · ${chain} 步`;
+			return "";
+		}
 		default: {
 			const json = JSON.stringify(args);
 			return json.length > 100 ? `${json.slice(0, 100)}…` : json;
@@ -54,6 +66,13 @@ function textOf(content: ContentBlock[] | undefined): string {
 		.map((b) => (b.type === "text" ? b.text : ""))
 		.join("\n")
 		.replace(/\s+$/, "");
+}
+
+/** 工具执行中的增量结果（例如子代理的实时输出），复用同一套 ContentBlock 结构。 */
+function partialTextOf(value: unknown): string {
+	if (!value || typeof value !== "object") return "";
+	const content = (value as { content?: unknown }).content;
+	return Array.isArray(content) ? textOf(content as ContentBlock[]) : "";
 }
 
 /** 工具结果里的图片（例如 read 读了一张图），单独渲染为缩略图 */
@@ -103,7 +122,7 @@ export const ToolBlock = memo(function ToolBlock({ call, result }: Props) {
 	const status = run?.status ?? (result ? (result.isError ? "error" : "done") : isRunning ? "pending" : "skipped");
 	const final = run?.result ?? result;
 	const diff = getDiff(final?.details);
-	const output = textOf(final?.content);
+	const output = textOf(final?.content) || (status === "running" ? partialTextOf(run?.partialResult) : "");
 	const images = imagesOf(final?.content);
 	const lines = output ? output.split("\n") : [];
 	const summary = describe(call.name, call.arguments, cwd) || argsText || "";
