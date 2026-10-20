@@ -189,8 +189,8 @@ export interface OpsSessionInfo {
 
 /**
  * 工具审批模式：
- * - auto：全部自动执行（运维会话中高危命令仍需确认）
- * - ask_writes：修改文件、执行命令及其他非只读工具前确认（默认）；运维会话中只读命令自动执行
+ * - auto：全部自动执行（高危命令、数据库连接和 SSH 远程连接仍需确认）
+ * - ask_writes：修改文件、执行命令及其他非只读工具前确认（默认）；运维会话中只读命令自动执行；连接命令始终确认
  * - ask_all：所有工具都需确认
  */
 export type ApprovalMode = "auto" | "ask_writes" | "ask_all";
@@ -200,10 +200,12 @@ export const READ_ONLY_TOOLS = new Set(["read", "grep", "find", "ls"]);
 
 export type ApprovalDecision = "allow" | "allow_session" | "deny";
 
-/** 运维会话中工具调用的风险评估（随审批请求下发，界面据此显示红色警告） */
+/** 工具调用的风险评估（随审批请求下发，界面据此显示警告） */
 export interface ApprovalRisk {
 	level: "read" | "write" | "danger";
 	reasons: string[];
+	/** 数据库 / SSH 等连接操作：即使关闭审批也必须逐次确认，且不能「本会话始终允许」 */
+	forced?: boolean;
 }
 
 export interface SessionSummary {

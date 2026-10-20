@@ -8,6 +8,7 @@ import {
 	type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import { isProjectTrusted } from "../trust";
+import { confirmSubagentConnection } from "./connection-guard";
 import { isDirectory } from "./discovery";
 import {
 	addUsage,
@@ -130,6 +131,19 @@ export async function runAgent(options: RunAgentOptions): Promise<SubagentResult
 				// 子代理扩展错误不应打断父会话；错误会通过最终输出或 stderr 体现。
 			},
 		});
+		// 子代理内部工具默认自动执行；连接类命令例外，借用父会话 UI 逐次确认。
+		const previousBeforeToolCall = session.agent.beforeToolCall;
+		session.agent.beforeToolCall = async (toolContext, toolSignal) => {
+			const guard = await confirmSubagentConnection(
+				ctx,
+				agent.name,
+				toolContext.toolCall.name,
+				toolContext.args,
+				toolSignal,
+			);
+			if (guard) return guard;
+			return previousBeforeToolCall?.(toolContext, toolSignal);
+		};
 	} catch (error) {
 		return {
 			agent: agent.name,

@@ -1,20 +1,23 @@
 /**
- * 运维会话的命令风险分级：只读 / 有改动 / 高危。
+ * 命令风险分级：只读 / 有改动 / 高危，并识别需要强制确认的数据库 / SSH 连接命令。
  *
  * 这是减少打扰的启发式规则，不是安全边界：
  * - 只读按白名单判断，管道、`;`、`&&`、`||` 拆开后每一段都必须只读；出现重定向写文件、命令替换、
  *   无法识别的命令时一律算「有改动」。宁可多确认，不漏放。
  * - 高危按黑名单判断，在任何审批模式下都要确认，且不允许「本会话始终允许」。
+ * - 数据库 / SSH 等连接命令同样在任何审批模式下逐次确认，不能用「本会话始终允许」跳过。
  *
- * 界面（审批面板的红色警告）与 worker（是否需要确认）共用这一份实现。
+ * 界面（审批面板的警告）与 worker（是否需要确认）共用这一份实现。
  */
 
 export type CommandRisk = "read" | "write" | "danger";
 
 export interface RiskAssessment {
 	risk: CommandRisk;
-	/** 高危原因（用于审批面板展示）；只读 / 普通改动时为空 */
+	/** 审批原因（用于审批面板展示）：高危原因或连接操作原因 */
 	reasons: string[];
+	/** 连接数据库 / SSH 等：即使关闭审批也必须逐次确认，且不能「本会话始终允许」 */
+	forced?: boolean;
 }
 
 // ---------- 高危规则 ----------
@@ -186,6 +189,83 @@ const READ_SUBCOMMANDS: Record<string, (args: string[]) => boolean> = {
 	"get-command": () => true,
 };
 
+// ---------- 连接类命令 ----------
+
+/**
+ * 这些命令会主动建立远程连接或数据库会话。它们未必写入，但会把本机凭据、网络路径和
+ * 远端环境暴露给模型，因此不按普通只读命令自动放行：每次都必须由用户单独确认。
+ */
+const REMOTE_CONNECTION_COMMANDS = new Set([
+	"ssh", "scp", "sftp", "ssh-copy-id", "sshpass", "sshfs", "plink", "pscp", "nc", "netcat",
+	"telnet", "socat", "winrs", "winrm", "enter-pssession", "new-pssession",
+]);
+const DATABASE_CONNECTION_COMMANDS = new Set([
+	"psql", "pg_dump", "pg_dumpall", "pg_restore", "pg_isready", "createdb", "dropdb",
+	"mysql", "mysqladmin", "mysqldump", "mysqlimport", "mysqlcheck", "mariadb", "sqlite3",
+	"duckdb", "sqlplus", "sqlcmd", "osql", "isql", "bcp", "mysqlsh", "pgcli", "mycli",
+	"litecli", "usql", "mongosh", "mongo", "mongodump", "mongorestore", "mongoexport",
+	"mongoimport", "redis-cli", "redis-benchmark", "cqlsh", "clickhouse-client", "influx",
+	"snowsql", "sqlpackage", "invoke-sqlcmd", "invoke-dbaquery",
+]);
+const SHELL_WRAPPERS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
+
+function commandBaseName(name: string): string {
+	return name.replace(/\.(?:exe|cmd|bat|ps1)$/i, "");
+}
+
+function isVersionOrHelp(args: string[]): boolean {
+	return args.some((arg) => ["--version", "-version", "-V", "--help", "-help", "-?"].includes(arg));
+}
+
+function connectionReason(name: string, args: string[]): string | null {
+	const base = commandBaseName(name);
+	if (REMOTE_CONNECTION_COMMANDS.has(base)) return "启动 SSH / 远程连接";
+	if (base === "invoke-command" && args.some((arg) => /^-(?:computername|session|connectionuri|vmid|containerid|hostname)$/i.test(arg))) {
+		return "启动远程连接";
+	}
+	if (DATABASE_CONNECTION_COMMANDS.has(base)) return isVersionOrHelp(args) ? null : "连接数据库";
+	if (base === "cockroach" && args[0]?.toLowerCase() === "sql") return "连接数据库";
+	return null;
+}
+
+/** `bash -c` / `cmd /c` / `pwsh -Command` 里还藏着一层命令，继续解析，避免简单包一层就绕过确认。 */
+function wrappedScript(name: string, args: string[]): string | undefined {
+	const base = commandBaseName(name);
+	if (base === "cmd") {
+		const index = args.findIndex((arg) => /^\/c$/i.test(arg));
+		return index >= 0 ? args[index + 1] : undefined;
+	}
+	if (base === "powershell" || base === "pwsh") {
+		const index = args.findIndex((arg) => /^-(?:command|c)$/i.test(arg));
+		return index >= 0 ? args[index + 1] : undefined;
+	}
+	if (SHELL_WRAPPERS.has(base)) {
+		const index = args.findIndex((arg) => /^-[a-z]*c$/i.test(arg));
+		return index >= 0 ? args[index + 1] : undefined;
+	}
+	if (base === "eval" || base === "invoke-expression" || base === "iex") return args.join(" ");
+	return undefined;
+}
+
+function connectionReasonsFor(segment: string, depth = 0): string[] {
+	const parsed = unwrap(tokenize(segment));
+	if (!parsed) return [];
+	const base = commandBaseName(parsed.name);
+	const reasons: string[] = [];
+	const reason = connectionReason(base, parsed.args);
+	if (reason) reasons.push(reason);
+	if (depth < 2) {
+		const script = wrappedScript(base, parsed.args);
+		if (script) reasons.push(...connectionReasonsFor(script, depth + 1));
+		// `echo $(ssh host)` / 反引号里的连接命令也不能绕过；只递归简单的一层，避免复杂解析。
+		for (const match of segment.matchAll(/\$\(([^()]*)\)|`([^`]*)`/g)) {
+			const inner = match[1] ?? match[2];
+			if (inner) reasons.push(...connectionReasonsFor(inner, depth + 1));
+		}
+	}
+	return reasons;
+}
+
 // ---------- 解析 ----------
 
 /** 引号外的字符扫描：把命令按 ; && || | 换行 拆成片段，并报告是否有写文件的重定向 / 命令替换 */
@@ -259,7 +339,7 @@ function unwrap(tokens: string[]): { name: string; args: string[] } | null {
 	let i = 0;
 	while (i < tokens.length) {
 		const t = tokens[i] as string;
-		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) {
+		if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t) || t === "&") {
 			i++;
 			continue;
 		}
@@ -303,13 +383,16 @@ export function assessCommand(command: string): RiskAssessment {
 	if (!text) return { risk: "read", reasons: [] };
 	const { segments, writesRedirect, substitution } = splitSegments(text);
 	const writes = writesRedirect || substitution || !segments.every(segmentIsReadOnly);
-	const reasons: string[] = [];
+	const dangerReasons: string[] = [];
 	for (const rule of DANGER_RULES) {
 		if (rule.onlyIfWrites && !writes) continue;
-		if (rule.pattern.test(text) && !reasons.includes(rule.reason)) reasons.push(rule.reason);
+		if (rule.pattern.test(text) && !dangerReasons.includes(rule.reason)) dangerReasons.push(rule.reason);
 	}
-	if (reasons.length > 0) return { risk: "danger", reasons };
-	return { risk: writes ? "write" : "read", reasons: [] };
+	const forcedReasons = [...new Set(segments.flatMap((segment) => connectionReasonsFor(segment)))];
+	const reasons = [...dangerReasons, ...forcedReasons];
+	const forced = forcedReasons.length > 0;
+	if (dangerReasons.length > 0) return { risk: "danger", reasons, ...(forced ? { forced: true } : {}) };
+	return { risk: writes ? "write" : "read", reasons, ...(forced ? { forced: true } : {}) };
 }
 
 /** 写入文件的路径是否高危（write / edit 工具） */

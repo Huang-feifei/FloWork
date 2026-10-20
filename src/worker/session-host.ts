@@ -47,6 +47,8 @@ interface PendingApproval {
 	toolName: string;
 	/** 高危操作：不允许「本会话始终允许」 */
 	danger: boolean;
+	/** 连接数据库 / SSH：同样只允许逐次确认，不允许「本会话始终允许」 */
+	forced: boolean;
 	resolve: (decision: ApprovalDecision, reason?: string) => void;
 }
 
@@ -293,11 +295,13 @@ ${err.extensionPath}` });
 
 	/**
 	 * 是否需要确认：
+	 * - 数据库 / SSH 连接在任何模式下都要确认、不受「始终允许」影响
 	 * - 本地会话按工具名判断（只读工具在 ask_writes 下自动执行）
 	 * - 运维会话按命令内容判断：高危在任何模式下都要确认、不受「始终允许」影响；
 	 *   ask_writes 下只读命令自动执行；auto 下非高危自动执行
 	 */
 	private needsApproval(toolName: string, risk: ApprovalRisk | undefined): boolean {
+		if (risk?.forced) return true;
 		if (risk) {
 			if (risk.level === "danger") return true;
 			if (this.approvalMode === "auto" || this.allowedTools.has(toolName)) return false;
@@ -310,9 +314,10 @@ ${err.extensionPath}` });
 	}
 
 	private assess(request: ApprovalRequest): ApprovalRisk | undefined {
-		if (!this.ops) return undefined;
-		const { risk, reasons } = assessToolCall(request.toolName, request.input);
-		return { level: risk, reasons };
+		const { risk, reasons, forced } = assessToolCall(request.toolName, request.input);
+		// 本地会话仍按工具名审批；但数据库 / SSH 连接是全局强制确认，必须把风险评估带出来。
+		if (!this.ops && !forced) return undefined;
+		return { level: risk, reasons, ...(forced ? { forced: true } : {}) };
 	}
 
 	private approve(request: ApprovalRequest, signal: AbortSignal | undefined): Promise<string | null> {
@@ -331,6 +336,7 @@ ${err.extensionPath}` });
 			this.pendingApprovals.set(request.toolCallId, {
 				toolName: request.toolName,
 				danger: risk?.level === "danger",
+				forced: risk?.forced === true,
 				resolve: (decision, reason) => {
 					signal?.removeEventListener("abort", onAbort);
 					resolve(decision === "deny" ? (reason ?? "用户拒绝执行此工具调用") : null);
@@ -350,8 +356,8 @@ ${err.extensionPath}` });
 		const pending = this.pendingApprovals.get(toolCallId);
 		if (!pending) return;
 		this.pendingApprovals.delete(toolCallId);
-		// 高危操作的「始终允许」按单次允许处理，不放开整个工具
-		if (decision === "allow_session" && !pending.danger) this.allowedTools.add(pending.toolName);
+		// 高危操作和数据库 / SSH 连接的「始终允许」按单次允许处理，不放开整个工具
+		if (decision === "allow_session" && !pending.danger && !pending.forced) this.allowedTools.add(pending.toolName);
 		pending.resolve(decision, reason);
 		this.emit({ type: "approval_resolved", toolCallId, decision });
 	}

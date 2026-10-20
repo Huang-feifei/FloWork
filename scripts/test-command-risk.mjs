@@ -125,6 +125,43 @@ const DANGER = [
 	"echo 'PermitRootLogin no' >> /etc/ssh/sshd_config",
 ];
 
+const CONNECTION = [
+	"ssh root@example.com",
+	"ssh -p 2222 example.com uptime",
+	"scp ./a root@example.com:/tmp/a",
+	"sftp root@example.com",
+	"psql postgresql://user:pass@db.example/app",
+	"psql -h db.internal -U app -d app -c 'select 1'",
+	"mysql -h db.internal -u app -p app",
+	"sqlite3 ./app.db",
+	"redis-cli -h cache.internal ping",
+	"mongosh mongodb://db.internal/app",
+	"bash -lc 'ssh example.com uptime'",
+	"pwsh -Command 'psql -h db.internal -c \"select 1\"'",
+	"pwsh -Command '& psql -h db.internal -c \"select 1\"'",
+	"pwsh -Command 'Invoke-Command -ComputerName db.example -ScriptBlock { hostname }'",
+	"plink root@example.com",
+	"invoke-sqlcmd -ServerInstance db.example -Query 'select 1'",
+	"pg_dump postgresql://user:pass@db.example/app",
+	"mysqldump -h db.internal app",
+	"mongodump --uri=mongodb://db.internal/app",
+	"echo $(ssh example.com)",
+	"echo `psql -h db.internal -c 'select 1'`",
+	"eval 'ssh example.com'",
+];
+const NOT_CONNECTION = [
+	"psql --version",
+	"pg_dump --version",
+	"mysql --version",
+	"sqlite3 --version",
+	"cat ~/.ssh/config",
+	"grep -n ssh ~/.ssh/config",
+	"systemctl status sshd",
+	"echo 'ssh host'",
+	"invoke-command -ScriptBlock { Get-Date }",
+	"pwsh -Command 'Invoke-Command -ScriptBlock { Get-Date }'",
+];
+
 const checks = createChecks();
 const report = (expected, list) => {
 	const wrong = list.filter((c) => assessCommand(c).risk !== expected);
@@ -136,6 +173,15 @@ try {
 	report("write", WRITE);
 	report("danger", DANGER);
 	checks.check("高危原因非空", assessCommand("rm -rf /").reasons.length > 0);
+	const connectWrong = CONNECTION.filter((c) => assessCommand(c).forced !== true);
+	checks.check(`连接类命令强制逐次确认：${CONNECTION.length - connectWrong.length}/${CONNECTION.length}`, connectWrong.length === 0);
+	for (const c of connectWrong) console.log(`    未强制确认：${c}`);
+	const falseForced = NOT_CONNECTION.filter((c) => assessCommand(c).forced === true);
+	checks.check(`版本 / 帮助 / 本地读取不误报连接：${NOT_CONNECTION.length - falseForced.length}/${NOT_CONNECTION.length}`, falseForced.length === 0);
+	for (const c of falseForced) console.log(`    误报连接：${c}`);
+	checks.check("连接命令带原因", assessCommand("ssh host").reasons.includes("启动 SSH / 远程连接"));
+	checks.check("数据库命令带原因", assessCommand("psql -h db -c 'select 1'").reasons.includes("连接数据库"));
+	checks.check("连接判断透传到工具", assessToolCall("bash", { command: "ssh host" }).forced === true && assessToolCall("bash", { command: "psql -h db" }).forced === true);
 	checks.check("write 工具改 sshd_config 为高危", assessToolCall("write", { path: "/etc/ssh/sshd_config" }).risk === "danger");
 	checks.check("edit 工具改 /etc/fstab 为高危", assessToolCall("edit", { path: "/etc/fstab" }).risk === "danger");
 	checks.check("write 工具普通配置为改动", assessToolCall("write", { path: "/etc/nginx/conf.d/app.conf" }).risk === "write");

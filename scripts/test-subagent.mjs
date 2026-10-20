@@ -34,7 +34,7 @@ try {
 	const bundle = join(base, "subagent.mjs");
 	await build({
 		stdin: {
-			contents: 'export * from "./src/worker/subagent.ts"; export * from "./src/worker/trust.ts"; export * from "./src/worker/session-host.ts"; export * from "./src/shared/subagent-settings.ts";',
+			contents: 'export * from "./src/worker/subagent.ts"; export * from "./src/worker/subagent/connection-guard.ts"; export * from "./src/worker/trust.ts"; export * from "./src/worker/session-host.ts"; export * from "./src/shared/subagent-settings.ts";',
 			resolveDir: root,
 			loader: "ts",
 		},
@@ -119,6 +119,34 @@ try {
 		maxConcurrency: 2,
 		defaultModel: "openai/gpt-5",
 	});
+
+	// 子代理连接守卫：只提供逐次允许 / 拒绝，不提供本会话始终允许
+	const guardCalls = [];
+	let guardAnswer = false;
+	const guardCtx = {
+		ui: {
+			confirm: async (title, message, opts) => {
+				guardCalls.push({ title, message, opts });
+				return guardAnswer;
+			},
+		},
+	};
+	const guardSignal = new AbortController().signal;
+	const sshGuard = await mod.confirmSubagentConnection(guardCtx, "scout", "bash", { command: "ssh host" }, guardSignal);
+	assert.equal(sshGuard?.block, true);
+	assert.match(sshGuard.reason, /拒绝/);
+	assert.equal(guardCalls.length, 1);
+	assert.match(guardCalls[0].message, /ssh host/);
+	assert.equal(guardCalls[0].opts.signal, guardSignal);
+	assert.doesNotMatch(guardCalls[0].message, /本会话始终允许/);
+	guardAnswer = true;
+	assert.equal(await mod.confirmSubagentConnection(guardCtx, "scout", "bash", { command: "psql -h db" }, undefined), undefined);
+	assert.equal(guardCalls.length, 2);
+	assert.match(guardCalls[1].message, /psql -h db/);
+	assert.equal(await mod.confirmSubagentConnection(guardCtx, "scout", "bash", { command: "ls" }, undefined), undefined);
+	assert.equal(guardCalls.length, 2, "普通命令不再额外确认");
+	assert.equal(await mod.confirmSubagentConnection(guardCtx, "scout", "read", { path: "README.md" }, undefined), undefined);
+	assert.equal(guardCalls.length, 2);
 
 	// single / parallel / chain 执行编排（不调用模型）
 	const singleCalls = [];

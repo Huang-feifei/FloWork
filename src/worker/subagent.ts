@@ -3,7 +3,7 @@
  *
  * - 子会话在 worker 进程内通过 pi SDK 创建，不依赖外部 `pi` 可执行文件；
  * - 子会话不加载 FloWork 的内联审批扩展，因此 `subagent` 只请求一次审批，
- *   子代理内部的工具调用不再逐个弹审批；
+ *   子代理内部的工具调用不再逐个弹审批；数据库 / SSH 连接例外，执行前仍会请求确认；
  * - agent 定义从用户级 `<agentDir>/agents/*.md` 和项目级 `.pi/agents/*.md` 读取，
  *   项目内 agent 在项目未受信任时先向用户确认；
  * - 支持 single / parallel / chain 三种模式，结果以工具输出返回父会话。
@@ -74,12 +74,12 @@ export function createSubagentExtension(
 				"把任务委派给拥有独立上下文窗口的专用子代理。",
 				`模式：single（agent + task）、parallel（tasks 数组，最多 ${config.maxTasks} 个、并发 ${config.maxConcurrency} 个）、chain（按顺序执行，可用 {previous} 引用上一步输出）。`,
 				`用户级 agent 位于 ${join(getAgentDir(), "agents")}，项目级 agent 位于 .pi/agents。默认 agentScope 为 "both"。`,
-				"子代理内部的工具调用不会再逐个请求审批；本工具本身只请求一次审批。",
+				"子代理内部的普通工具调用不会再逐个请求审批；本工具本身只请求一次审批。数据库 / SSH 连接属于例外，执行前仍会请求确认。",
 			].join(" "),
 			promptSnippet: "Delegate a task to a specialized subagent with isolated context.",
 			promptGuidelines: [
 				"适合把大范围搜索、独立审查或并行子任务交给子代理，避免污染主上下文。",
-				"子代理内部工具自动执行；调用前确认任务范围。",
+				"子代理内部工具自动执行；调用前确认任务范围。子代理发起数据库 / SSH 连接时仍会逐次请求确认。",
 			],
 			parameters: SubagentParams,
 

@@ -507,12 +507,12 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 		? [
 				{ value: "ask_writes", title: "审批：只读自动，改动确认" },
 				{ value: "ask_all", title: "审批：每条都确认" },
-				{ value: "auto", title: "审批：全部自动，只拦高危" },
+				{ value: "auto", title: "审批：自动（高危/连接仍确认）" },
 			]
 		: [
 				{ value: "ask_writes", title: "审批：修改与命令" },
 				{ value: "ask_all", title: "审批：全部工具" },
-				{ value: "auto", title: "审批：关闭（自动执行）" },
+				{ value: "auto", title: "审批：关闭（连接仍确认）" },
 			];
 	const approvalLabel = approvalItems.find((o) => o.value === approvalMode)?.title ?? "审批";
 	/** 模型按 provider 分组：分组标题给出 provider，行里只留模型 ID，长 ID 才读得清 */

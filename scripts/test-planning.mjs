@@ -146,6 +146,27 @@ try {
 	await assert.rejects(tool("submit_plan", { plan: "不能在执行模式重复提交" }), /计划模式/);
 	console.log("✓ 明确批准后才能真实写入，原有审批设置仍然有效");
 
+	// 自动审批也不能放过数据库 / SSH 连接，且「本会话始终允许」必须退化为单次允许
+	const sshFrom = events.length;
+	const sshCall = callEvent("bash", { command: "ssh example.invalid uptime" });
+	const sshApproval = events.slice(sshFrom).find((e) => e.type === "approval_request");
+	assert.ok(sshApproval, "关闭审批后 SSH 连接仍需确认");
+	assert.equal(sshApproval.risk?.forced, true);
+	assert.equal(sshApproval.risk?.level, "write");
+	await send({ type: "respond_approval", toolCallId: sshApproval.toolCallId, decision: "allow_session" });
+	assert.equal(await sshCall, undefined);
+	const dbFrom = events.length;
+	const dbCall = callEvent("bash", { command: "psql -h db.example -c 'select 1'" });
+	const dbApproval = events.slice(dbFrom).find((e) => e.type === "approval_request");
+	assert.ok(dbApproval, "本会话始终允许不能跳过下一次数据库连接确认");
+	assert.equal(dbApproval.risk?.forced, true);
+	assert.equal(dbApproval.risk?.level, "write");
+	await send({ type: "respond_approval", toolCallId: dbApproval.toolCallId, decision: "deny" });
+	const denied = await dbCall;
+	assert.equal(denied?.block, true);
+	assert.match(denied?.reason, /拒绝/);
+	console.log("✓ 自动审批下数据库 / SSH 连接逐次确认，连接操作不能本会话始终允许");
+
 	await send({ type: "set_work_mode", mode: "plan" });
 	const other = new SessionHost(() => {}, "auto");
 	hosts.push(other);
