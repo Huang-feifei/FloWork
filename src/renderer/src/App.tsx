@@ -29,7 +29,7 @@ function EmptyState() {
 	const { importProjects, setView, setDiscoverOpen, setRemoteOpen } = useApp.getState();
 	const hasProjects = useApp((s) => s.projects.projects.length > 0);
 	return (
-		<div className="flex flex-1 items-center justify-center p-8">
+		<div className="flex flex-1 items-center justify-center bg-bg p-8">
 			<div className="w-full max-w-[560px] text-center">
 				<div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-[20px] bg-primary-soft text-[26px] leading-none text-primary">✻</div>
 				<h1 className="mb-3 text-[32px] font-semibold tracking-tight">{hasProjects ? "选择一个项目" : "导入你的第一个项目"}</h1>
@@ -71,8 +71,8 @@ export function App() {
 			{/* 窗口背后的桌面：桌面版由系统材质（Acrylic / vibrancy）透出，网页版用这一层模拟 */}
 			<div className="fw-wallpaper absolute inset-0" />
 
-			{/* 整个窗口是一层模糊：各区域再用不同透明度叠出层次 */}
-			<div className="relative flex h-full flex-col backdrop-blur-[40px] backdrop-saturate-150">
+			{/* 整个窗口一层毛玻璃（见 .fw-shell）：各区域再用不同透明度叠出层次；图片模式下关掉，否则壁纸会被糊成色斑 */}
+			<div className="fw-shell relative flex h-full flex-col">
 				<TitleBar />
 
 				{view === "welcome" ? (

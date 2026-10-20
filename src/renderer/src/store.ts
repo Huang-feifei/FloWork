@@ -340,13 +340,21 @@ export function hostKeyChangedHost(text: string): string | null {
 /** 启动时把 IndexedDB 里的背景图读出来换成 object URL；顺带迁移旧版存在 localStorage 的 data URL */
 async function restoreBackgroundImage(): Promise<void> {
 	const current = useApp.getState().appearance;
-	// 旧版把图片以 data URL 存进 localStorage：搬到 IndexedDB 后，storeAppearance 会顺手清掉它
+	// 旧版把图片以 data URL 存进 localStorage：搬到 IndexedDB 后才能清掉那份大副本。
+	// 必须先写成功并读回校验：写库失败而 localStorage 副本又被清掉，这张图就永久丢了。
 	if (current.bgImage.startsWith("data:")) {
 		try {
-			await saveStoredImage(await (await fetch(current.bgImage)).blob());
+			const blob = await (await fetch(current.bgImage)).blob();
+			await saveStoredImage(blob);
+			const stored = await loadStoredImage();
+			if (!stored || stored.size !== blob.size) throw new Error("图片未能写入本机数据库");
+			// 迁移成功：换成 object URL，storeAppearance 会顺手清掉 localStorage 里的 data URL
+			useApp.getState().setAppearance({ bgImage: URL.createObjectURL(stored) });
 		} catch {
-			/* 迁移失败就继续沿用旧值，不丢用户的图 */
+			// 迁移失败：保留 localStorage 里的 data URL（它同样能当壁纸用），下次启动再试一次
+			useApp.getState().pushNotice("warning", "背景图暂时没能存进本机数据库，本次仍会显示；下次启动会自动重试。");
 		}
+		return;
 	}
 	const blob = await loadStoredImage();
 	if (blob) useApp.getState().setAppearance({ bgImage: URL.createObjectURL(blob) });

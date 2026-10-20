@@ -293,7 +293,7 @@ export function AppearanceTab() {
 
 				<div className="space-y-5">
 					{/* 窗口背景 */}
-					<Section title="窗口背景" hint="窗口背后的材质：跟随系统壁纸，或指定一张图片。">
+					<Section title="窗口背景" hint="窗口背后的材质：跟随系统壁纸，或指定一张图片；图片模式下壁纸会透到侧栏与内容区。">
 						<Segmented
 							items={BG_MODES}
 							active={appearance.bg}
@@ -343,7 +343,7 @@ export function AppearanceTab() {
 								onChange={(bgBlur) => setAppearance({ bgBlur })}
 							/>
 							<Slider
-								label="不透明度"
+								label="壁纸浓度"
 								value={appearance.bgOpacity}
 								min={0.2}
 								max={1}
@@ -356,7 +356,7 @@ export function AppearanceTab() {
 							<div className="mt-3 text-[12px] leading-5 text-faint">
 								{appearance.bg === "image" && !appearance.bgImage
 									? "先选一张图片；图片保存在本机（IndexedDB），不会上传。"
-									: "模糊与不透明度对三种背景模式都生效。"}
+									: "模糊只作用于壁纸；壁纸浓度越低，图片越淡、面板越实。"}
 							</div>
 						)}
 					</Section>

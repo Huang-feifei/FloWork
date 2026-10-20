@@ -30,9 +30,9 @@ export interface Appearance {
 	bg: BgMode;
 	/** 自定义背景图：本次会话的 object URL（blob:…），图片本体存在 IndexedDB，bg = image 时生效 */
 	bgImage: string;
-	/** 背景模糊（px，0–40） */
+	/** 背景模糊（px，0–40）：只作用于壁纸本身 */
 	bgBlur: number;
-	/** 背景不透明度（0.2–1） */
+	/** 壁纸浓度（0.2–1）：越低壁纸越淡、面板越实；实现为壁纸上方一层薄膜的浓度，不是壁纸自身的 opacity */
 	bgOpacity: number;
 	/** 提高对比度 */
 	contrast: boolean;
@@ -147,8 +147,11 @@ export function storedAppearance(): Appearance {
 
 export function storeAppearance(appearance: Appearance): void {
 	try {
-		// bgImage 是本次会话的 object URL，不能落盘；图片本体存在 IndexedDB（见 background-image.ts）
-		localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...appearance, bgImage: "" }));
+		// bgImage 是本次会话的 object URL，不能落盘；图片本体存在 IndexedDB（见 background-image.ts）。
+		// 但如果还是 data: 值，说明这张图没进 IndexedDB（迁移失败或旧版遗留）：此时必须原样保留，
+		// 否则清空后再也找不回来（曾因此丢失用户的壁纸）。
+		const keepDataUrl = appearance.bgImage.startsWith("data:");
+		localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...appearance, bgImage: keepDataUrl ? appearance.bgImage : "" }));
 	} catch {
 		/* 存储不可用时忽略：本次会话仍然生效 */
 	}

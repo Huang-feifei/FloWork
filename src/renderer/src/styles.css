@@ -234,18 +234,35 @@ select option {
 
 /* ---------- 壁纸与浮层玻璃 ---------- */
 
-/* 窗口背后的桌面：桌面版由 Acrylic / vibrancy 材质透出，网页版与截图场景用这一层模拟 */
+/* 窗口背后的桌面：桌面版由 Acrylic / vibrancy 材质透出，网页版与截图场景用这一层模拟。
+ * 壁纸本体画在 ::before 上（向外扩出模糊半径，避免 filter: blur 从元素边缘取到透明像素、四周发白）；
+ * ::after 是「壁纸可见度」薄膜，由设置里的不透明度滑块控制。 */
 .fw-wallpaper {
+	--app-bg-blur: 0px;
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	background: var(--color-window);
+	pointer-events: none;
+}
+.fw-wallpaper::before {
+	content: "";
+	position: absolute;
+	/* 外扩 2 倍模糊半径：模糊采样不会取到容器外的透明像素，窗口四周就不会出现一圈白雾 */
+	inset: calc(var(--app-bg-blur) * -2 - 8px);
 	background:
 		radial-gradient(46% 56% at 14% 18%, rgb(122 162 255 / 0.34), transparent 70%),
 		radial-gradient(40% 50% at 86% 78%, rgb(255 176 190 / 0.3), transparent 72%),
 		radial-gradient(34% 44% at 66% 24%, rgb(166 222 255 / 0.3), transparent 70%),
 		radial-gradient(30% 40% at 28% 86%, rgb(206 180 255 / 0.28), transparent 70%),
 		linear-gradient(160deg, #eef1f8, #f7f2f4 55%, #fdf6ef);
+	background-position: center;
+	background-size: cover;
+	filter: blur(var(--app-bg-blur));
 }
 
 /* 深色壁纸：同一组光斑换成深色底 */
-html[data-theme="dark"] .fw-wallpaper {
+html[data-theme="dark"] .fw-wallpaper::before {
 	background:
 		radial-gradient(60% 60% at 18% 10%, rgb(255 255 255 / 0.05), transparent 70%),
 		radial-gradient(50% 55% at 88% 88%, rgb(255 255 255 / 0.035), transparent 72%),
@@ -567,34 +584,60 @@ html[data-code-size="14"] .term {
 	font-size: 14px;
 }
 
-/* 窗口背景：跟随系统壁纸 / 纯色 / 图片；模糊与不透明度对三种模式都生效 */
-.fw-wallpaper {
-	filter: blur(var(--app-bg-blur, 0px));
-	opacity: var(--app-bg-opacity, 1);
-}
-html[data-theme="light"][data-bg="image"] {
-	/* 浅色面板默认 90%+ 不透明，会把自定义壁纸完全盖住；图片模式下降一档，并在壁纸上加一层很淡的白膜保证文字对比度 */
-	--color-chrome: rgb(255 255 255 / 0.62);
-	--color-sidebar: rgb(245 245 247 / 0.66);
-	--color-bg: rgb(245 245 247 / 0.7);
-	--color-term: rgb(255 255 255 / 0.82);
-	--color-term-bar: rgb(245 245 247 / 0.76);
-	--color-panel: rgb(255 255 255 / 0.84);
-	--color-glass: rgb(255 255 255 / 0.72);
-}
-html[data-theme="light"][data-bg="image"] .fw-wallpaper::after {
+/* 窗口背景：跟随系统壁纸 / 纯色 / 图片。
+ * 不透明度不再是「壁纸自身的 opacity」（那样调低时透出的是 body 纯色，观感发灰），
+ * 而是壁纸上方一层薄膜的浓度：100% 壁纸最清晰，越低壁纸越淡。 */
+.fw-wallpaper::after {
 	content: "";
 	position: absolute;
 	inset: 0;
-	background: rgb(255 255 255 / 0.12);
+	background: #fff;
+	opacity: calc((1 - var(--app-bg-opacity, 1)) * 0.88);
 }
-html[data-bg="solid"] .fw-wallpaper {
+html[data-theme="dark"] .fw-wallpaper::after {
+	background: #000;
+}
+
+/* 整窗毛玻璃：把桌面材质糊成柔和的雾面。图片模式下关掉，否则壁纸会被糊成一块色斑 */
+.fw-shell {
+	backdrop-filter: blur(40px) saturate(150%);
+}
+html[data-bg="image"] .fw-shell {
+	backdrop-filter: none;
+}
+
+/* 图片模式：浅色面板默认 90%+ 不透明，会把自定义壁纸完全盖住；这里整体降一档，让图片真正透出来，
+ * 同时正文区（bg / term）留得比侧栏更实，保证长文本可读。 */
+html[data-theme="light"][data-bg="image"] {
+	--color-chrome: rgb(255 255 255 / 0.58);
+	--color-sidebar: rgb(248 248 250 / 0.52);
+	--color-bg: rgb(252 252 253 / 0.68);
+	--color-term: rgb(255 255 255 / 0.76);
+	--color-term-bar: rgb(248 248 250 / 0.7);
+	--color-panel: rgb(255 255 255 / 0.86);
+	--color-glass: rgb(255 255 255 / 0.8);
+	--color-surface-raised: rgb(255 255 255 / 0.92);
+}
+html[data-theme="dark"][data-bg="image"] {
+	--color-chrome: rgb(8 10 14 / 0.52);
+	--color-sidebar: rgb(14 17 22 / 0.52);
+	--color-bg: rgb(17 20 26 / 0.64);
+	--color-term: rgb(17 20 26 / 0.68);
+	--color-term-bar: rgb(30 35 44 / 0.66);
+	--color-panel: rgb(30 35 44 / 0.72);
+	--color-glass: rgb(22 26 33 / 0.78);
+	--color-surface-raised: rgb(35 35 40 / 0.92);
+}
+/* 图片模式下壁纸上再罩一层很淡的膜：滑块调到很低时也不至于让正文完全压在照片细节上 */
+html[data-theme="light"][data-bg="image"] .fw-wallpaper::after {
+	opacity: calc((1 - var(--app-bg-opacity, 1)) * 0.88 + 0.1);
+}
+html[data-bg="solid"] .fw-wallpaper::before {
 	background: var(--color-window);
+	filter: none;
 }
-html[data-bg="image"] .fw-wallpaper {
+html[data-bg="image"] .fw-wallpaper::before {
 	background-image: var(--app-bg-image);
-	background-size: cover;
-	background-position: center;
 }
 
 /* 辅助功能：提高对比度 */

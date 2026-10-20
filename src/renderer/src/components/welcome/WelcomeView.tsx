@@ -99,7 +99,7 @@ export function WelcomeView() {
 
 	return (
 		<div className="grid h-full grid-cols-[1fr_540px]">
-			<section className="flex min-h-0 flex-col justify-center overflow-y-auto px-24 py-12">
+			<section className="flex min-h-0 flex-col justify-center overflow-y-auto bg-bg px-24 py-12">
 				<div className="flex items-baseline gap-4">
 					<span className="text-[52px] leading-none text-primary">✻</span>
 					<span className="text-[40px] font-semibold tracking-tight text-fg">flowork</span>
