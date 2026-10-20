@@ -1,14 +1,22 @@
-/** 本地测试并签名放行官方 Pi；只发布兼容清单，不重新分发 Pi 运行包。 */
+/** 测试官方 Pi 固定依赖后，生成供 GitHub Releases 发布的签名完整运行包。 */
 import { spawnSync } from "node:child_process";
 import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { constants, createReadStream } from "node:fs";
 import { copyFile, mkdir, mkdtemp, open, readFile, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import * as tar from "tar";
 import { buildKernelAdapter } from "./lib/build-kernel-adapter.mjs";
 import { probeKernel } from "./lib/kernel-probe.mjs";
+import { backendRuntime } from "./web-build-options.mjs";
+
+const runtimeEnvironment = await backendRuntime();
+if (runtimeEnvironment.command !== process.execPath || (runtimeEnvironment.env?.ELECTRON_RUN_AS_NODE === "1" && !process.versions.electron)) {
+	const result = spawnSync(runtimeEnvironment.command, [import.meta.filename, ...process.argv.slice(2)], { stdio: "inherit", env: { ...process.env, ...runtimeEnvironment.env } });
+	process.exit(result.status ?? 1);
+}
 
 const root = resolve(import.meta.dirname, "..");
 const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -66,10 +74,11 @@ try {
 	// 复用客户端的下载、解包、布局验证实现；避免批准了仅 npm install 才能运行的树。
 	await build({
 		absWorkingDir: root,
-		entryPoints: ["src/core/kernel-npm.ts", "src/core/kernel-package.ts"], outdir: join(stage, "lib"),
+		entryPoints: ["src/core/kernel-npm.ts", "src/core/kernel-package.ts", "src/core/kernel-archive.ts"], outdir: join(stage, "lib"),
 		bundle: true, packages: "external", platform: "node", format: "esm", alias: { "@shared": "./src/shared" }, logLevel: "silent",
 	});
 	const { installApprovedRuntime, requestNpm } = await import(pathToFileURL(join(stage, "lib/kernel-npm.js")).href);
+	const { extractKernelRuntime } = await import(pathToFileURL(join(stage, "lib/kernel-archive.js")).href);
 	const { verifyManifest, npmTarballUrl, MAX_KERNEL_BYTES, MAX_MANIFEST_BYTES } = await import(pathToFileURL(join(stage, "lib/kernel-package.js")).href);
 	const installedLock = JSON.parse(await readFile(join(stage, "node_modules/.package-lock.json"), "utf8"));
 	const packages = [];
@@ -120,10 +129,6 @@ try {
 		platform: process.platform, arch: process.arch, minAppVersion, maxAppVersion, minNodeVersion, minElectronVersion,
 		adapterSha256: createHash("sha256").update(await readFile(adapter)).digest("hex"), packages,
 	};
-	const bytes = Buffer.from(JSON.stringify(manifest));
-	const envelope = { manifest: bytes.toString("base64"), signature: sign(null, bytes, key).toString("base64") };
-	if (Buffer.byteLength(JSON.stringify(envelope)) > MAX_MANIFEST_BYTES) throw new Error("兼容清单超出客户端大小限制");
-	verifyManifest(envelope, config.publicKey);
 	const runtime = join(stage, "runtime");
 	await installApprovedRuntime({
 		manifest, adapterEntry: adapter, destination: runtime, archiveDirectory: join(stage, "install-tarballs"),
@@ -133,11 +138,28 @@ try {
 			return new Response(Readable.toWeb(createReadStream(file)));
 		},
 	});
-	await probeKernel(join(runtime, "pi-worker.js"), protocolVersion);
-	const filename = join(output, `flowork-pi-approval-${process.platform}-${process.arch}.json`);
-	// 每个平台/批次使用独立输出目录，拒绝无意覆盖已审批的文件。
-	await writeFile(filename, `${JSON.stringify(envelope, null, 2)}\n`, { flag: "wx" });
-	console.log(`\n✓ 已批准官方 Pi ${pi.version}，放行批次 ${version}，FloWork ${minAppVersion}–${maxAppVersion}`);
-	console.log(`只上传兼容清单：${filename}`);
-	console.log(`Release 标签：kernel-v${version}。无需上传 Pi 压缩包。`);
+	const archiveName = `flowork-kernel-${process.platform}-${process.arch}.tar.gz`;
+	const archive = join(stage, archiveName);
+	await tar.c({ cwd: runtime, file: archive, gzip: true, portable: true, prefix: "runtime" }, ["package.json", "node_modules"]);
+	let size = 0; const hash = createHash("sha256");
+	for await (const chunk of createReadStream(archive)) { size += chunk.length; hash.update(chunk); }
+	if (size > MAX_KERNEL_BYTES) throw new Error("完整内核包超出客户端下载上限");
+	const fullManifest = { ...manifest, format: 3, archive: { name: archiveName, size, sha256: hash.digest("hex") } };
+	const bytes = Buffer.from(JSON.stringify(fullManifest));
+	const envelope = { manifest: bytes.toString("base64"), signature: sign(null, bytes, key).toString("base64") };
+	if (Buffer.byteLength(JSON.stringify(envelope)) > MAX_MANIFEST_BYTES) throw new Error("兼容清单超出客户端大小限制");
+	verifyManifest(envelope, config.publicKey);
+	// 自检的是实际归档经客户端安全解包后的目录，不只是 npm 安装目录。
+	const extracted = join(stage, "extracted");
+	await extractKernelRuntime(archive, extracted, fullManifest, adapter);
+	await probeKernel(join(extracted, "pi-worker.js"), protocolVersion);
+	const filename = join(output, `flowork-kernel-${process.platform}-${process.arch}.json`);
+	const archiveOutput = join(output, archiveName);
+	await copyFile(archive, archiveOutput, constants.COPYFILE_EXCL);
+	try { await writeFile(filename, `${JSON.stringify(envelope, null, 2)}\n`, { flag: "wx" }); }
+	catch (error) { await rm(archiveOutput, { force: true }); throw error; }
+	console.log(`\n✓ 已批准并打包官方 Pi ${pi.version}，放行批次 ${version}，FloWork ${minAppVersion}–${maxAppVersion}`);
+	console.log(`上传完整包：${archiveOutput}（${size} 字节）`);
+	console.log(`上传签名清单：${filename}`);
+	console.log(`Release 标签：kernel-v${version}。两个附件必须同时发布。`);
 } finally { await rm(stage, { recursive: true, force: true, maxRetries: 3 }); }

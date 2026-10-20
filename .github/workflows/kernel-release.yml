@@ -1,4 +1,4 @@
-name: Approve official Pi
+name: Build signed Pi kernel
 
 on:
   push:
@@ -28,7 +28,7 @@ jobs:
           node --input-type=module -e "import fs from 'node:fs'; const c=JSON.parse(fs.readFileSync('kernel.config.json','utf8')); if(c.repository.toLowerCase()!==process.env.GITHUB_REPOSITORY.toLowerCase() || !c.publicKey) throw new Error('Configure kernel.config.json repository/publicKey first');"
       - name: Run regression tests
         run: npm test
-      - name: Test official packages and sign approval
+      - name: Build, test and sign complete kernel
         shell: pwsh
         env:
           FLOWORK_KERNEL_SIGNING_KEY: ${{ secrets.FLOWORK_KERNEL_SIGNING_KEY }}
@@ -36,10 +36,10 @@ jobs:
           $version = $env:GITHUB_REF_NAME -replace '^kernel-v', ''
           npm run kernel:approve -- --version $version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Publish approval only (no Pi archive)
+      - name: Publish complete kernel and signed manifest
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $version = $env:GITHUB_REF_NAME -replace '^kernel-v', ''
-          gh release create $env:GITHUB_REF_NAME release/kernels/$version/*.json --verify-tag --title "Approved Pi · $env:GITHUB_REF_NAME" --generate-notes
+          gh release create $env:GITHUB_REF_NAME release/kernels/$version/*.json release/kernels/$version/*.tar.gz --verify-tag --title "FloWork Pi Kernel · $env:GITHUB_REF_NAME" --generate-notes

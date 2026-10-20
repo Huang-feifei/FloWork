@@ -54,10 +54,14 @@ function isAppUrl(url: string): boolean {
 	}
 }
 
+// 私有仓库测试凭据只留在主进程更新器内，不继承到 Pi / 数据库等子进程。
+const kernelGithubToken = process.env.FLOWORK_KERNEL_GITHUB_TOKEN;
+delete process.env.FLOWORK_KERNEL_GITHUB_TOKEN;
 const kernelUpdates = new KernelUpdater({
 	directory: () => join(app.getPath("userData"), "kernels"),
 	repository: kernelConfig.repository,
 	publicKey: kernelConfig.publicKey,
+	githubToken: kernelGithubToken,
 	appVersion: app.getVersion(),
 	nodeVersion: process.versions.node,
 	electronVersion: process.versions.electron,

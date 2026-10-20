@@ -608,6 +608,8 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 }
 
 export function TerminalView() {
+	const handleId = useApp((s) => s.handleId);
+	const sessionFile = useApp((s) => s.state?.sessionFile);
 	const connecting = useApp((s) => s.connecting);
 	const messages = useApp((s) => s.messages);
 	const streaming = useApp((s) => s.streaming);
@@ -631,6 +633,14 @@ export function TerminalView() {
 		});
 	}, []);
 
+	// 切换会话不能继承上一会话的「正在翻阅历史」状态；在绘制前直接定位最新消息。
+	useLayoutEffect(() => {
+		stickToBottom.current = true;
+		setAtBottom(true);
+		const el = scrollRef.current;
+		if (el) el.scrollTop = el.scrollHeight;
+	}, [handleId, sessionFile]);
+
 	// 内容长高就跟随：覆盖流式文本、工具输出、图片加载、Markdown 重排等所有情况
 	useEffect(() => {
 		const content = contentRef.current;
@@ -640,14 +650,18 @@ export function TerminalView() {
 		return () => observer.disconnect();
 	}, [follow]);
 
-	// 内容高度没变但状态变了（例如刚开始运行）也跟随一次
-	useEffect(() => {
+	// 历史消息异步载入后也在绘制前定位，避免布局产生的 scroll 先关闭跟随。
+	// 同一会话中手动上滚后仍保留阅读位置，不因新消息强制跳到底部。
+	useLayoutEffect(() => {
+		const el = scrollRef.current;
+		if (el && stickToBottom.current) el.scrollTop = el.scrollHeight;
 		follow();
 	}, [messages, streaming, isRunning, pendingCount, follow]);
 
 	useEffect(
 		() => () => {
 			if (followFrame.current) cancelAnimationFrame(followFrame.current);
+			followFrame.current = 0;
 		},
 		[],
 	);

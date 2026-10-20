@@ -32,9 +32,15 @@ export interface ApprovedNpmPackage {
 	size: number;
 }
 
-/** 签名的兼容版本清单：只有维护者测试并放行的官方 Pi 才能安装。 */
-export interface KernelManifest {
-	format: 2;
+/** GitHub Release 中的完整运行包；名称、长度和摘要均受签名保护。 */
+export interface KernelArchive {
+	name: string;
+	size: number;
+	sha256: string;
+}
+
+/** 格式 2 仅保留已安装版本的离线验证；新发布统一使用格式 3 完整包。 */
+interface KernelManifestBase {
 	version: string;
 	piVersion: string;
 	protocolVersion: number;
@@ -48,6 +54,10 @@ export interface KernelManifest {
 	adapterSha256: string;
 	packages: ApprovedNpmPackage[];
 }
+
+export interface NpmKernelManifest extends KernelManifestBase { format: 2; archive?: never }
+export interface ArchiveKernelManifest extends KernelManifestBase { format: 3; archive: KernelArchive }
+export type KernelManifest = NpmKernelManifest | ArchiveKernelManifest;
 
 /** 原始 JSON 字节的 Base64 与 Ed25519 签名。 */
 export interface SignedKernelManifest {

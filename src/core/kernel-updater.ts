@@ -1,18 +1,18 @@
-/** GitHub 只发布维护者签名的兼容清单；Pi 与固定依赖从官方 npm 拉取。 */
+/** 从维护者 GitHub Releases 下载签名批准的完整 Pi 运行包。 */
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { KernelManifest, KernelUpdateController, KernelUpdateStatus, KernelVersion, SignedKernelManifest } from "@shared/kernel";
+import type { ArchiveKernelManifest, KernelManifest, KernelUpdateController, KernelUpdateStatus, KernelVersion, SignedKernelManifest } from "@shared/kernel";
 import {
 	compareVersions, incompatibility, isVersion, MAX_MANIFEST_BYTES, validateInstalledLayout, validateRepository, verifyManifest,
 	type KernelEnvironment,
 } from "./kernel-package";
-import { installApprovedRuntime } from "./kernel-npm";
+import { extractKernelRuntime } from "./kernel-archive";
 
-interface ReleaseAsset { name: string; browser_download_url: string }
+interface ReleaseAsset { id?: number; name: string; browser_download_url: string }
 interface Release { tag_name: string; draft: boolean; prerelease: boolean; body: string | null; assets: ReleaseAsset[] }
 interface Selection { active: string | null; previous: string | null; pending?: string | null }
-interface Candidate { manifest: KernelManifest; envelope: SignedKernelManifest; notes: string; releaseUrl: string }
+interface Candidate { manifest: ArchiveKernelManifest; envelope: SignedKernelManifest; notes: string; releaseUrl: string }
 
 export interface KernelUpdaterOptions extends Omit<KernelEnvironment, "adapterSha256"> {
 	/** 来自应用自身，不从网络下载或替换。 */
@@ -20,6 +20,8 @@ export interface KernelUpdaterOptions extends Omit<KernelEnvironment, "adapterSh
 	directory: () => string;
 	repository: string;
 	publicKey: string;
+	/** 仅由后端环境注入的维护者测试凭据；不写配置、不返回 Renderer、不转发 CDN。 */
+	githubToken?: string;
 	bundled: { version: string; piVersion: string; entry: string };
 	/** 只启动隔离的自检进程，不打开真实会话、加载用户扩展或调用模型。 */
 	probe: (entry: string) => Promise<void>;
@@ -169,9 +171,10 @@ export class KernelUpdater implements KernelUpdateController {
 				!(parsed.hostname === "api.github.com" || parsed.hostname === "github.com" || parsed.hostname.endsWith(".githubusercontent.com"))) {
 				throw new Error("更新地址不是受支持的 GitHub HTTPS 地址");
 			}
-			const response = await (this.options.fetch ?? fetch)(url, {
-				redirect: "manual", signal, headers: { "User-Agent": "FloWork-Kernel-Updater", Accept: parsed.hostname === "api.github.com" ? "application/vnd.github+json" : "application/octet-stream" },
-			});
+			const api = parsed.hostname === "api.github.com";
+			const headers: Record<string, string> = { "User-Agent": "FloWork-Kernel-Updater", Accept: api && !/\/releases\/assets\/\d+$/.test(parsed.pathname) ? "application/vnd.github+json" : "application/octet-stream" };
+			if (api && parsed.pathname.startsWith(`/repos/${this.options.repository}/`) && this.options.githubToken) headers.Authorization = `Bearer ${this.options.githubToken}`;
+			const response = await (this.options.fetch ?? fetch)(url, { redirect: "manual", signal, headers });
 			if ([301, 302, 303, 307, 308].includes(response.status)) {
 				const location = response.headers.get("location");
 				await response.body?.cancel();
@@ -181,7 +184,7 @@ export class KernelUpdater implements KernelUpdateController {
 			}
 			if (!response.ok) {
 				await response.body?.cancel();
-				throw new Error(response.status === 403 || response.status === 429 ? "GitHub 请求受限，请稍后重试" : `GitHub 请求失败（HTTP ${response.status}）`);
+				throw new Error(response.status === 403 || response.status === 429 ? "GitHub 请求受限或当前凭据权限不足，请稍后重试" : response.status === 404 ? "GitHub 仓库或附件不可见（HTTP 404）；私有仓库测试需在后端设置 FLOWORK_KERNEL_GITHUB_TOKEN，公开后无需凭据" : `GitHub 请求失败（HTTP ${response.status}）`);
 			}
 			return response;
 		}
@@ -204,6 +207,10 @@ export class KernelUpdater implements KernelUpdateController {
 		if (typeof asset.browser_download_url !== "string" || asset.browser_download_url !== `${prefix}${asset.name}`) {
 			throw new Error("内核附件地址与发布仓库不一致");
 		}
+		if (this.options.githubToken) {
+			if (!Number.isSafeInteger(asset.id) || asset.id! <= 0) throw new Error("私有内核附件缺少合法 GitHub asset ID");
+			return `https://api.github.com/repos/${this.options.repository}/releases/assets/${asset.id}`;
+		}
 		return asset.browser_download_url;
 	}
 
@@ -221,19 +228,21 @@ export class KernelUpdater implements KernelUpdateController {
 			const base = this.state.pending?.source === "downloaded" ? this.state.pending.version : this.state.current.version;
 			for (const release of candidates) {
 				if (compareVersions(release.tag_name.slice(8), base) <= 0) continue;
-				const asset = release.assets?.find((a) => a.name === `flowork-pi-approval-${this.options.platform}-${this.options.arch}.json`);
+				const asset = release.assets?.find((a) => a.name === `flowork-kernel-${this.options.platform}-${this.options.arch}.json`);
 				if (!asset) continue;
 				const verified = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), MAX_MANIFEST_BYTES), this.options.publicKey);
 				const m = verified.manifest;
+				if (m.format !== 3) throw new Error("此发布不是签名完整内核包，请维护者重新打包发布");
+				if (!release.assets.some(a => a.name === m.archive.name)) { reason ??= "维护者尚未上传完整内核包"; continue; }
 				if (`kernel-v${m.version}` !== release.tag_name) throw new Error("内核版本与 Release 标签不一致");
 				const incompatible = incompatibility(m, this.environment());
 				if (incompatible) { reason ??= incompatible; continue; }
 				const releaseUrl = `https://github.com/${this.options.repository}/releases/tag/${release.tag_name}`;
-				this.candidate = { ...verified, notes: (release.body ?? "").slice(0, 20_000), releaseUrl };
+				this.candidate = { envelope: verified.envelope, manifest: m, notes: (release.body ?? "").slice(0, 20_000), releaseUrl };
 				this.publish({ latest: { version: m.version, piVersion: m.piVersion, source: "downloaded", notes: this.candidate.notes, releaseUrl } });
 				break;
 			}
-			this.publish({ phase: this.state.pending ? "ready" : "idle", message: this.candidate ? "发现维护者已测试并批准的 Pi 更新，将从官方 npm 源下载" : reason ?? "暂无维护者已批准的 Pi 更新" });
+			this.publish({ phase: this.state.pending ? "ready" : "idle", message: this.candidate ? "发现维护者已测试并签名批准的完整 Pi 内核包，将从 GitHub 下载" : reason ?? "暂无维护者已批准的 Pi 更新" });
 		});
 	}
 
@@ -245,19 +254,33 @@ export class KernelUpdater implements KernelUpdateController {
 			// 安装前再次确认维护者没有撤回或更换这次放行；已安装版本仍可离线启动。
 			const release = await this.json(`https://api.github.com/repos/${this.options.repository}/releases/tags/kernel-v${manifest.version}`, 4 * 1024 * 1024) as Release;
 			if (!release || release.draft || release.prerelease || release.tag_name !== `kernel-v${manifest.version}`) throw new Error("该 Pi 放行已被撤回，请重新检查更新");
-			const asset = release.assets?.find((a) => a.name === `flowork-pi-approval-${this.options.platform}-${this.options.arch}.json`);
+			const asset = release.assets?.find((a) => a.name === `flowork-kernel-${this.options.platform}-${this.options.arch}.json`);
 			if (!asset) throw new Error("该 Pi 放行清单已被撤回，请重新检查更新");
 			const fresh = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), MAX_MANIFEST_BYTES), this.options.publicKey);
 			if (fresh.envelope.manifest !== envelope.manifest) throw new Error("该批次放行内容已变更，请重新检查更新；维护者应使用新的批次号");
-			this.publish({ phase: "downloading", downloadedBytes: 0, totalBytes: manifest.packages.reduce((sum, p) => sum + p.size, 0), message: undefined });
+			const archiveAsset = release.assets?.find(a => a.name === manifest.archive.name);
+			if (!archiveAsset) throw new Error("该完整内核包已被撤回，请重新检查更新");
+			const archiveUrl = this.assetUrl(archiveAsset, release.tag_name);
+			this.publish({ phase: "downloading", downloadedBytes: 0, totalBytes: manifest.archive.size, message: undefined });
 			const stage = await mkdtemp(join(this.options.directory(), ".download-"));
 			try {
 				const unpacked = join(stage, "runtime");
-				await installApprovedRuntime({
-					manifest, adapterEntry: this.options.adapterEntry, destination: unpacked, archiveDirectory: join(stage, "tarballs"), fetch: this.options.fetch,
-					onProgress: (downloadedBytes) => { this.publish({ downloadedBytes }); },
-					onVerifying: () => { this.publish({ phase: "verifying" }); },
-				});
+				const archive = join(stage, "kernel.tar.gz");
+				const response = await this.request(archiveUrl, AbortSignal.timeout(5 * 60_000));
+				if (!response.body) throw new Error("内核包下载响应为空");
+				const hash = createHash("sha256"), output = await open(archive, "wx");
+				let downloaded = 0, lastProgress = 0;
+				try {
+					for await (const chunk of response.body) {
+						downloaded += chunk.byteLength;
+						if (downloaded > manifest.archive.size) throw new Error("内核包大小超出签名清单限制");
+						hash.update(chunk); await output.writeFile(chunk);
+						if (Date.now() - lastProgress > 150) { this.publish({ downloadedBytes: downloaded }); lastProgress = Date.now(); }
+					}
+				} finally { await output.close(); }
+				if (downloaded !== manifest.archive.size || hash.digest("hex") !== manifest.archive.sha256) throw new Error("完整内核包下载不完整或 SHA-256 校验失败");
+				this.publish({ downloadedBytes: downloaded, phase: "verifying" });
+				await extractKernelRuntime(archive, unpacked, manifest, this.options.adapterEntry);
 				await this.options.probe(join(unpacked, "pi-worker.js"));
 				await writeFile(join(unpacked, "installed.json"), JSON.stringify(envelope));
 				const destination = this.directory(manifest.version);

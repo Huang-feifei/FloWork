@@ -1,4 +1,4 @@
-/** 签名放行清单与官方 npm 包的信任、解包边界。 */
+/** 签名放行清单与内核依赖的信任、兼容性边界。 */
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
@@ -61,11 +61,14 @@ export function verifyManifest(raw: unknown, publicKey: string): { envelope: Sig
 		throw new Error("兼容清单签名校验失败，已拒绝安装");
 	}
 	const m = JSON.parse(bytes.toString("utf8")) as KernelManifest;
-	if (!m || m.format !== 2 || !isVersion(m.version) || !isVersion(m.piVersion) || !isVersion(m.minAppVersion) ||
+	if (!m || ![2, 3].includes(m.format) || !isVersion(m.version) || !isVersion(m.piVersion) || !isVersion(m.minAppVersion) ||
 		!isVersion(m.maxAppVersion) || compareVersions(m.minAppVersion, m.maxAppVersion) > 0 || !isVersion(m.minNodeVersion) || !isVersion(m.minElectronVersion) ||
 		!Number.isSafeInteger(m.protocolVersion) || typeof m.platform !== "string" || typeof m.arch !== "string" ||
 		typeof m.adapterSha256 !== "string" || !/^[a-f0-9]{64}$/.test(m.adapterSha256) ||
 		!Array.isArray(m.packages) || !m.packages.length || m.packages.length > 2048) throw new Error("兼容清单内容无效");
+	if (m.format === 3 && (!m.archive || m.archive.name !== `flowork-kernel-${m.platform}-${m.arch}.tar.gz` ||
+		!Number.isSafeInteger(m.archive.size) || m.archive.size <= 0 || m.archive.size > MAX_KERNEL_BYTES ||
+		typeof m.archive.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(m.archive.sha256))) throw new Error("完整内核包清单无效");
 	let size = 0;
 	const paths = new Set<string>();
 	for (const p of m.packages) {

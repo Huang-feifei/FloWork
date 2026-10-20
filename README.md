@@ -143,13 +143,13 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 
 用户可在 **设置 → 内核更新** 安装维护者本地测试并签名批准的官方 Pi 版本，重启后生效，无需重新安装 FloWork。官方发布新版不代表自动放行；支持恢复内置内核，启动自检失败自动回退。
 
-GitHub Releases **只存放兼容放行清单**；Pi SDK 与全部固定依赖直接从官方 npm（`registry.npmjs.org`）下载。继续使用当前应用内置的 Worker 适配层，不从网络替换适配代码，也不在用户机器执行 npm。首次发行前配置 `kernel.config.json` 的公开清单仓库和 Ed25519 公钥，再发布一次包含更新器的应用。
+GitHub Releases 同时存放 **维护者测试并签名批准的完整内核包及兼容清单**。维护者从官方 npm 获取锁定的 Pi SDK 与运行依赖后打包；客户端只从 GitHub 下载完整包、核对签名与 SHA-256，不安装 npm 依赖。继续使用当前应用内置的 Worker 适配层，不远程替换适配代码。仓库已指向 `Huang-feifei/FloWork`，正式 Ed25519 公钥已配置；客户端需使用包含此信任根的新构建。配置完成不代表已上传内核 Release。私有仓库自测可由主进程环境注入临时 GitHub Token，仓库公开后用户无需登录。
 
 配置密钥、本地测试与批准官方版本、GitHub Actions 发布步骤见 **[独立内核更新指南](docs/kernel-updates.md)**。
 
 ```bash
 npm run kernel:keygen                         # 首次生成发行密钥（私钥已加入忽略目录）
-npm run kernel:approve -- --version 1.0.1 --key .kernel-keys/signing-private.pem
+npm run kernel:approve -- --version 1.0.1 --key .kernel-keys/signing-private.pem # 完整包 + 签名清单
 node scripts/test-kernel.mjs                   # 离线更新回归，不调用模型
 ```
 
