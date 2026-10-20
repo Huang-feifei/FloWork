@@ -36,7 +36,7 @@
 
 仓库和公钥是随应用构建的配置，不是远程清单可修改的内容。未配置公钥时客户端不发起更新网络请求。
 
-`bundledVersion` 为内置批次基线，不是 Pi 版本号。应用版本、Pi 版本和放行批次相互独立。例如：FloWork `1.0.8`、Pi `1.1.0`、放行批次 `1.0.1`。
+`bundledVersion` 为内置批次基线，不是 Pi 版本号。应用版本、Pi 版本和放行批次相互独立。例如：FloWork `1.0.9`、Pi `1.1.0`、放行批次 `1.0.1`。
 
 ### 私有仓库自测
 
@@ -97,8 +97,8 @@ release/kernels/1.0.1/
 可选参数：
 
 ```text
---min-app 1.0.8          默认当前 package.json 版本
---max-app 1.0.8          默认等于 min-app，不批准未测试的未来版本
+--min-app 1.0.9          默认当前 package.json 版本
+--max-app 1.0.9          默认等于 min-app，不批准未测试的未来版本
 --min-node 22.19.0       默认从 Pi engines 推导
 --min-electron 44.7.0    默认当前项目 Electron 版本
 --adapter <path>        目标应用内置的 kernel-adapter/pi-worker.js

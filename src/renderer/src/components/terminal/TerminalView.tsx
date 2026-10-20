@@ -352,13 +352,19 @@ function PromptInput() {
 		if (ready) ref.current?.focus();
 	}, [ready]);
 
-	// 回溯 / 分叉后把原消息填回输入框
+	// 回溯 / 分叉 / 从队列取回后把内容填回输入框
 	useEffect(() => {
 		if (draft.seq === 0) return;
-		if (draft.append) setText((prev) => (prev && !/\s$/.test(prev) ? `${prev} ${draft.text} ` : `${prev}${draft.text} `));
-		else setText(draft.text);
+		if (draft.append) {
+			if (draft.text)
+				setText((prev) => (prev && !/\s$/.test(prev) ? `${prev} ${draft.text} ` : `${prev}${draft.text} `));
+		} else setText(draft.text);
+		if (draft.images && draft.images.length > 0) {
+			const current = useApp.getState().pendingImages;
+			setImages(draft.append ? [...current, ...draft.images] : [...draft.images]);
+		}
 		ref.current?.focus();
-	}, [draft]);
+	}, [draft, setImages]);
 
 	// 自适应高度
 	useLayoutEffect(() => {
@@ -518,7 +524,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	}));
 
 	return (
-		<div className="flex flex-wrap items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
+		<div className="flex min-w-0 items-center gap-1 overflow-hidden px-3.5 pt-1 pb-3 whitespace-nowrap">
 			<Picker
 				label={workMode === "plan" ? "计划模式 · 只读" : "执行模式"}
 				title={isRunning || waiting > 0 ? "请先结束或中断当前运行，再切换模式" : "计划模式先讨论并确认方案，执行模式允许实施"}
@@ -566,10 +572,11 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					align="end"
 					searchable
 					mono
+					shrink
 					title="切换模型"
 					searchPlaceholder="搜索模型…"
 					emptyText="没有匹配的模型"
-					label={currentKey || "选择模型"}
+					label={state?.model?.id ?? "选择模型"}
 					value={currentKey}
 					items={modelItems}
 					onSelect={(next) => {
@@ -583,7 +590,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					type="button"
 					onClick={() => void abort()}
 					title="中断当前任务"
-					className="ml-1 flex h-9 items-center gap-2 rounded-full bg-panel-2 px-4 text-[13px] font-medium text-fg hover:bg-highlight"
+					className="ml-1 flex h-9 shrink-0 items-center gap-2 rounded-full bg-panel-2 px-4 text-[13px] font-medium text-fg hover:bg-highlight"
 				>
 					<Icon
 						name="stop"
@@ -598,7 +605,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 					disabled={!canSend}
 					onClick={onSend}
 					title={isRunning ? "加入队列（Enter）· Ctrl+Enter 插话" : "发送（Enter）"}
-					className="ml-1 flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary-strong disabled:bg-panel-2 disabled:text-faint"
+					className="ml-1 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary-strong disabled:bg-panel-2 disabled:text-faint"
 				>
 					<Icon name="arrow-up" />
 				</button>
@@ -613,7 +620,7 @@ function DecisionDock() {
 	const dialogs = useApp((s) => s.extDialogs.length > 0);
 	if (!approvals && !dialogs) return null;
 	return (
-		<div className="flex max-h-[56vh] flex-col gap-2 overflow-y-auto pb-2">
+		<div className="fw-scroll flex max-h-[min(56vh,520px)] w-full flex-col gap-2.5 overflow-y-auto pb-3 pr-0.5">
 			<ApprovalPanel />
 			<ExtDialogPanel />
 		</div>

@@ -87,6 +87,8 @@ export interface RunAgentOptions {
 	task: string;
 	cwd: string | undefined;
 	step: number | undefined;
+	/** agent 文件没有写 model 时的全局默认模型 */
+	defaultModel?: string;
 	signal: AbortSignal | undefined;
 	onUpdate: AgentToolUpdateCallback<SubagentDetails> | undefined;
 	makeDetails: (results: SubagentResult[]) => SubagentDetails;

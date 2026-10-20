@@ -33,6 +33,7 @@ export function Picker({
 	align = "start",
 	emptyText = "没有匹配项",
 	disabled = false,
+	shrink = false,
 }: {
 	label: string;
 	items: PickerItem[];
@@ -46,6 +47,8 @@ export function Picker({
 	align?: "start" | "end";
 	emptyText?: string;
 	disabled?: boolean;
+	/** 允许在窄容器里收缩（用于输入框底部工具条，避免换行） */
+	shrink?: boolean;
 }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
@@ -109,17 +112,17 @@ export function Picker({
 	const toneCls = tone === "warn" ? "text-warn" : tone === "faint" ? "text-faint" : "text-muted";
 
 	return (
-		<div className="relative shrink-0" ref={boxRef}>
+		<div className={`relative ${shrink ? "min-w-0" : "shrink-0"}`} ref={boxRef}>
 			<button
 				type="button"
 				disabled={disabled}
 				title={title}
 				onClick={() => setOpen((o) => !o)}
-				className={`flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] hover:bg-panel-2 hover:text-fg disabled:opacity-40 ${
+				className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 text-[12.5px] hover:bg-panel-2 hover:text-fg disabled:opacity-40 ${
 					open ? "bg-panel-2 text-fg" : toneCls
 				}`}
 			>
-				<span className={`max-w-[280px] truncate ${mono ? "font-mono" : ""}`}>{label}</span>
+				<span className={`min-w-0 max-w-[280px] truncate ${mono ? "font-mono" : ""}`}>{label}</span>
 				<Icon name="chevron-down" className="size-3 shrink-0 text-faint" />
 			</button>
 

@@ -64,7 +64,7 @@ export interface Notice {
 
 export type View = "welcome" | "chat" | "review" | "settings" | "imagegen" | "gallery" | "database";
 export type RightPanel = "files" | "session" | "server" | "services" | "browser";
-export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "appearance" | "raw" | "kernel";
+export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "subagent" | "appearance" | "raw" | "kernel";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
 /** 底部面板的页签 */
@@ -132,8 +132,8 @@ interface AppState extends SessionSlice {
 
 	notices: Notice[];
 	approvalMode: ApprovalMode;
-	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息）；seq 变化时输入框读取 */
-	draft: { text: string; seq: number; append?: boolean };
+	/** 需要填入输入框的文本（回溯 / 分叉时返回的原消息，或从队列取回的消息）；seq 变化时输入框读取 */
+	draft: { text: string; images?: ImageAttachment[]; seq: number; append?: boolean };
 	/** 版本更新提示：启动时发现版本变化则置为当前版本号，null 表示不弹 */
 	updatedTo: string | null;
 	/** 右侧面板：项目文件 / 会话文件 / 浏览器；null 表示收起 */
@@ -1067,7 +1067,15 @@ export const useApp = create<AppState>()((set, get) => {
 			if (!queue) return;
 			const pending = [...queue.steering, ...queue.followUp];
 			if (pending.length === 0) return;
-			set((s) => ({ draft: { text: pending.join("\n"), seq: s.draft.seq + 1, append: true } }));
+			// 取回时文字和图片一起恢复，不能只恢复文字。
+			set((s) => ({
+				draft: {
+					text: pending.map((item) => item.text).filter(Boolean).join("\n"),
+					images: pending.flatMap((item) => item.images ?? []),
+					seq: s.draft.seq + 1,
+					append: true,
+				},
+			}));
 		},
 
 		async reorderQueue(steering, followUp) {

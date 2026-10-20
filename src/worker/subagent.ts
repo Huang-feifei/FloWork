@@ -15,11 +15,10 @@ import {
 	type ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { DEFAULT_SUBAGENT_SETTINGS, normalizeSubagentSettings, type SubagentSettings } from "@shared/subagent-settings";
 import { getProjectTrust } from "./trust";
 import { discoverAgents } from "./subagent/discovery";
 import {
-	MAX_CONCURRENCY,
-	MAX_PARALLEL_TASKS,
 	runChain,
 	runParallel,
 	runSingle,
@@ -61,14 +60,19 @@ const SubagentParams = Type.Object({
 	cwd: Type.Optional(Type.String({ description: "single 模式 agent 的工作目录" })),
 });
 
-export function createSubagentExtension(host: SubagentHost): ExtensionFactory {
+export function createSubagentExtension(
+	host: SubagentHost,
+	settings: SubagentSettings = DEFAULT_SUBAGENT_SETTINGS,
+): ExtensionFactory {
+	const config = normalizeSubagentSettings(settings);
 	return (pi) => {
+		if (!config.enabled) return;
 		pi.registerTool({
 			name: "subagent",
 			label: "子代理",
 			description: [
 				"把任务委派给拥有独立上下文窗口的专用子代理。",
-				`模式：single（agent + task）、parallel（tasks 数组，最多 ${MAX_PARALLEL_TASKS} 个、并发 ${MAX_CONCURRENCY} 个）、chain（按顺序执行，可用 {previous} 引用上一步输出）。`,
+				`模式：single（agent + task）、parallel（tasks 数组，最多 ${config.maxTasks} 个、并发 ${config.maxConcurrency} 个）、chain（按顺序执行，可用 {previous} 引用上一步输出）。`,
 				`用户级 agent 位于 ${join(getAgentDir(), "agents")}，项目级 agent 位于 .pi/agents。默认 agentScope 为 "both"。`,
 				"子代理内部的工具调用不会再逐个请求审批；本工具本身只请求一次审批。",
 			].join(" "),
@@ -138,6 +142,7 @@ export function createSubagentExtension(host: SubagentHost): ExtensionFactory {
 						task: options.task,
 						cwd: options.cwd,
 						step: options.step,
+						defaultModel: config.defaultModel,
 						signal,
 						onUpdate: options.onUpdate,
 						makeDetails: options.makeDetails,
@@ -156,6 +161,7 @@ export function createSubagentExtension(host: SubagentHost): ExtensionFactory {
 						runStep,
 						modeDetails: makeDetails("parallel"),
 						onUpdate,
+						limits: { maxTasks: config.maxTasks, maxConcurrency: config.maxConcurrency },
 					});
 				}
 

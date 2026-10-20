@@ -34,7 +34,7 @@ try {
 	const bundle = join(base, "subagent.mjs");
 	await build({
 		stdin: {
-			contents: 'export * from "./src/worker/subagent.ts"; export * from "./src/worker/trust.ts"; export * from "./src/worker/session-host.ts";',
+			contents: 'export * from "./src/worker/subagent.ts"; export * from "./src/worker/trust.ts"; export * from "./src/worker/session-host.ts"; export * from "./src/shared/subagent-settings.ts";',
 			resolveDir: root,
 			loader: "ts",
 		},
@@ -77,6 +77,48 @@ try {
 	mod.setProjectTrust(cwd, true);
 	assert.equal(mod.getProjectTrust(cwd).state, "trusted");
 	assert.equal(mod.isProjectTrusted(cwd), true);
+
+	// 全局设置规范化：损坏值收敛到安全范围，并保留 settings.json 其他内容
+	assert.deepEqual(mod.normalizeSubagentSettings(undefined), {
+		enabled: true,
+		maxTasks: 8,
+		maxConcurrency: 4,
+	});
+	assert.deepEqual(
+		mod.normalizeSubagentSettings({ enabled: false, maxTasks: 99, maxConcurrency: 99, defaultModel: " openai/gpt-5 " }),
+		{ enabled: false, maxTasks: 8, maxConcurrency: 4, defaultModel: "openai/gpt-5" },
+	);
+	assert.deepEqual(
+		mod.normalizeSubagentSettings({ maxTasks: 2, maxConcurrency: 4, defaultModel: "   " }),
+		{ enabled: true, maxTasks: 2, maxConcurrency: 2 },
+	);
+	assert.deepEqual(
+		mod.normalizeSubagentSettings({ maxTasks: 0, maxConcurrency: -1 }),
+		{ enabled: true, maxTasks: 1, maxConcurrency: 1 },
+	);
+	const settingsDocument = {
+		defaultProvider: "openai",
+		flowork: { other: 1, subagent: { enabled: false, maxTasks: 2, maxConcurrency: 4 } },
+	};
+	assert.deepEqual(mod.readSubagentSettings(settingsDocument), {
+		enabled: false,
+		maxTasks: 2,
+		maxConcurrency: 2,
+	});
+	const writtenSettings = mod.writeSubagentSettings(settingsDocument, {
+		enabled: true,
+		maxTasks: 3,
+		maxConcurrency: 2,
+		defaultModel: "openai/gpt-5",
+	});
+	assert.equal(writtenSettings.defaultProvider, "openai");
+	assert.equal(writtenSettings.flowork.other, 1);
+	assert.deepEqual(writtenSettings.flowork.subagent, {
+		enabled: true,
+		maxTasks: 3,
+		maxConcurrency: 2,
+		defaultModel: "openai/gpt-5",
+	});
 
 	// single / parallel / chain 执行编排（不调用模型）
 	const singleCalls = [];
@@ -147,6 +189,48 @@ try {
 	assert.equal(tooManyCalls, 0);
 	assert.match(tooMany.content[0].text, /最多 8 个/);
 	assert.equal(tooMany.isError, true);
+
+	// 配置上限：任务数 2、并发 1
+	let customActive = 0;
+	let customMaxActive = 0;
+	const custom = await mod.runParallel(
+		[
+			{ agent: "a", task: "1" },
+			{ agent: "b", task: "2" },
+		],
+		{
+			runStep: async (options) => {
+				customActive += 1;
+				customMaxActive = Math.max(customMaxActive, customActive);
+				await new Promise((resolve) => setTimeout(resolve, 5));
+				customActive -= 1;
+				return agentResult(options.agentName, `out-${options.agentName}`);
+			},
+			modeDetails: detailsFor("parallel"),
+			limits: { maxTasks: 2, maxConcurrency: 1 },
+		},
+	);
+	assert.equal(customMaxActive, 1, "配置的并发上限生效");
+	assert.match(custom.content[0].text, /2\/2 成功/);
+
+	let customTooManyCalls = 0;
+	const customTooMany = await mod.runParallel(
+		[
+			{ agent: "a", task: "1" },
+			{ agent: "b", task: "2" },
+			{ agent: "c", task: "3" },
+		],
+		{
+			runStep: async () => {
+				customTooManyCalls += 1;
+				return agentResult("unexpected", "x");
+			},
+			modeDetails: detailsFor("parallel"),
+			limits: { maxTasks: 2, maxConcurrency: 1 },
+		},
+	);
+	assert.equal(customTooManyCalls, 0);
+	assert.match(customTooMany.content[0].text, /最多 2 个/);
 
 	const partial = await mod.runParallel(
 		[{ agent: "ok1", task: "1" }, { agent: "bad", task: "2" }, { agent: "ok2", task: "3" }],
@@ -224,6 +308,29 @@ try {
 		assert.equal(blocked?.block, true, "计划模式阻止 subagent");
 	} finally {
 		await host.dispose();
+	}
+
+	// 总开关关闭后，新会话不注册 subagent
+	writeFileSync(
+		join(agentDir, "settings.json"),
+		JSON.stringify({
+			packages: [],
+			extensions: [],
+			skills: [],
+			prompts: [],
+			flowork: { subagent: { enabled: false, maxTasks: 2, maxConcurrency: 1 } },
+		}),
+	);
+	const disabledManager = SessionManager.create(cwd);
+	disabledManager.appendMessage({ role: "user", content: "hello", timestamp: Date.now() });
+	const disabledEvents = [];
+	const disabledHost = new SessionHost((event) => disabledEvents.push(event), "auto");
+	try {
+		await disabledHost.init(cwd, disabledManager.getSessionFile());
+		assert.ok(!disabledHost.session.getActiveToolNames().includes("subagent"), "关闭后不启用 subagent");
+		assert.equal(disabledHost.session.extensionRunner.getToolDefinition("subagent"), undefined, "关闭后不注册 subagent 工具");
+	} finally {
+		await disabledHost.dispose();
 	}
 	console.log("SUBAGENT REGRESSION OK（未调用模型）");
 } finally {

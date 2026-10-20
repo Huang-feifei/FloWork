@@ -62,10 +62,12 @@ model: provider/model-id
 
 `model` 省略时继承当前会话的模型和思考等级；`tools` 省略时使用内置工具（`read` / `bash` / `edit` / `write` / `grep` / `find` / `ls`）。项目级 agent 与用户级同名时，项目级优先。
 
+子代理的全局行为可以在「设置 → 子代理」中配置：总开关、`parallel` 的最大任务数 / 并发数、默认模型，写入 `settings.json` 的 `flowork.subagent`，不需要手动编辑 JSON。agent 文件写了 `model` 时仍以 agent 为准；总开关和运行参数在新建或切换会话后生效。
+
 `subagent` 支持三种模式：
 
 - `single`：一个 `agent` + 一个 `task`
-- `parallel`：最多 8 个任务，最多 4 个并发
+- `parallel`：默认最多 8 个任务、4 个并发，可在设置页调整
 - `chain`：按顺序执行，后续任务可用 `{previous}` 引用上一步输出
 
 审批边界：`subagent` 工具本身按当前审批策略确认一次（默认 / 全部确认模式会弹窗，自动审批模式不弹）；批准后，子代理内部的工具调用自动执行，不再逐个弹审批。请在批准前确认 agent 与任务范围。子代理在独立上下文中运行，结果显示在父会话的工具块中，运行中可看到流式进度。
@@ -120,7 +122,7 @@ src/
   renderer/                 界面（两种外壳共用）
     src/api/                Transport 选择与类型化 API
     src/lib/session-tree.ts 会话树压平与当前分支计算（供窄轨使用）
-    src/components/settings 设置页：模型供应商 / 自定义端点 / 偏好设置 / 配置文件
+    src/components/settings 设置页：模型供应商 / 自定义端点 / 偏好设置 / 子代理 / 配置文件
 scripts/                    网页版构建、开发、启动脚本，以及自起隔离后端的回归脚本
 ```
 
@@ -135,6 +137,7 @@ FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）
 | 模型供应商（API Key / OAuth 登录 / 登出） | auth.json（明文；桌面版计划改用系统加密存储） |
 | 自定义端点 | models.json 的 `providers` |
 | 偏好设置 | settings.json |
+| 子代理 | settings.json 的 `flowork.subagent` |
 | 配置文件 | 直接编辑 settings.json / models.json（auth.json 不在页面中显示） |
 
 ## 命令
@@ -195,10 +198,10 @@ node scripts/test-kernel.mjs                   # 离线更新回归，不调用�
 
 - 数据库：SQLite / PostgreSQL / MySQL 连接管理、SSH 隧道、表/视图与字段结构、筛选/排序/分页、SQL 高亮/格式化/运行、历史/收藏、CSV 导出；默认只读、逐次写入确认、超时/取消与结果上限
 - 对话：流式输出、思考过程、终端式工具调用展示、Markdown 渲染
-- 运行中投递：任务运行中继续输入时，Enter 排队（当前轮结束后执行）、Ctrl+Enter 插话（在工具调用之间插入送达）；输入框上方显示待发送队列，可拖拽或 ↑↓ 调整顺序，也可一键取回输入框
+- 运行中投递：任务运行中继续输入时，Enter 排队（当前轮结束后执行）、Ctrl+Enter 插话（在工具调用之间插入送达）；输入框上方显示待发送队列，可拖拽或 ↑↓ 调整顺序，也可一键取回输入框（文字和图片一起恢复）
 - 工具审批：修改与命令前确认（默认）/ 全部确认 / 关闭；可“本会话始终允许”某个工具；拒绝原因会告诉模型
 - 计划与共同决策：按会话切换计划/执行模式，只读限制、交互提问、计划确认后执行；拒绝或中断不授权
-- 子代理：`subagent` 支持 single / parallel / chain，子会话拥有独立上下文；agent 可放在用户级 `~/.flowork/agent/agents/` 或项目级 `.pi/agents/`，项目级需要信任；`subagent` 整体审批一次，内部工具自动放行；计划模式禁用，运维会话不启用
+- 子代理：`subagent` 支持 single / parallel / chain，子会话拥有独立上下文；agent 可放在用户级 `~/.flowork/agent/agents/` 或项目级 `.pi/agents/`，项目级需要信任；「设置 → 子代理」可配置总开关、最大任务数 / 并发数和默认模型，写入 settings.json 的 `flowork.subagent`；`subagent` 整体审批一次，内部工具自动放行；计划模式禁用，运维会话不启用
 - 修改 diff：edit 使用 pi 自带的 diff；write 由 FloWork 扩展在执行前快照、执行后生成 diff
 - 会话树窄轨：会话区右缘一条竖轨，每个用户消息一条横条（屏幕上可见的最亮、当前分支上其余淡亮、其他分支最暗，当前位置加粗，分叉点带竖线与缩进）；悬停弹出节点卡片，可回到任意节点继续（用户消息会填回输入框以便修改重发）、分叉为新会话、节点标签。命令面板与标题栏「会话」菜单可隐藏 / 显示窄轨（默认显示，选择记在 localStorage）
 - 会话输出滚动：默认跟随最新输出（内容长高即贴底，不做滚动动画，避免流式输出时追不上）；上滚查看历史后停止跟随，并浮出「回到最新」按钮。长会话分段渲染：打开时只挂最近 80 条消息，滚到顶部自动再加载 80 条，也可一键全部显示
@@ -218,7 +221,7 @@ node scripts/test-kernel.mjs                   # 离线更新回归，不调用�
 - 服务器目录：远程项目时右侧多一个「服务器目录」面板，可浏览服务器上的任意目录（可输入路径跳转、返回上一级、回到 home），上传本地文件（选择或拖拽）、下载到本地、新建 / 重命名 / 删除 / 移动，双击文件在预览面板里打开并可编辑。与「项目文件」（限定项目根）并存，命令面板可一键打开
 - 服务状态：远程项目时右侧多一个「服务状态」面板（只读监控）——资源概览（负载 / 内存 / 各挂载点用量）、systemd 服务单元列表（可过滤，失败项置顶高亮）、监听端口与对应进程、失败单元与最近的错误日志；支持手动刷新与自动刷新（10 秒，可关），面板关闭即停
 - 终端连接列表：底部终端面板顶部列出所有连接（主机 + 目录 + 状态），可切换、关闭、重启，并可「＋」新建连接（选主机或本地 + 起始目录），不必先打开对应项目
-- 设置：模型供应商（API Key / OAuth 登录 / 测试连接）、自定义端点、偏好设置、配置文件编辑
+- 设置：模型供应商（API Key / OAuth 登录 / 测试连接）、自定义端点、偏好设置、子代理、配置文件编辑
   - 模型供应商默认只显示「常用」的主流厂商，其余可在「全部」查看；没有可用登录方式且未配置的不展示（例如只剩订阅登录的供应商），已配置的始终显示
   - 自定义端点按模型逐个配置：显示名、上下文窗口、最大输出、思考、图片输入、价格，以及思考等级映射（`thinkingLevelMap`）等其余字段；留空的字段不写入 models.json
   - 配置保存前校验磁盘文件是否被外部修改（mtime），不一致时提示重新加载或明确覆盖，避免静默覆盖别人的改动
@@ -237,7 +240,7 @@ node scripts/shoot-ui.mjs <输出目录>                                  # 对 
 node scripts/test-database.mjs    # 真实 SQLite + SQL/只读/写入确认/取消/凭据回归；可选 Docker PostgreSQL/MySQL（不需要构建）
 node scripts/test-hosts.mjs       # SSH 主机口令加密与迁移（不需要构建）
 node scripts/test-planning.mjs    # 计划模式、ask_user、submit_plan
-node scripts/test-subagent.mjs    # 子代理发现、信任、single/parallel/chain 编排与计划模式拦截
+node scripts/test-subagent.mjs    # 子代理发现、信任、配置规范化、single/parallel/chain 编排与计划模式拦截
 node scripts/test-preview.mjs     # 本地 HTML / SVG 预览
 node scripts/test-sessions.mjs    # 会话重命名与删除
 node scripts/test-projects.mjs    # 项目注册表

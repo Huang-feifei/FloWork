@@ -23,6 +23,8 @@ import {
 	type HostProfile,
 	type ImageAttachment,
 	type OpsSessionInfo,
+	type QueuedMessage,
+	type QueuedMessages,
 	READ_ONLY_TOOLS,
 	type SessionCommand,
 	type SessionEvent,
@@ -31,7 +33,8 @@ import {
 	type SshHost,
 	type WorkMode,
 } from "@shared/protocol";
-import { toChatMessage, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
+import { readSubagentSettings } from "@shared/subagent-settings";
+import { toChatMessage, toContentBlocks, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
 import { ExtensionUI } from "./extension-ui";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
 import { BackupLog, createOpsExtension, type OpsTarget, probeHostProfile } from "./ops-tools";
@@ -50,6 +53,36 @@ interface PendingApproval {
 export interface OpsInit {
 	host: SshHost;
 	remoteCwd: string;
+}
+
+/** pi 内部队列保存的是完整 AgentMessage；用它取回被队列暂存的图片附件。 */
+type AgentQueueInternals = {
+	steeringQueue?: { messages?: unknown[] };
+	followUpQueue?: { messages?: unknown[] };
+};
+
+function queuedImages(message: unknown): ImageAttachment[] | undefined {
+	const images = toContentBlocks((message as { content?: unknown } | null)?.content).filter(
+		(block): block is ImageAttachment => block.type === "image",
+	);
+	return images.length > 0 ? images : undefined;
+}
+
+/**
+ * 把队列文本和 pi 内部队列里的完整消息按顺序对齐，得到带图片的排队消息。
+ * 升级 pi 后如果内部队列结构变化，这里会退化成只有文字，取回仍然可用。
+ */
+function readQueuedMessages(session: AgentSession): QueuedMessages {
+	const internal = session.agent as unknown as AgentQueueInternals;
+	const align = (texts: readonly string[], messages: unknown[] | undefined): QueuedMessage[] =>
+		texts.map((text, index) => {
+			const images = messages?.length === texts.length ? queuedImages(messages[index]) : undefined;
+			return images ? { text, images } : { text };
+		});
+	return {
+		steering: align(session.getSteeringMessages(), internal.steeringQueue?.messages),
+		followUp: align(session.getFollowUpMessages(), internal.followUpQueue?.messages),
+	};
 }
 
 /**
@@ -119,6 +152,10 @@ export class SessionHost {
 	/** 每次新建 / 切换 / 分叉会话时 pi 都会调用它重建服务，FloWork 扩展随之注入 */
 	private readonly createRuntime: CreateAgentSessionRuntimeFactory = async ({ cwd, sessionManager, sessionStartEvent }) => {
 		const ops = this.ops;
+		// SDK 默认信任所有项目；这里按用户的信任决定加载项目级配置（见 trust.ts）。
+		// 运维会话的 cwd 是本地占位目录，里面没有项目配置，按不信任处理
+		const settingsManager = SettingsManager.create(cwd, getAgentDir(), { projectTrusted: !ops && isProjectTrusted(cwd) });
+		const subagentSettings = readSubagentSettings(settingsManager.getGlobalSettings());
 		const extensionFactories = [
 			createFloworkExtension({ approve: (req, signal) => this.approve(req, signal), skipWriteDiff: !!ops }),
 			createPlanningExtension({
@@ -135,12 +172,13 @@ export class SessionHost {
 		];
 		if (ops) extensionFactories.push(createOpsExtension(ops.target, () => this.opsProfile, ops.backups));
 		// 子代理只在本地会话可用：运维会话的工具在远端，不能把本地子会话当作远程子代理。
-		else extensionFactories.push(createSubagentExtension({ getModelRuntime: () => this.session.modelRuntime }));
+		// 设置关闭时新会话不注册这个工具；已打开的会话需要重开或切换会话。
+		else if (subagentSettings.enabled) {
+			extensionFactories.push(createSubagentExtension({ getModelRuntime: () => this.session.modelRuntime }, subagentSettings));
+		}
 		const services = await createAgentSessionServices({
 			cwd,
-			// SDK 默认信任所有项目；这里按用户的信任决定加载项目级配置（见 trust.ts）。
-			// 运维会话的 cwd 是本地占位目录，里面没有项目配置，按不信任处理
-			settingsManager: SettingsManager.create(cwd, getAgentDir(), { projectTrusted: !ops && isProjectTrusted(cwd) }),
+			settingsManager,
 			resourceLoaderOptions: { extensionFactories },
 		});
 		return {
@@ -336,8 +374,10 @@ ${err.extensionPath}` });
 			case "prompt":
 				return this.prompt(command.message, command.images, command.streamingBehavior);
 			case "clear_queue": {
-				const queue = session.clearQueue();
-				return { steering: [...queue.steering], followUp: [...queue.followUp] };
+				// 先读取完整消息（含图片）再清空，供界面「取回」到输入框。
+				const queue = readQueuedMessages(session);
+				session.clearQueue();
+				return queue;
 			}
 			case "reorder_queue":
 				return this.reorderQueue(command.steering, command.followUp);
@@ -513,25 +553,37 @@ ${err.extensionPath}` });
 	private async reorderQueue(steering: string[], followUp: string[]): Promise<{ steering: string[]; followUp: string[] }> {
 		const session = this.session;
 		const internals = session as unknown as {
-			_queueSteer?: (text: string) => Promise<void>;
-			_queueFollowUp?: (text: string) => Promise<void>;
+			_queueSteer?: (text: string, images?: ImageAttachment[]) => Promise<void>;
+			_queueFollowUp?: (text: string, images?: ImageAttachment[]) => Promise<void>;
 		};
 		if (typeof internals._queueSteer !== "function" || typeof internals._queueFollowUp !== "function") {
 			throw new Error("当前 pi 版本不支持队列重排");
 		}
-		const before = session.clearQueue();
+		// 清除前先保留每条消息的图片，重排后按文本多重集把附件补回去。
+		const before = readQueuedMessages(session);
 		const next = { steering: [...steering], followUp: [...followUp] };
 		// 多重集校验：界面操作期间队列可能变化（新消息入队或被送达）
 		const counts = new Map<string, number>();
-		for (const text of [...before.steering, ...before.followUp]) counts.set(text, (counts.get(text) ?? 0) + 1);
+		for (const item of [...before.steering, ...before.followUp]) counts.set(item.text, (counts.get(item.text) ?? 0) + 1);
 		for (const text of [...next.steering, ...next.followUp]) counts.set(text, (counts.get(text) ?? 0) - 1);
-		if ([...counts.values()].some((n) => n !== 0)) {
-			for (const text of before.steering) await internals._queueSteer(text);
-			for (const text of before.followUp) await internals._queueFollowUp(text);
-			throw new Error("队列已变化，请重试");
+		if ([...counts.values()].some((n) => n !== 0)) throw new Error("队列已变化，请重试");
+
+		session.clearQueue();
+		const pool = [...before.steering, ...before.followUp];
+		const take = (text: string): QueuedMessage | undefined => {
+			const index = pool.findIndex((item) => item.text === text);
+			return index >= 0 ? pool.splice(index, 1)[0] : undefined;
+		};
+		try {
+			for (const text of next.steering) await internals._queueSteer(text, take(text)?.images);
+			for (const text of next.followUp) await internals._queueFollowUp(text, take(text)?.images);
+		} catch (error) {
+			// 中途失败时恢复原队列（连同图片），避免消息丢失。
+			session.clearQueue();
+			for (const item of before.steering) await internals._queueSteer(item.text, item.images);
+			for (const item of before.followUp) await internals._queueFollowUp(item.text, item.images);
+			throw error;
 		}
-		for (const text of next.steering) await internals._queueSteer(text);
-		for (const text of next.followUp) await internals._queueFollowUp(text);
 		return { steering: [...session.getSteeringMessages()], followUp: [...session.getFollowUpMessages()] };
 	}
 

@@ -1,3 +1,4 @@
+import { MAX_SUBAGENT_CONCURRENCY, MAX_SUBAGENT_TASKS, normalizeSubagentSettings } from "@shared/subagent-settings";
 import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-coding-agent";
 import { isFailed, resultText, truncate } from "./format";
 import type {
@@ -8,13 +9,20 @@ import type {
 	SubagentTask,
 } from "./types";
 
-export const MAX_PARALLEL_TASKS = 8;
-export const MAX_CONCURRENCY = 4;
+export const MAX_PARALLEL_TASKS = MAX_SUBAGENT_TASKS;
+export const MAX_CONCURRENCY = MAX_SUBAGENT_CONCURRENCY;
+
+export interface OrchestratorLimits {
+	maxTasks: number;
+	maxConcurrency: number;
+}
 
 export interface OrchestratorDeps {
 	runStep: RunStep;
 	modeDetails: (results: SubagentResult[]) => SubagentDetails;
 	onUpdate?: AgentToolUpdateCallback<SubagentDetails>;
+	/** 不传时使用硬上限，兼容现有调用与测试 */
+	limits?: OrchestratorLimits;
 }
 
 export interface SingleInput {
@@ -69,9 +77,13 @@ export async function runParallel(
 	tasks: readonly SubagentTask[],
 	deps: OrchestratorDeps,
 ): Promise<AgentToolResult<SubagentDetails>> {
-	if (tasks.length > MAX_PARALLEL_TASKS) {
+	const { maxTasks, maxConcurrency } = normalizeSubagentSettings({
+		maxTasks: deps.limits?.maxTasks,
+		maxConcurrency: deps.limits?.maxConcurrency,
+	});
+	if (tasks.length > maxTasks) {
 		return {
-			content: [{ type: "text", text: `并行任务过多（${tasks.length}），最多 ${MAX_PARALLEL_TASKS} 个。` }],
+			content: [{ type: "text", text: `并行任务过多（${tasks.length}），最多 ${maxTasks} 个。` }],
 			details: deps.modeDetails([]),
 			isError: true,
 		};
@@ -87,7 +99,7 @@ export async function runParallel(
 		});
 	};
 
-	const results = await mapWithConcurrency(tasks, MAX_CONCURRENCY, async (item, index) => {
+	const results = await mapWithConcurrency(tasks, maxConcurrency, async (item, index) => {
 		const result = await deps.runStep({
 			agentName: item.agent,
 			task: item.task,

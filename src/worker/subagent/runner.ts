@@ -73,15 +73,16 @@ export async function runAgent(options: RunAgentOptions): Promise<SubagentResult
 	}
 	let model: ParentModel | undefined = ctx.model;
 	let thinkingLevel: ThinkingLevel | undefined = ctx.thinkingLevel;
-	if (agent.model) {
-		const resolved = resolveAgentModel(ctx, agent.model);
+	const modelSpec = agent.model ?? options.defaultModel?.trim();
+	if (modelSpec) {
+		const resolved = resolveAgentModel(ctx, modelSpec);
 		if (!resolved) {
 			return {
 				agent: agent.name,
 				agentSource: agent.source,
 				task,
 				output: "",
-				error: `找不到模型 "${agent.model}"`,
+				error: `找不到模型 "${modelSpec}"`,
 				usage: usageZero(),
 				step,
 			};

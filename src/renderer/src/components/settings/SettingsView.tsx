@@ -7,6 +7,7 @@ import { Icon, type IconName } from "../Icon";
 import { AppearanceTab } from "./AppearanceTab";
 import { CustomProvidersTab } from "./CustomProvidersTab";
 import { PreferencesTab } from "./PreferencesTab";
+import { SubagentTab } from "./SubagentTab";
 import { KernelTab } from "./KernelTab";
 import { ProvidersTab } from "./ProvidersTab";
 import { RawConfigTab } from "./RawConfigTab";
@@ -17,6 +18,7 @@ const TABS: Array<{ id: SettingsTab; label: string; icon: IconName; desc: string
 	{ id: "custom", label: "自定义端点", icon: "git-fork", desc: "OpenAI / Anthropic 兼容接口、本地模型、中转服务，写入 models.json。" },
 	{ id: "resources", label: "技能与扩展", icon: "files", desc: "当前项目可用的技能、扩展、提示模板与 pi 包；导入、启用 / 禁用、删除。" },
 	{ id: "preferences", label: "偏好设置", icon: "settings", desc: "默认模型、工具、Shell、代理等 pi 设置，写入 settings.json。" },
+	{ id: "subagent", label: "子代理", icon: "git-fork", desc: "子代理总开关、并行任务上限、并发数与默认模型；写入 settings.json。" },
 	{ id: "appearance", label: "外观", icon: "palette", desc: "主题、强调色、字体与窗口背景；只保存在本机，不改变会话与模型行为。" },
 	{ id: "raw", label: "配置文件", icon: "file-json", desc: "直接编辑 settings.json 与 models.json。" },
 	{ id: "kernel", label: "内核更新", icon: "cpu", desc: "通过 GitHub Releases 独立更新 Pi 内核，无需重新安装 FloWork。" },
@@ -82,6 +84,7 @@ export function SettingsView() {
 						{tab === "custom" && <CustomProvidersTab />}
 						{tab === "resources" && <ResourcesTab />}
 						{tab === "preferences" && <PreferencesTab />}
+						{tab === "subagent" && <SubagentTab />}
 						{tab === "appearance" && <AppearanceTab />}
 						{tab === "raw" && <RawConfigTab />}
 						{tab === "kernel" && <KernelTab />}

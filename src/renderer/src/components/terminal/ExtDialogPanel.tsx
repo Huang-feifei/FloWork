@@ -208,11 +208,11 @@ function ExtDialogItem({ request, active }: { request: ExtUIRequest; active: boo
 	const purpose = request.purpose ?? "other";
 	return (
 		<div
-			className={`fw-float overflow-hidden rounded-[18px] border transition-colors ${
-				active ? "border-accent/30" : "border-border/70 opacity-60"
+			className={`w-full min-w-0 overflow-hidden rounded-[18px] border bg-surface-raised transition-colors ${
+				active ? "border-accent/35 shadow-[0_10px_30px_-24px_var(--color-shadow)]" : "border-border/70 opacity-60"
 			}`}
 		>
-			<div className="flex items-start gap-2.5 px-4 pt-3">
+			<div className="flex items-start gap-2.5 px-4 pt-3.5">
 				<span
 					className={`mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full text-[10.5px] font-medium ${
 						PURPOSE_TONE[purpose]
@@ -238,7 +238,7 @@ function ExtDialogItem({ request, active }: { request: ExtUIRequest; active: boo
 					<div className="pt-1 text-[14px] leading-[1.55] font-medium whitespace-pre-wrap text-fg">{request.title}</div>
 				</div>
 			</div>
-			<div className={`px-4 pt-1.5 pb-3 ${active ? "" : "pointer-events-none"}`}>
+			<div className={`px-4 pt-1.5 pb-3.5 ${active ? "" : "pointer-events-none"}`}>
 				<Body
 					request={request}
 					active={active}
@@ -256,7 +256,7 @@ export function ExtDialogPanel() {
 	const head = dialogs[0];
 	if (!head) return null;
 	return (
-		<div className="flex flex-col gap-1.5">
+		<div className="flex w-full flex-col gap-1.5">
 			<ExtDialogItem
 				key={head.id}
 				request={head}

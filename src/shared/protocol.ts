@@ -139,6 +139,17 @@ export interface SessionQueue {
 	followUp: string[];
 }
 
+/** 取回输入框的排队消息；图片随原消息一起返回，避免「取回」后只剩文字 */
+export interface QueuedMessage {
+	text: string;
+	images?: ImageAttachment[];
+}
+
+export interface QueuedMessages {
+	steering: QueuedMessage[];
+	followUp: QueuedMessage[];
+}
+
 /** 计划模式只读探索；确认计划后进入执行模式，工具审批设置仍然生效。 */
 export type WorkMode = "plan" | "execute";
 
@@ -300,7 +311,7 @@ export interface TestResult {
 
 export type SessionCommand =
 	| { type: "prompt"; message: string; images?: ImageAttachment[]; streamingBehavior?: "steer" | "followUp" }
-	/** 清空并取回排队消息（界面把返回的文本填回输入框） */
+	/** 清空并取回排队消息（文字和图片一起返回，界面填回输入框） */
 	| { type: "clear_queue" }
 	/** 按给定顺序重建排队消息（pi 队列是 FIFO，重排通过清空后重新入队实现） */
 	| { type: "reorder_queue"; steering: string[]; followUp: string[] }
@@ -356,7 +367,7 @@ export type ServiceCommand =
 
 export interface CommandResultMap {
 	prompt: { disposition: "started" | "queued" | "handled" };
-	clear_queue: SessionQueue;
+	clear_queue: QueuedMessages;
 	reorder_queue: SessionQueue;
 	abort: null;
 	get_state: SessionState;
