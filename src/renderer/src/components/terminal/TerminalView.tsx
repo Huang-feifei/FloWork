@@ -607,6 +607,19 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	);
 }
 
+/** 等待你决定的卡片（工具审批 + 提问/计划审批）：停在输入框上方，不插进会话流，免得要往上翻才找得到。 */
+function DecisionDock() {
+	const approvals = useApp((s) => s.pendingApprovals.length > 0);
+	const dialogs = useApp((s) => s.extDialogs.length > 0);
+	if (!approvals && !dialogs) return null;
+	return (
+		<div className="flex max-h-[56vh] flex-col gap-2 overflow-y-auto pb-2">
+			<ApprovalPanel />
+			<ExtDialogPanel />
+		</div>
+	);
+}
+
 export function TerminalView() {
 	const handleId = useApp((s) => s.handleId);
 	const sessionFile = useApp((s) => s.state?.sessionFile);
@@ -716,8 +729,6 @@ export function TerminalView() {
 							) : (
 								<Transcript />
 							)}
-							<ApprovalPanel />
-							<ExtDialogPanel />
 							<RunningLine />
 						</div>
 					</div>
@@ -739,6 +750,7 @@ export function TerminalView() {
 				<div className="shrink-0 px-6 pt-1 pb-4">
 					<div className="mx-auto max-w-4xl">
 						<ExtWidgets placement="aboveEditor" />
+						<DecisionDock />
 						<QueueList />
 						<PromptInput />
 						<ExtWidgets placement="belowEditor" />
