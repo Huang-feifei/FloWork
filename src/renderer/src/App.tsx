@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useApp } from "./store";
 import { FolderPicker } from "./components/FolderPicker";
 import { Notices } from "./components/Notices";
@@ -8,22 +8,37 @@ import { ActivityBar } from "./components/ActivityBar";
 import { CommandPalette } from "./components/palette/CommandPalette";
 import { PromptDialog } from "./components/PromptDialog";
 import { ConfirmDialog } from "./components/ConfirmDialog";
-import { ReviewView } from "./components/review/ReviewView";
-import { SettingsView } from "./components/settings/SettingsView";
 import { Sidebar } from "./components/Sidebar";
 import { UpdateDialog } from "./components/UpdateDialog";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
 import { RemoteProjectDialog } from "./components/sidebar/RemoteProjectDialog";
 import { HostKeyDialog } from "./components/sidebar/HostKeyDialog";
 import { StatusBar } from "./components/StatusBar";
-import { BottomPanel } from "./components/terminal/BottomPanel";
 import { TerminalView } from "./components/terminal/TerminalView";
 import { TitleBar } from "./components/TitleBar";
 import { WelcomeView } from "./components/welcome/WelcomeView";
-import { DatabaseView } from "./components/database/DatabaseView";
-import { ImageStudio } from "./components/imagegen/ImageStudio";
-import { ImageLibrary } from "./components/imagegen/ImageLibrary";
 import { RightPanel } from "./components/panels/RightPanel";
+
+// 设置、数据库、图片和评审不是首屏必需内容，按需加载，避免把它们的依赖带进启动 chunk。
+const SettingsView = lazy(() => import("./components/settings/SettingsView").then((m) => ({ default: m.SettingsView })));
+const DatabaseView = lazy(() => import("./components/database/DatabaseView").then((m) => ({ default: m.DatabaseView })));
+const ImageStudio = lazy(() => import("./components/imagegen/ImageStudio").then((m) => ({ default: m.ImageStudio })));
+const ImageLibrary = lazy(() => import("./components/imagegen/ImageLibrary").then((m) => ({ default: m.ImageLibrary })));
+const ReviewView = lazy(() => import("./components/review/ReviewView").then((m) => ({ default: m.ReviewView })));
+const BottomPanel = lazy(() => import("./components/terminal/BottomPanel").then((m) => ({ default: m.BottomPanel })));
+
+function ViewFallback() {
+	return <div className="flex min-h-0 flex-1 items-center justify-center bg-bg text-[13px] text-faint">加载中…</div>;
+}
+
+function BottomPanelSlot({ open }: { open: boolean }) {
+	if (!open) return null;
+	return (
+		<Suspense fallback={<div className="flex h-[280px] shrink-0 items-center justify-center border-t border-border bg-bg text-[13px] text-faint">加载中…</div>}>
+			<BottomPanel />
+		</Suspense>
+	);
+}
 
 function EmptyState() {
 	const { importProjects, setView, setDiscoverOpen, setRemoteOpen } = useApp.getState();
@@ -59,6 +74,7 @@ export function App() {
 	const activeProjectId = useApp((s) => s.activeProjectId);
 	const sidebarOpen = useApp((s) => s.sidebarOpen);
 	const rightPanel = useApp((s) => s.rightPanel);
+	const terminalPanelOpen = useApp((s) => s.terminalPanel);
 	const [databaseOpened, setDatabaseOpened] = useState(view === "database");
 	useEffect(() => { if (view === "database") setDatabaseOpened(true); }, [view]);
 
@@ -87,18 +103,31 @@ export function App() {
 							{/* 底部面板位于会话内容之下、状态栏之上，与设计稿的层次一致 */}
 							<div className="flex min-w-0 flex-1 flex-col">
 								<main className="relative flex min-h-0 flex-1 flex-col">
-									{/* 切换到会话/设置时保留数据库结果和进行中的操作，不因导航中止写入。 */}
-									{(databaseOpened || view === "database") && <div className={view === "database" ? "flex min-h-0 flex-1 flex-col" : "hidden"}><DatabaseView /></div>}
+									{(databaseOpened || view === "database") && (
+										<div className={view === "database" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+											<Suspense fallback={<ViewFallback />}>
+												<DatabaseView />
+											</Suspense>
+										</div>
+									)}
 									{view === "settings" ? (
-										<SettingsView />
+										<Suspense fallback={<ViewFallback />}>
+											<SettingsView />
+										</Suspense>
 									) : view === "database" ? (
 										null
 									) : view === "imagegen" ? (
-										<ImageStudio />
+										<Suspense fallback={<ViewFallback />}>
+											<ImageStudio />
+										</Suspense>
 									) : view === "gallery" ? (
-										<ImageLibrary />
+										<Suspense fallback={<ViewFallback />}>
+											<ImageLibrary />
+										</Suspense>
 									) : view === "review" ? (
-										<ReviewView />
+										<Suspense fallback={<ViewFallback />}>
+											<ReviewView />
+										</Suspense>
 									) : activeProjectId ? (
 										// 远程项目同样是对话区：AI 的工具通过 SSH 在服务器上执行（运维会话）
 										<TerminalView />
@@ -110,7 +139,7 @@ export function App() {
 									)}
 									<Notices />
 								</main>
-								<BottomPanel />
+								<BottomPanelSlot open={terminalPanelOpen} />
 							</div>
 						</div>
 						<StatusBar />

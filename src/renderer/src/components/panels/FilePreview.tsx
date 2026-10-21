@@ -12,6 +12,7 @@ import { collectSessionFiles } from "../../lib/session-files";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
 import { Icon } from "../Icon";
+import { Markdown } from "../terminal/Markdown";
 import { Segmented } from "../ui";
 
 const CodeEditor = lazy(() => import("./CodeEditor"));
@@ -44,6 +45,7 @@ export function FilePreview() {
 	const [file, setFile] = useState<Preview | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [tab, setTab] = useState<"content" | "changes">("content");
+	const [mode, setMode] = useState<"preview" | "source">("preview");
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState("");
 	const [revision, setRevision] = useState(0);
@@ -58,6 +60,8 @@ export function FilePreview() {
 
 	const dirty = file !== null && editing && draft !== normalizeEol(file.text);
 	const editable = file !== null && !file.binary && !file.truncated;
+	/** Markdown 默认渲染预览，工具栏可切到源码；截断文件只显示源码。 */
+	const isMarkdown = file !== null && !file.binary && !file.truncated && isMarkdownPath(path ?? "");
 	/** HTML / SVG 可以交给内置浏览器渲染；仅本地项目（远程文件在 SSH 后面） */
 	const canPreviewInBrowser = file !== null && !file.binary && !previewHostId && !!cwd && /\.(?:html?|svg)$/i.test(path ?? "");
 
@@ -87,6 +91,7 @@ export function FilePreview() {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: 仅在文件切换时执行
 	useEffect(() => {
 		setTab("content");
+		setMode(isMarkdownPath(path ?? "") ? "preview" : "source");
 		setEditing(false);
 		setFile(null);
 		void load();
@@ -188,8 +193,25 @@ export function FilePreview() {
 						onChange={(id) => setTab(id as "content" | "changes")}
 					/>
 				)}
+				{isMarkdown && tab === "content" && !editing && (
+					<Segmented
+						items={[
+							{ id: "preview", label: "预览" },
+							{ id: "source", label: "源码" },
+						]}
+						active={mode}
+						onChange={(id) => setMode(id as "preview" | "source")}
+					/>
+				)}
 				{editable && tab === "content" && !editing && (
-					<button type="button" onClick={() => setEditing(true)} className="flex h-8 items-center rounded-full bg-panel-2 px-3.5 hover:bg-highlight">
+					<button
+						type="button"
+						onClick={() => {
+							setMode("source");
+							setEditing(true);
+						}}
+						className="flex h-8 items-center rounded-full bg-panel-2 px-3.5 hover:bg-highlight"
+					>
 						编辑
 					</button>
 				)}
@@ -211,6 +233,7 @@ export function FilePreview() {
 							onClick={async () => {
 								if (dirty && !(await askConfirm({ title: "放弃修改", message: "放弃未保存的修改？", confirmLabel: "放弃", danger: true }))) return;
 								setEditing(false);
+								setMode(isMarkdownPath(path ?? "") ? "preview" : "source");
 								setDraft(normalizeEol(file?.text ?? ""));
 								setRevision((r) => r + 1);
 							}}
@@ -279,6 +302,10 @@ export function FilePreview() {
 					<div className="flex h-full flex-col">
 						{file.binary ? (
 							<div className="term p-4 text-muted">二进制文件，不显示内容。</div>
+						) : isMarkdown && mode === "preview" && !editing ? (
+							<div className="min-h-0 flex-1 overflow-auto">
+								<Markdown text={draft} variant="document" />
+							</div>
 						) : (
 							<div className="min-h-0 flex-1">
 								<Suspense fallback={<div className="term p-4 text-muted">加载编辑器…</div>}>
@@ -319,4 +346,8 @@ export function FilePreview() {
 
 function normalizeEol(text: string): string {
 	return text.replace(/\r\n?/g, "\n");
+}
+
+function isMarkdownPath(path: string): boolean {
+	return /\.(?:md|markdown)$/i.test(path);
 }

@@ -30,7 +30,7 @@ import {
 import { api, errorText, setHostKeyChangedHandler } from "./api/client";
 import type { ConnectionStatus } from "./api/transport";
 import { askConfirm } from "./components/ConfirmDialog";
-import { disposeTerminal } from "./components/terminal/TerminalPanel";
+import { disposeTerminal } from "./components/terminal/terminal-disposer";
 import { getRecentCwds } from "./lib/recent";
 import { buildTree } from "./lib/session-tree";
 import { emptySlice, pickSlice, reduceEvent, type SessionSlice, waitingCount } from "./session-slice";

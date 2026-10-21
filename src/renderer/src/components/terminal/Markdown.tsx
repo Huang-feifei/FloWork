@@ -10,10 +10,16 @@ function textOf(node: ReactNode): string {
 	return "";
 }
 
-/** 终端风格的 Markdown：标题前缀 #、列表用 –、代码块带语法高亮（样式见 styles.css .term-md） */
-export const Markdown = memo(function Markdown({ text }: { text: string }) {
+/** Markdown 渲染：对话里用终端风格，文件预览用 variant="document" 的文档排版。 */
+export const Markdown = memo(function Markdown({
+	text,
+	variant = "terminal",
+}: {
+	text: string;
+	variant?: "terminal" | "document";
+}) {
 	return (
-		<div className="term-md">
+		<div className={variant === "document" ? "markdown-doc" : "term-md"}>
 			<ReactMarkdown
 				remarkPlugins={[remarkGfm]}
 				components={{

@@ -14,6 +14,7 @@ import { isMac } from "../../lib/desktop";
 import { normalizedPath, useApp } from "../../store";
 import { Icon } from "../Icon";
 import { Button, Field, Input, Modal, Select } from "../ui";
+import { setTerminalDisposer } from "./terminal-disposer";
 
 /** xterm 只认具体色值，这里给出深 / 浅两套，与 styles.css 的 token 对应 */
 const DARK_THEME: ITheme = {
@@ -283,6 +284,9 @@ export function disposeTerminal(cwd: string, hostId?: string): void {
 	// 项目已经停了，收 shell 失败也没别的可做
 	if (terminalId) void api.terminal.close(terminalId).catch(() => undefined);
 }
+
+// 只有终端模块真正加载后才接管释放；store 不再静态依赖 xterm。
+setTerminalDisposer(disposeTerminal);
 
 /** 容器不可测量（隐藏 / 面板正在收起）时 fit() 会抛错，忽略即可 */
 function applyFit(entry: Entry): void {
