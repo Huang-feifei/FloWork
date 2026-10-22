@@ -2,7 +2,8 @@
  * 工作区文件浏览：按目录懒加载列出条目、读取文件用于预览。
  * 所有路径都必须位于工作区根目录之内。
  */
-import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, open, readdir, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { imageMimeType, MAX_MARKDOWN_IMAGE_BYTES } from "@shared/image";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import ignore, { type Ignore } from "ignore";
 import {
@@ -97,6 +98,34 @@ export async function readWorkspaceFile(root: string, path: string): Promise<Fil
 			truncated: info.size > MAX_PREVIEW_BYTES,
 			text: binary ? "" : buffer.toString("utf8"),
 		};
+	} finally {
+		await handle.close();
+	}
+}
+
+/** 图片经 IPC 以内联 data URL 返回；真实路径也必须留在工作区，拒绝符号链接越界。 */
+export async function readWorkspaceImage(root: string, path: string): Promise<{ dataUrl: string }> {
+	const mime = imageMimeType(path);
+	if (!mime) throw new Error("不支持的图片格式");
+	const { abs } = resolveInside(root, path);
+	const rootReal = await realpath(root);
+	const fileReal = await realpath(abs);
+	resolveInside(rootReal, fileReal);
+	const handle = await open(fileReal, "r");
+	try {
+		const info = await handle.stat();
+		if (!info.isFile()) throw new Error("不是图片文件");
+		if (info.size > MAX_MARKDOWN_IMAGE_BYTES) throw new Error("图片超过 8 MB");
+		// 最多多读一个字节检测读取期间的增长，不对变化中的文件使用无界 readFile。
+		const buffer = Buffer.alloc(Math.min(info.size + 1, MAX_MARKDOWN_IMAGE_BYTES + 1));
+		let size = 0;
+		while (size < buffer.length) {
+			const { bytesRead } = await handle.read(buffer, size, buffer.length - size, size);
+			if (!bytesRead) break;
+			size += bytesRead;
+		}
+		if (size > info.size) throw new Error("图片在读取期间已变化，请重试");
+		return { dataUrl: `data:${mime};base64,${buffer.subarray(0, size).toString("base64")}` };
 	} finally {
 		await handle.close();
 	}

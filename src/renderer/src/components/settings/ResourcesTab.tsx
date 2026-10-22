@@ -157,7 +157,15 @@ export function ResourcesTab() {
 	}, [load, version]);
 
 	if (!projectId || !cwd) {
-		return <div className="fw-card px-6 py-10 text-center text-[13.5px] leading-relaxed text-muted">先在左侧打开一个项目。技能与扩展的列表取决于项目（项目可以有自己的 .pi 配置）。</div>;
+		return (
+			<div className="fw-card px-6 py-10 text-center">
+				<div className="text-[13.5px] text-fg">先打开一个项目</div>
+				<div className="mt-1 text-[12.5px] leading-relaxed text-muted">
+					技能、扩展与提示模板按项目解析（项目可以有自己的 <span className="font-mono">.pi</span> 配置）。
+					回到工作台打开一个项目后再回来。
+				</div>
+			</div>
+		);
 	}
 
 	const setTrust = async (trusted: boolean) => {

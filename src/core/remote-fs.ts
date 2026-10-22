@@ -399,21 +399,23 @@ export async function uploadServerFile(host: SshHost, dir: string, name: string,
 }
 
 /** 下载：把远端文件内容以 base64 返回（超过上限时直接拒绝，不传输） */
-export async function downloadServerFile(host: SshHost, path: string): Promise<{ name: string; dataBase64: string; size: number }> {
+export async function downloadServerFile(host: SshHost, path: string, limit = SERVER_TRANSFER_LIMIT): Promise<{ name: string; dataBase64: string; size: number }> {
 	const abs = serverAbs(path);
-	const limitMb = Math.round(SERVER_TRANSFER_LIMIT / 1024 / 1024);
+	const limitMb = Math.round(limit / 1024 / 1024);
 	const script = [
 		`p=${shQuote(abs)}`,
 		'[ -f "$p" ] || { echo "不是文件" >&2; exit 3; }',
 		'sz=$(wc -c < "$p")',
-		`[ "$sz" -gt ${SERVER_TRANSFER_LIMIT} ] && { echo "文件超过 ${limitMb} MB，暂不支持下载" >&2; exit 4; }`,
+		`[ "$sz" -gt ${limit} ] && { echo "文件超过 ${limitMb} MB，暂不支持下载" >&2; exit 4; }`,
 		`printf 'M %s\\n' "$sz"`,
-		`base64 < "$p" | tr -d '\\n'`,
+		`head -c ${limit + 1} "$p" | base64 | tr -d '\\n'`,
 		`printf '\\n'`,
 	].join("\n");
 	const stdout = await sshRun(host, script, { timeoutMs: 300_000 });
 	const newline = stdout.indexOf("\n");
 	if (newline < 0 || !stdout.startsWith("M ")) throw new Error(`下载失败：${stdout.trim().slice(0, 200) || "无输出"}`);
 	const size = Number(stdout.slice(2, newline)) || 0;
-	return { name: posix.basename(abs), size, dataBase64: stdout.slice(newline + 1).replace(/\s+/g, "") };
+	const dataBase64 = stdout.slice(newline + 1).replace(/\s+/g, "");
+	if (Buffer.byteLength(dataBase64, "base64") > limit) throw new Error(`文件超过 ${limitMb} MB，暂不支持下载`);
+	return { name: posix.basename(abs), size, dataBase64 };
 }

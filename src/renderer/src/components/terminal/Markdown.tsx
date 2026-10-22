@@ -1,7 +1,9 @@
-import { isValidElement, memo, useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { isValidElement, lazy, memo, Suspense, useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { CodeBlock } from "./CodeBlock";
+
+// 对话里没有代码块时，不加载 CodeMirror；加载期间仍显示可读的纯文本代码。
+const CodeBlock = lazy(() => import("./CodeBlock").then((m) => ({ default: m.CodeBlock })));
 
 function textOf(node: ReactNode): string {
 	if (typeof node === "string" || typeof node === "number") return String(node);
@@ -26,7 +28,7 @@ function MarkdownImage({
 	loadImage?: (src: string) => Promise<string | null>;
 }) {
 	const syncSrc = src ? (resolveImage?.(src) ?? src) : undefined;
-	const [resolved, setResolved] = useState(syncSrc);
+	const [resolved, setResolved] = useState(loadImage ? undefined : syncSrc);
 
 	useEffect(() => {
 		if (!src) {
@@ -42,10 +44,10 @@ function MarkdownImage({
 		setResolved(undefined);
 		void loadImage(src).then(
 			(next) => {
-				if (!cancelled) setResolved(next ?? fallback);
+				if (!cancelled) setResolved(next ?? "");
 			},
 			() => {
-				if (!cancelled) setResolved(fallback);
+				if (!cancelled) setResolved("");
 			},
 		);
 		return () => {
@@ -54,6 +56,7 @@ function MarkdownImage({
 	}, [src, resolveImage, loadImage]);
 
 	if (!src) return null;
+	if (resolved === "") return <span className="text-muted" title={src}>[图片不可用：{alt || src}]</span>;
 	if (!resolved) return <span className="text-muted">[图片加载中…]</span>;
 	return <img src={resolved} alt={alt ?? ""} width={width} height={height} loading="lazy" />;
 }
@@ -64,7 +67,7 @@ export type MarkdownProps = {
 	variant?: "terminal" | "document";
 	/** 文档模式由 MarkdownDocument 懒加载注入；终端模式不解析原始 HTML */
 	rehypePlugins?: ComponentProps<typeof ReactMarkdown>["rehypePlugins"];
-	/** 把本地相对图片改为预览服务地址；远程项目可换成 data URL 加载器 */
+	/** 自定义图片地址；文件预览通过 loadImage 走受限 IPC 获取内联图片，不依赖 HTTP 服务 */
 	resolveImage?: (src: string) => string;
 	loadImage?: (src: string) => Promise<string | null>;
 	/** 返回 true 表示已由应用内部打开，阻止默认跳转 */
@@ -120,7 +123,8 @@ export const Markdown = memo(function Markdown({
 						const code = Array.isArray(children) ? children[0] : children;
 						const className = isValidElement<{ className?: string }>(code) ? (code.props.className ?? "") : "";
 						const lang = /language-([\w#+.-]+)/.exec(className)?.[1];
-						return <CodeBlock code={textOf(children).replace(/\n$/, "")} lang={lang} />;
+						const text = textOf(children).replace(/\n$/, "");
+						return <Suspense fallback={<pre><code>{text}</code></pre>}><CodeBlock code={text} lang={lang} /></Suspense>;
 					},
 				}}
 			>

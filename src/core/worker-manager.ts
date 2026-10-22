@@ -22,9 +22,31 @@ import type { WorkerProcess, WorkerSpawner } from "./worker-process";
 
 const INIT_TIMEOUT_MS = 30_000;
 
+export interface WorkerTimeouts {
+	requestMs: number;
+	operationMs: number;
+	packageMs: number;
+	heartbeatMs: number;
+}
+const DEFAULT_TIMEOUTS: WorkerTimeouts = { requestMs: 30_000, operationMs: 120_000, packageMs: 600_000, heartbeatMs: 15_000 };
+
 interface Pending {
 	resolve: (value: unknown) => void;
 	reject: (error: Error) => void;
+	flowId?: string;
+	cancel?: () => void;
+	arm: () => void;
+	timer?: ReturnType<typeof setTimeout>;
+	health: boolean;
+}
+
+/** prompt / OAuth 可能等待用户或扩展，不设任务总时限，改由独立心跳检测 worker 是否失联。 */
+function commandTimeout(command: AnyCommand, policy: WorkerTimeouts): number {
+	if (command.type === "prompt" || command.type === "auth_login" || (command.type === "navigate_tree" && command.summarize)) return 0;
+	if (command.type === "abort") return policy.requestMs;
+	if (command.type === "install_package" || command.type === "remove_package") return policy.packageMs;
+	if (command.type.startsWith("get_") || command.type.startsWith("list_") || command.type === "ping" || command.type === "validate_session") return policy.requestMs;
+	return policy.operationMs;
 }
 
 export interface WorkerCallbacks {
@@ -36,17 +58,23 @@ export interface WorkerCallbacks {
 export class WorkerClient {
 	private readonly pending = new Map<string, Pending>();
 	private exited = false;
+	private failure: Error | undefined;
+	private heartbeat: ReturnType<typeof setInterval> | undefined;
+	private checkingHealth = false;
+	private readonly interactions = new Set<string>();
 	private readonly exitWaiters: Array<() => void> = [];
 
 	private constructor(
 		readonly id: string,
 		private readonly proc: WorkerProcess,
+		private readonly timeouts: WorkerTimeouts,
 	) {}
 
 	static start(
 		spawn: WorkerSpawner,
 		init: WorkerInit,
 		callbacks: WorkerCallbacks = {},
+		timeouts: Partial<WorkerTimeouts> = {},
 	): Promise<{ client: WorkerClient; state?: SessionState }> {
 		const id = randomUUID();
 		const proc = spawn({
@@ -57,7 +85,7 @@ export class WorkerClient {
 				PI_SKIP_VERSION_CHECK: "1",
 			}),
 		});
-		const client = new WorkerClient(id, proc);
+		const client = new WorkerClient(id, proc, { ...DEFAULT_TIMEOUTS, ...timeouts });
 		const tag = `[pi-worker:${init.role}:${id.slice(0, 8)}]`;
 		proc.stdout?.on("data", (chunk: Buffer) => process.stdout.write(`${tag} ${chunk.toString()}`));
 		proc.stderr?.on("data", (chunk: Buffer) => process.stderr.write(`${tag} ${chunk.toString()}`));
@@ -92,15 +120,22 @@ export class WorkerClient {
 					case "response": {
 						const pending = client.pending.get(message.id);
 						if (!pending) return;
-						client.pending.delete(message.id);
 						if (message.ok) pending.resolve(message.data);
 						else pending.reject(new Error(message.error));
 						return;
 					}
-					case "event":
-						callbacks.onEvent?.(message.event);
+					case "event": {
+						const event = message.event;
+						if (event.type === "ext_ui_request") client.interaction(`ui:${event.request.id}`, true);
+						if (event.type === "ext_ui_closed") client.interaction(`ui:${event.id}`, false);
+						if (event.type === "approval_request") client.interaction(`approval:${event.toolCallId}`, true);
+						if (event.type === "approval_resolved") client.interaction(`approval:${event.toolCallId}`, false);
+						callbacks.onEvent?.(event);
 						return;
+					}
 					case "auth":
+						if (message.event.kind === "prompt") client.interaction(`auth:${message.event.flowId}:${message.event.promptId}`, true);
+						if (message.event.kind === "prompt_cancelled") client.interaction(`auth:${message.event.flowId}:${message.event.promptId}`, false);
 						callbacks.onAuth?.(message.event);
 						return;
 				}
@@ -109,8 +144,9 @@ export class WorkerClient {
 			proc.onExit((code) => {
 				client.exited = true;
 				clearTimeout(timer);
-				for (const pending of client.pending.values()) pending.reject(new Error(`pi worker 已退出（code ${code}）`));
-				client.pending.clear();
+				clearInterval(client.heartbeat);
+				client.interactions.clear();
+				for (const pending of [...client.pending.values()]) pending.reject(new Error(`pi worker 已退出（code ${code}）`));
 				for (const waiter of client.exitWaiters.splice(0)) waiter();
 				if (!ready) reject(new Error(`pi worker 启动失败（code ${code}）`));
 				callbacks.onExit?.(code);
@@ -121,15 +157,77 @@ export class WorkerClient {
 	}
 
 	post(message: MainToWorker): void {
-		if (!this.exited) this.proc.postMessage(message);
+		if (this.exited) return;
+		if (message.kind === "auth_answer") this.interaction(`auth:${message.flowId}:${message.promptId}`, false);
+		if (message.kind === "auth_cancel") {
+			for (const id of [...this.interactions]) if (id.startsWith(`auth:${message.flowId}:`)) this.interaction(id, false);
+			// 先发送协作取消；SDK 未响应取消时也不能让无总时限的登录请求永久挂起。
+			for (const pending of this.pending.values()) if (pending.flowId === message.flowId) pending.cancel?.();
+		}
+		this.proc.postMessage(message);
 	}
 
-	send(command: AnyCommand): Promise<unknown> {
+	private interaction(id: string, open: boolean): void {
+		if (open) this.interactions.add(id);
+		else this.interactions.delete(id);
+		for (const pending of this.pending.values()) {
+			if (pending.health) continue;
+			clearTimeout(pending.timer);
+			if (!this.interactions.size) pending.arm();
+		}
+	}
+
+	/** 失联后不重放命令；先停用并终止原进程，直到真实 exit 才释放会话锁。 */
+	private fail(error: Error): void {
+		if (this.failure || this.exited) return;
+		this.failure = error;
+		clearInterval(this.heartbeat);
+		for (const pending of [...this.pending.values()]) pending.reject(error);
+		try { this.proc.kill(); }
+		catch (cause) { console.error("[pi-worker] 无法确认失联进程退出，保留会话锁", cause); }
+	}
+
+	send(command: AnyCommand, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<unknown> {
+		return this.request(command, options, false);
+	}
+
+	private request(command: AnyCommand, options: { signal?: AbortSignal; timeoutMs?: number }, health: boolean): Promise<unknown> {
 		if (this.exited) return Promise.reject(new Error("pi worker 已退出"));
+		if (this.failure) return Promise.reject(this.failure);
+		if (options.signal?.aborted) return Promise.reject(new Error("pi worker 请求已取消（未发送）"));
+		let timeoutMs = options.timeoutMs ?? commandTimeout(command, this.timeouts);
+		if (!Number.isFinite(timeoutMs) || timeoutMs < 0) return Promise.reject(new Error("无效的 worker 请求超时"));
 		const id = randomUUID();
 		return new Promise((resolve, reject) => {
-			this.pending.set(id, { resolve, reject });
-			this.post({ kind: "command", id, command });
+			const finish = (error: Error | undefined, value?: unknown) => {
+				if (!this.pending.delete(id)) return;
+				clearTimeout(pending.timer);
+				options.signal?.removeEventListener("abort", cancel);
+				if (!this.pending.size) { clearInterval(this.heartbeat); this.heartbeat = undefined; }
+				if (error) reject(error); else resolve(value);
+			};
+			const uncertain = "worker 已停用；操作可能已生效，请检查后再操作（不会自动重试）";
+			const cancel = () => this.fail(new Error(`pi worker 请求已取消（${command.type}）；${uncertain}`));
+			const pending: Pending = {
+				resolve: (value) => finish(undefined, value), reject: (error) => finish(error), health: health || command.type === "abort",
+				flowId: command.type === "auth_login" ? command.flowId : undefined,
+				cancel: () => { timeoutMs = this.timeouts.requestMs; pending.health = true; pending.arm(); },
+				arm: () => {
+					clearTimeout(pending.timer);
+					if (timeoutMs > 0) pending.timer = setTimeout(() => this.fail(new Error(`pi worker 请求超时（${command.type}，${timeoutMs}ms）；${uncertain}`)), timeoutMs);
+				},
+			};
+			this.pending.set(id, pending);
+			options.signal?.addEventListener("abort", cancel, { once: true });
+			if (pending.health || !this.interactions.size) pending.arm();
+			this.heartbeat ??= setInterval(() => {
+				if (this.checkingHealth || !this.pending.size) return;
+				this.checkingHealth = true;
+				void this.request({ type: "ping" }, { timeoutMs: this.timeouts.requestMs }, true)
+					.catch(() => undefined).finally(() => { this.checkingHealth = false; });
+			}, this.timeouts.heartbeatMs);
+			try { this.post({ kind: "command", id, command }); }
+			catch (cause) { this.fail(cause instanceof Error ? cause : new Error(String(cause))); }
 		});
 	}
 
@@ -165,6 +263,10 @@ export class WorkerClient {
 	get hasExited(): boolean {
 		return this.exited;
 	}
+
+	get hasFailed(): boolean {
+		return !!this.failure;
+	}
 }
 
 export interface SessionCallbacks {
@@ -180,6 +282,8 @@ interface SessionOwner {
 	operations: number;
 	closing: boolean;
 	draft: boolean;
+	/** 替换会话的结果不确定时，原文件与目标文件都锁定到进程真正退出。 */
+	reservedFiles: Set<string>;
 }
 
 const IDENTITY_COMMANDS = new Set<SessionCommand["type"]>(["new_session", "switch_session", "fork", "navigate_tree", "set_project_trust"]);
@@ -195,6 +299,7 @@ export class WorkerManager {
 	constructor(
 		private readonly spawn: WorkerSpawner,
 		private readonly onAuth: (event: AuthFlowEvent) => void = () => undefined,
+		private readonly timeouts: Partial<WorkerTimeouts> = {},
 	) {}
 
 	private coordinate<T>(action: () => Promise<T>): Promise<T> {
@@ -211,7 +316,7 @@ export class WorkerManager {
 				onExit: () => {
 					if (this.service === started) this.service = undefined;
 				},
-			}).then((r) => r.client);
+			}, this.timeouts).then((r) => r.client);
 			this.service = started;
 			started.catch(() => {
 				if (this.service === started) this.service = undefined;
@@ -227,7 +332,8 @@ export class WorkerManager {
 	}
 
 	private ownersOf(path: string): SessionOwner[] {
-		return [...this.sessions.values()].filter((owner) => owner.state.sessionFile && samePath(owner.state.sessionFile, path));
+		return [...this.sessions.values()].filter((owner) =>
+			(owner.state.sessionFile && samePath(owner.state.sessionFile, path)) || [...owner.reservedFiles].some((file) => samePath(file, path)));
 	}
 
 	private assertNotOpened(path: string, except?: SessionOwner): void {
@@ -291,13 +397,13 @@ export class WorkerManager {
 						this.sessions.delete(handleId);
 						if (handleId) callbacks.onExit(handleId, code, owner?.closing || undefined);
 					},
-				});
+				}, this.timeouts);
 			if (!state || client.hasExited) {
 				await client.shutdown();
 				throw new Error("session worker 未返回可用会话状态");
 			}
 			handleId = client.id;
-			owner = { client, state, approvals: new Set(), uiRequests: new Set(), operations: 0, closing: false, draft: !sessionPath };
+			owner = { client, state, approvals: new Set(), uiRequests: new Set(), operations: 0, closing: false, draft: !sessionPath, reservedFiles: new Set() };
 			this.sessions.set(handleId, owner);
 			for (const event of earlyEvents) {
 				this.updateEvent(owner, event);
@@ -313,6 +419,12 @@ export class WorkerManager {
 
 	private async send(owner: SessionOwner, command: SessionCommand): Promise<unknown> {
 		if (owner.closing) throw new Error("会话正在关闭");
+		if (owner.client.hasFailed) throw new Error("会话 worker 已停用，尚未确认退出");
+		const identity = IDENTITY_COMMANDS.has(command.type);
+		if (identity) {
+			if (owner.state.sessionFile) owner.reservedFiles.add(owner.state.sessionFile);
+			if (command.type === "switch_session") owner.reservedFiles.add(command.sessionPath);
+		}
 		owner.operations++;
 		try {
 			const result = await owner.client.send(command);
@@ -323,6 +435,7 @@ export class WorkerManager {
 			return result;
 		} finally {
 			owner.operations--;
+			if (identity && !owner.client.hasFailed) owner.reservedFiles.clear();
 		}
 	}
 

@@ -52,6 +52,26 @@ function cspPlugin(): Plugin {
 	};
 }
 
+/** 可选依赖体积报告：只分析构建结果，不改变分包或生产页面。模块长度为压缩前的估算贡献。 */
+function bundleAnalysisPlugin(): Plugin {
+	return {
+		name: "flowork-bundle-analysis",
+		apply: "build",
+		generateBundle(_options, bundle) {
+			if (process.env.FLOWORK_ANALYZE !== "1") return;
+			const chunks = Object.values(bundle).flatMap((item) => item.type === "chunk" ? [{
+				file: item.fileName, entry: item.isEntry, dynamicEntry: item.isDynamicEntry,
+				bytes: Buffer.byteLength(item.code), imports: item.imports, dynamicImports: item.dynamicImports,
+				modules: Object.entries(item.modules).map(([id, info]) => ({
+					id: id.replaceAll("\\", "/").replace(`${projectRoot.replaceAll("\\", "/")}/`, ""),
+					renderedBytes: info.renderedLength,
+				})).sort((a, b) => b.renderedBytes - a.renderedBytes).slice(0, 30),
+			}] : []).sort((a, b) => b.bytes - a.bytes);
+			this.emitFile({ type: "asset", fileName: "bundle-analysis.json", source: JSON.stringify(chunks, null, 2) });
+		},
+	};
+}
+
 export function rendererConfig(): UserConfig {
 	return {
 		root: resolve(projectRoot, "src/renderer"),
@@ -61,6 +81,6 @@ export function rendererConfig(): UserConfig {
 				"@renderer": resolve(projectRoot, "src/renderer/src"),
 			},
 		},
-		plugins: [react(), tailwindcss(), cspPlugin()],
+		plugins: [react(), tailwindcss(), cspPlugin(), bundleAnalysisPlugin()],
 	};
 }

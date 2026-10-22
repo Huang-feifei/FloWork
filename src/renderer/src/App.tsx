@@ -61,7 +61,7 @@ function EmptyState() {
 					</Button>
 					<Button onClick={() => setRemoteOpen(true)}>添加远程项目</Button>
 					<Button onClick={() => setDiscoverOpen(true)}>从已有会话发现</Button>
-					<Button onClick={() => setView("settings", "providers")}>配置模型</Button>
+					<Button onClick={() => setView("settings", "custom")}>配置模型</Button>
 				</div>
 			</div>
 		</div>

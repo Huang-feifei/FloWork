@@ -77,20 +77,4 @@ export function resolveMarkdownAssetUrl(origin: string | null | undefined, baseP
 	return `${origin}/${pathname}`;
 }
 
-const IMAGE_MIME: Record<string, string> = {
-	png: "image/png",
-	jpg: "image/jpeg",
-	jpeg: "image/jpeg",
-	gif: "image/gif",
-	webp: "image/webp",
-	avif: "image/avif",
-	bmp: "image/bmp",
-	ico: "image/x-icon",
-	svg: "image/svg+xml",
-};
-
-/** 远程图片以内联 data URL 展示时需要的 MIME；非图片返回 null */
-export function imageMimeType(path: string): string | null {
-	const ext = /\.([a-z\d]+)$/i.exec(path)?.[1]?.toLowerCase();
-	return ext ? (IMAGE_MIME[ext] ?? null) : null;
-}
+export { imageMimeType } from "@shared/image";

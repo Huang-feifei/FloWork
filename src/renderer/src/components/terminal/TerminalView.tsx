@@ -129,7 +129,7 @@ function OpsWelcome() {
 			{models.length === 0 && (
 				<div className="mt-2 text-muted">
 					尚未配置可用模型，
-					<button type="button" onClick={() => setView("settings", "providers")} className="text-accent underline">
+					<button type="button" onClick={() => setView("settings", "custom")} className="text-accent underline">
 						前往设置
 					</button>
 				</div>
@@ -155,7 +155,7 @@ function Welcome() {
 				{models.length === 0 ? (
 					<>
 						尚未配置可用模型，
-						<button type="button" onClick={() => setView("settings", "providers")} className="text-accent underline">
+						<button type="button" onClick={() => setView("settings", "custom")} className="text-accent underline">
 							前往设置
 						</button>
 					</>

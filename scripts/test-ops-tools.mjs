@@ -15,10 +15,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { createChecks } from "./lib/isolated-backend.mjs";
+import { reportSkip } from "./lib/test-results.mjs";
 
 const targets = (process.env.FLOWORK_TEST_SSH ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 if (targets.length === 0) {
-	console.log("跳过：未设置 FLOWORK_TEST_SSH（见脚本开头的说明）");
+	reportSkip("未设置 FLOWORK_TEST_SSH（见脚本开头的说明）");
 	process.exit(0);
 }
 

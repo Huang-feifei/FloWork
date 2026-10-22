@@ -86,6 +86,7 @@ export const api = {
 	pickSavePath: (defaultName?: string) => call("app.pickSavePath", { defaultName }),
 	listWorkspace: (root: string, path?: string) => call("workspace.list", { root, path }),
 	readWorkspaceFile: (root: string, path: string) => call("workspace.read", { root, path }),
+	readWorkspaceImage: (root: string, path: string) => call("workspace.image", { root, path }),
 	writeWorkspaceFile: (root: string, path: string, content: string, expectedMtime?: number) =>
 		call("workspace.write", { root, path, content, expectedMtime }),
 	searchWorkspace: (root: string, query: string, options: { limit?: number; fresh?: boolean } = {}) =>

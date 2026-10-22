@@ -7,6 +7,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
 import { backendRuntime } from './runtime.mjs';
+import { reportSkip } from './lib/test-results.mjs';
 // Windows 会在 Electron 退出前保持 ASAR 文件句柄；由普通 Node 父进程负责最终清理。
 if(process.env.FLOWORK_TEST_DATABASE_ASAR==='1' && !process.versions.electron){
  const {default:electron}=await import('electron');const base=await mkdtemp(resolve('out/test-database-asar-'));let code=1;
@@ -182,7 +183,7 @@ try {
    }
    await manager.remove(a.id);
   }
- }else console.log('跳过网络数据库集成：设置 FLOWORK_TEST_DATABASES=1 可启动隔离 Docker PostgreSQL / MySQL');
+ }else reportSkip('设置 FLOWORK_TEST_DATABASES=1 可启动隔离 Docker PostgreSQL / MySQL','PostgreSQL / MySQL 网络集成');
  await test('删除连接同步移除历史/收藏，但保留真实数据库文件',async()=>{await manager.remove(c.id);assert.deepEqual(await manager.list(),[]);assert.ok((await readFile(fixture)).byteLength>0);});
  console.log(`\nDATABASE REGRESSION OK：${n} 项通过（未调用模型）`);
 }finally{

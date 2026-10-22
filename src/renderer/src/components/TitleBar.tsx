@@ -186,7 +186,7 @@ export function TitleBar() {
 				if (s.activeProjectId) void s.newSession();
 			} else if (key === "m") {
 				e.preventDefault();
-				if (s.activeProjectId) s.setView("settings", "providers");
+				if (s.activeProjectId) s.setView("settings", "custom");
 			} else if (key === "o") {
 				e.preventDefault();
 				void s.importProjects();

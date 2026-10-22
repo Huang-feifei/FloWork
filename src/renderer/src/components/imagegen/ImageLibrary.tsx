@@ -20,13 +20,27 @@ export function ImageLibrary() {
 	const clearImages = useApp((s) => s.clearImages);
 	const attachImage = useApp((s) => s.attachImage);
 	const pushNotice = useApp((s) => s.pushNotice);
+	const filter = useApp((s) => s.imageFilter);
+	const favorites = useApp((s) => s.imageFavorites);
+	const toggleImageFavorite = useApp((s) => s.toggleImageFavorite);
 	const [selectedId, setSelectedId] = useState<string>();
 
 	useEffect(() => {
 		void loadImages().catch((error) => pushNotice("error", `读取图片库失败：${errorText(error)}`));
 	}, [loadImages, pushNotice]);
 
-	const selected = useMemo(() => images.find((i) => i.id === selectedId) ?? images[0], [images, selectedId]);
+	/** 侧栏筛选：全部 / 收藏 / 本周 / 按模型 */
+	const visible = useMemo(() => {
+		const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+		if (filter === "favorite") return images.filter((i) => favorites[i.id]);
+		if (filter === "week") return images.filter((i) => i.createdAt >= weekAgo);
+		if (filter.startsWith("model:")) {
+			const model = filter.slice("model:".length);
+			return images.filter((i) => i.model === model);
+		}
+		return images;
+	}, [images, filter, favorites]);
+	const selected = useMemo(() => visible.find((i) => i.id === selectedId) ?? visible[0], [visible, selectedId]);
 	const url = useImageUrl(selected?.id ?? "");
 	const bytes = images.reduce((sum, i) => sum + i.bytes, 0);
 
@@ -98,7 +112,7 @@ export function ImageLibrary() {
 				<div className="flex min-h-0 flex-1 gap-6 overflow-y-auto px-6 py-5">
 					<div className="min-w-0 flex-1">
 						<div className="grid grid-cols-4 gap-4">
-							{images.map((image) => (
+							{visible.map((image) => (
 								<button
 									type="button"
 									key={image.id}
@@ -113,6 +127,11 @@ export function ImageLibrary() {
 						</div>
 					</div>
 
+							{visible.length === 0 && (
+								<div className="rounded-2xl border border-dashed border-border-strong px-4 py-10 text-center text-[12.5px] text-muted">
+									这个筛选下还没有图片。
+								</div>
+							)}
 					<div className="w-[320px] shrink-0">
 						{selected && (
 							<div className="fw-card overflow-hidden">
@@ -156,6 +175,10 @@ export function ImageLibrary() {
 										</Button>
 										<Button size="sm" onClick={() => void download()}>
 											下载
+										</Button>
+										<Button size="sm" variant="ghost" onClick={() => toggleImageFavorite(selected.id)}>
+											<Icon name="star" className={`size-4 ${favorites[selected.id] ? "text-warn" : ""}`} />
+											{favorites[selected.id] ? "已收藏" : "收藏"}
 										</Button>
 									</div>
 								</div>

@@ -15,11 +15,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import { createChecks } from "./lib/isolated-backend.mjs";
+import { reportSkip } from "./lib/test-results.mjs";
 
 const spec = (process.env.FLOWORK_TEST_SSH ?? "").split(",")[0]?.trim();
 const container = process.env.FLOWORK_TEST_SSH_CONTAINER;
 if (!spec || !container) {
-	console.log("跳过：需要 FLOWORK_TEST_SSH 与 FLOWORK_TEST_SSH_CONTAINER（见脚本开头的说明）");
+	reportSkip("需要 FLOWORK_TEST_SSH 与 FLOWORK_TEST_SSH_CONTAINER（见脚本开头的说明）");
 	process.exit(0);
 }
 

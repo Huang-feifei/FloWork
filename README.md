@@ -235,6 +235,14 @@ node scripts/test-projects.mjs    # 项目注册表
 node scripts/test-resources.mjs   # 技能 / 扩展 / 提示模板与包管理
 node scripts/test-ext-ui.mjs      # 第三方扩展对话框与界面接口
 node scripts/test-command-risk.mjs # 运维命令风险分级（不需要构建）
+node scripts/test-session-store.mjs # 真实 store 的延迟响应、跨标签与草稿归属（不需要构建）
+node scripts/test-worker-manager.mjs # 可控 worker 的超时、取消、交互等待与会话保锁（不需要构建）
+node scripts/test-test-results.mjs   # PASS / SKIP / FAIL 分类与严格模式退出码
+node scripts/test-markdown-desktop.mjs # 生产 CSP 下 PNG / SVG 实际解码、越界限制与高亮按需加载
+
+npm test -- --require-all          # 严格门禁：有任何 SKIP 也非零退出
+node scripts/analyze-renderer.mjs  # 构建并输出 out/renderer/bundle-analysis.json，不改变分包策略
+node scripts/benchmark-transcript.mjs # 真实生产 Electron 的 1千 / 1万 / 3万消息压测；先 npm run build
 
 # 运维会话的集成测试需要一台可用 root + 密码登录的测试主机（未设置时自动跳过）：
 #   FLOWORK_TEST_SSH="127.0.0.1:2222" FLOWORK_TEST_SSH_PASSWORD="..."
@@ -242,6 +250,10 @@ node scripts/test-ops-tools.mjs     # 远程工具：执行、流式输出、中
 node scripts/test-ops-session.mjs   # 隔离后端 + 本地模拟模型：完整的审批与执行链路
 node scripts/test-host-key.mjs      # 主机密钥变化的检测与更新（另需 FLOWORK_TEST_SSH_CONTAINER；使用临时 known_hosts）
 ```
+
+测试结果分别汇总 **PASS / SKIP / FAIL / BLOCKED**：环境缺失不算通过，前置检查或构建失败时相关套件为 BLOCKED。数据库套件可同时报告 SQLite 等基础回归 PASS、PostgreSQL / MySQL 网络集成 SKIP。普通 `npm test` 允许环境跳过，发布集成门禁可使用 `--require-all`；启用数据库网络集成还需 `FLOWORK_TEST_DATABASES=1` 与 Docker。
+
+压测会显示隔离 Electron 窗口，不调用模型；产物为 `out/transcript-performance.json` / `.png`。测量边界、基线和尚未验证事项见 [桌面稳定性与性能验证](docs/desktop-stability.md)。
 
 ## 路线图
 

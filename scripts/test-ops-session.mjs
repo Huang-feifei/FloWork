@@ -12,6 +12,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { connect, createChecks, deadline, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 import { startMockOpenAI } from "./lib/mock-openai.mjs";
+import { reportSkip } from "./lib/test-results.mjs";
 
 const spec = (process.env.FLOWORK_TEST_SSH ?? "").split(",")[0]?.trim();
 
@@ -169,7 +170,7 @@ async function main(checks) {
 }
 
 if (!spec) {
-	console.log("跳过：未设置 FLOWORK_TEST_SSH（见脚本开头的说明）");
+	reportSkip("未设置 FLOWORK_TEST_SSH（见脚本开头的说明）");
 } else {
 	const checks = createChecks();
 	await main(checks).then(

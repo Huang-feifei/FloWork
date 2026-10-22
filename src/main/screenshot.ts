@@ -2,9 +2,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { BrowserWindow } from "electron";
 
-type Step = string | { js?: string; wait?: number; shot?: string | number };
+type Step = string | { js?: string; wait?: number; shot?: string | number; result?: string };
 export async function runUIScreenshot(win: BrowserWindow): Promise<number> {
 	try {
+		// 性能压测需要真实帧时钟，隐藏窗口不会持续派发 requestAnimationFrame。
+		if (process.env.SHOT_SHOW === "1") win.showInactive();
 		if (win.webContents.isLoading()) await new Promise<void>((resolve, reject) => {
 			win.webContents.once("did-finish-load", () => resolve());
 			win.webContents.once("did-fail-load", (_e, code, text) => reject(new Error(`${code}: ${text}`)));
@@ -31,7 +33,10 @@ export async function runUIScreenshot(win: BrowserWindow): Promise<number> {
 		if (out.includes("{n}") && !named) await capture(0);
 		for (const [i, value] of steps.entries()) {
 			const step = typeof value === "string" ? { js: value } : value;
-			if (step.js) await win.webContents.executeJavaScript(step.js);
+			if (step.js) {
+				const result: unknown = await win.webContents.executeJavaScript(step.js);
+				if (step.result) await writeFile(step.result, JSON.stringify(result, null, 2));
+			}
 			await sleep(step.wait ?? wait);
 			if (step.shot !== undefined) await capture(step.shot);
 			else if (out.includes("{n}") && !named) await capture(i + 1);

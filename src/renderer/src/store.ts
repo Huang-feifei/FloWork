@@ -63,7 +63,7 @@ export interface Notice {
 
 export type View = "welcome" | "chat" | "review" | "settings" | "imagegen" | "gallery" | "database";
 export type RightPanel = "files" | "session" | "server" | "services" | "browser";
-export type SettingsTab = "providers" | "custom" | "resources" | "preferences" | "subagent" | "appearance" | "raw" | "kernel";
+export type SettingsTab = "custom" | "resources" | "preferences" | "subagent" | "appearance" | "raw" | "kernel";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
 export type PaletteMode = "all" | "commands" | "files" | "sessions";
 /** 底部面板的页签 */
@@ -97,6 +97,10 @@ interface AppState extends SessionSlice {
 	imageBusy: boolean;
 	/** 输入框里待发送的图片；图片生成模块会把生成的图片放进这里 */
 	pendingImages: ImageAttachment[];
+	/** 图片库侧栏的筛选：all | favorite | week | model:<key> */
+	imageFilter: string;
+	/** 生成记录的收藏标记（只存在本机，不进 models.json） */
+	imageFavorites: Record<string, boolean>;
 	/** 配置变更计数，设置页据此刷新 */
 	configVersion: number;
 	discoverOpen: boolean;
@@ -177,6 +181,8 @@ interface AppState extends SessionSlice {
 	/** 把缓存里的图片放进输入框，作为下一条消息的附件 */
 	attachImage(id: string): Promise<void>;
 	setPendingImages(images: ImageAttachment[]): void;
+	setImageFilter(filter: string): void;
+	toggleImageFavorite(id: string): void;
 
 	// 项目
 	importProjects(): Promise<void>;
@@ -377,6 +383,34 @@ export const useApp = create<AppState>()((set, get) => {
 		});
 	}
 
+	/** 只更新请求发起时的会话；同一 worker 已切换记录或关闭时丢弃旧结果。 */
+	function sessionPatcher(handleId: string) {
+		const sessionId = sliceOfHandle(handleId)?.state?.sessionId;
+		return (patch: Partial<SessionSlice>) => patchHandle(handleId,
+			(s) => s.state?.sessionId === sessionId ? patch : null);
+	}
+
+	const pendingDrafts = new Map<string, { sessionId: string | undefined; draft: Omit<AppState["draft"], "seq"> }>();
+	function deliverDraft(handleId: string, sessionId: string | undefined, draft: Omit<AppState["draft"], "seq">) {
+		const slice = sliceOfHandle(handleId);
+		if (!slice || slice.state?.sessionId !== sessionId) return;
+		if (get().handleId === handleId) set((s) => ({ draft: { ...draft, seq: s.draft.seq + 1 } }));
+		else pendingDrafts.set(handleId, { sessionId, draft });
+	}
+
+	const treeRequests = new Map<string, symbol>();
+	async function loadTreeFor(handleId: string): Promise<void> {
+		const token = Symbol();
+		treeRequests.set(handleId, token);
+		const patch = sessionPatcher(handleId);
+		try {
+			const result = await call(handleId, (h) => api.session(h, { type: "get_tree" }));
+			if (result && treeRequests.get(handleId) === token) patch({ tree: buildTree(result.tree), leafId: result.leafId });
+		} finally {
+			if (treeRequests.get(handleId) === token) treeRequests.delete(handleId);
+		}
+	}
+
 	/** 所有打开中的会话切片：[handleId, slice] */
 	function allSlices(): Array<[string, SessionSlice]> {
 		const st = get();
@@ -436,6 +470,8 @@ export const useApp = create<AppState>()((set, get) => {
 
 	/** 关闭一个会话：从打开列表移除；若关闭的是当前显示的，则切到同项目下一个或清空 */
 	function clearOwner(handleId: string): void {
+		treeRequests.delete(handleId);
+		pendingDrafts.delete(handleId);
 		const pid = projectByHandle(handleId);
 		set((st) => {
 			const background = { ...st.background };
@@ -583,13 +619,15 @@ export const useApp = create<AppState>()((set, get) => {
 		connection: "connecting",
 		// 启动时先进入欢迎页（环境自检 + 发现项目）；已导入过项目时 init() 会直接进入会话
 		view: "welcome",
-		settingsTab: "providers",
+		settingsTab: "custom",
 		theme: storedTheme(),
 		appearance: storedAppearance(),
 		imageModels: [],
 		images: [],
 		imageBusy: false,
 		pendingImages: [],
+		imageFilter: "all",
+		imageFavorites: {},
 		resolvedTheme: resolveTheme(storedTheme()),
 		configVersion: 0,
 		discoverOpen: false,
@@ -707,6 +745,15 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setPendingImages(images) {
 			set({ pendingImages: images });
+		},
+
+		setImageFilter(imageFilter) {
+			set({ imageFilter });
+		},
+
+		toggleImageFavorite(id) {
+			const next = { ...get().imageFavorites, [id]: !get().imageFavorites[id] };
+			set({ imageFavorites: next });
 		},
 
 		// ----- 项目 -----
@@ -866,6 +913,9 @@ export const useApp = create<AppState>()((set, get) => {
 				};
 			});
 			set({ view: "chat" });
+			const pending = pendingDrafts.get(handleId);
+			pendingDrafts.delete(handleId);
+			if (pending) deliverDraft(handleId, pending.sessionId, pending.draft);
 			localStorage.setItem(LAST_PROJECT_KEY, pid);
 			void api.projects.touch(pid).then((projects) => set({ projects })).catch(() => undefined);
 			if (get().railVisible) void get().loadTree();
@@ -1047,19 +1097,19 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		async dequeue() {
-			const queue = await active((h) => api.session(h, { type: "clear_queue" }));
+			const handleId = get().handleId;
+			if (!handleId) return;
+			const sessionId = get().state?.sessionId;
+			const queue = await call(handleId, (h) => api.session(h, { type: "clear_queue" }));
 			if (!queue) return;
 			const pending = [...queue.steering, ...queue.followUp];
 			if (pending.length === 0) return;
 			// 取回时文字和图片一起恢复，不能只恢复文字。
-			set((s) => ({
-				draft: {
-					text: pending.map((item) => item.text).filter(Boolean).join("\n"),
-					images: pending.flatMap((item) => item.images ?? []),
-					seq: s.draft.seq + 1,
-					append: true,
-				},
-			}));
+			deliverDraft(handleId, sessionId, {
+				text: pending.map((item) => item.text).filter(Boolean).join("\n"),
+				images: pending.flatMap((item) => item.images ?? []),
+				append: true,
+			});
 		},
 
 		async reorderQueue(steering, followUp) {
@@ -1071,20 +1121,27 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		async setModel(model) {
-			const state = await active((h) => api.session(h, { type: "set_model", provider: model.provider, modelId: model.id }));
-			if (state) set({ state });
+			const handleId = get().handleId;
+			if (!handleId) return;
+			const patch = sessionPatcher(handleId);
+			const state = await call(handleId, (h) => api.session(h, { type: "set_model", provider: model.provider, modelId: model.id }));
+			if (state) patch({ state });
 		},
 
 		async setThinkingLevel(level) {
-			const state = await active((h) => api.session(h, { type: "set_thinking_level", level }));
-			if (state) set({ state });
+			const handleId = get().handleId;
+			if (!handleId) return;
+			const patch = sessionPatcher(handleId);
+			const state = await call(handleId, (h) => api.session(h, { type: "set_thinking_level", level }));
+			if (state) patch({ state });
 		},
 
 		async setWorkMode(mode) {
 			const handleId = get().handleId;
 			if (!handleId) return;
+			const patch = sessionPatcher(handleId);
 			const state = await call(handleId, (h) => api.session(h, { type: "set_work_mode", mode }));
-			if (state) patchHandle(handleId, { state });
+			if (state) patch({ state });
 		},
 
 		async setApprovalMode(mode) {
@@ -1157,9 +1214,8 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		async loadTree() {
-			const result = await active((h) => api.session(h, { type: "get_tree" }));
-			// worker 发来的是前序扁平列表，这里还原成树供 SessionRail 使用
-			if (result) set({ tree: buildTree(result.tree), leafId: result.leafId });
+			const handleId = get().handleId;
+			if (handleId) await loadTreeFor(handleId);
 		},
 
 		async navigateTo(entryId) {
@@ -1167,10 +1223,13 @@ export const useApp = create<AppState>()((set, get) => {
 				get().pushNotice("warning", "请先等待当前运行结束，或按 Esc 中断");
 				return;
 			}
-			const result = await active((h) => api.session(h, { type: "navigate_tree", entryId }));
-			if (result?.editorText) set((s) => ({ draft: { text: result.editorText ?? "", seq: s.draft.seq + 1 } }));
-			// 回溯会移动 leaf，轨道上的当前位置要跟着走
-			void get().loadTree();
+			const handleId = get().handleId;
+			if (!handleId) return;
+			const sessionId = get().state?.sessionId;
+			const result = await call(handleId, (h) => api.session(h, { type: "navigate_tree", entryId }));
+			if (result?.editorText) deliverDraft(handleId, sessionId, { text: result.editorText });
+			// 回溯完成时可能已切换标签；刷新原会话而非当前标签。
+			if (sliceOfHandle(handleId)) void loadTreeFor(handleId);
 		},
 
 		async forkFrom(entryId, position) {
@@ -1178,16 +1237,21 @@ export const useApp = create<AppState>()((set, get) => {
 				get().pushNotice("warning", "请先等待当前运行结束，或按 Esc 中断");
 				return;
 			}
-			const result = await active((h) => api.session(h, { type: "fork", entryId, position }));
+			const handleId = get().handleId;
+			if (!handleId) return;
+			const pid = projectByHandle(handleId);
+			const result = await call(handleId, (h) => api.session(h, { type: "fork", entryId, position }));
 			if (!result || result.cancelled) return;
-			if (result.editorText) set((s) => ({ draft: { text: result.editorText ?? "", seq: s.draft.seq + 1 } }));
+			if (result.editorText) deliverDraft(handleId, result.state.sessionId, { text: result.editorText });
 			get().pushNotice("info", "已分叉为新会话");
-			await get().refreshSessions();
+			if (pid) await get().refreshProjectSessions(pid);
 		},
 
 		async setLabel(entryId, label) {
-			await active((h) => api.session(h, { type: "set_label", entryId, label }));
-			await get().loadTree();
+			const handleId = get().handleId;
+			if (!handleId) return;
+			await call(handleId, (h) => api.session(h, { type: "set_label", entryId, label }));
+			if (sliceOfHandle(handleId)) await loadTreeFor(handleId);
 		},
 
 		pushNotice(level, text) {

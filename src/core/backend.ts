@@ -17,6 +17,7 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import type { KernelUpdateController } from "@shared/kernel";
+import { imageMimeType, MAX_MARKDOWN_IMAGE_BYTES } from "@shared/image";
 import { isDirectory } from "./fs";
 import { DatabaseManager } from "./database";
 import type { DatabaseBrowseParams, DatabaseInput, DatabaseQueryParams } from "@shared/database";
@@ -39,6 +40,7 @@ import {
 	listWorkspaceDir,
 	moveWorkspaceEntry,
 	readWorkspaceFile,
+	readWorkspaceImage,
 	renameWorkspaceEntry,
 	resolveInside,
 	searchWorkspaceFiles,
@@ -236,6 +238,16 @@ export class Backend {
 				const params = rawParams as BackendMethods["workspace.read"]["params"];
 				const host = await this.hostOf(params.root);
 				return host ? remoteFs.readWorkspaceFile(host, params.root, params.path) : readWorkspaceFile(params.root, params.path);
+			}
+			case "workspace.image": {
+				const params = rawParams as BackendMethods["workspace.image"]["params"];
+				const mime = imageMimeType(params.path);
+				if (!mime) throw new Error("不支持的图片格式");
+				const host = await this.hostOf(params.root);
+				if (!host) return readWorkspaceImage(params.root, params.path);
+				const { abs } = remoteFs.remoteResolve(params.root, params.path);
+				const { dataBase64 } = await remoteFs.downloadServerFile(host, abs, MAX_MARKDOWN_IMAGE_BYTES);
+				return { dataUrl: `data:${mime};base64,${dataBase64}` };
 			}
 			case "workspace.write": {
 				const params = rawParams as BackendMethods["workspace.write"]["params"];

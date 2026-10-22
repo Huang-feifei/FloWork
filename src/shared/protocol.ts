@@ -796,6 +796,8 @@ export interface BackendMethods extends DatabaseMethods {
 	"hosts.acceptKey": { params: { id: string; fingerprints: string[] }; result: { removedFrom: string[] } };
 	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
 	"workspace.read": { params: { root: string; path: string }; result: FilePreview };
+	/** 仅图片格式、单图最多 8 MB；内联加载，不放宽 renderer CSP。 */
+	"workspace.image": { params: { root: string; path: string }; result: { dataUrl: string } };
 	/** 保存文件；expectedMtime 与磁盘不一致时拒绝（文件已被 AI 或外部修改） */
 	"workspace.write": {
 		params: { root: string; path: string; content: string; expectedMtime?: number };

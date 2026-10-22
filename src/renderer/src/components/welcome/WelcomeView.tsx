@@ -147,7 +147,7 @@ export function WelcomeView() {
 					<Button size="lg" onClick={() => setView("database")}>
 						<Icon name="database" className="size-4" />数据库工作台
 					</Button>
-					<Button size="lg" onClick={() => setView("settings", "providers")}>
+					<Button size="lg" onClick={() => setView("settings", "custom")}>
 						配置模型
 					</Button>
 					{projects.length > 0 && (

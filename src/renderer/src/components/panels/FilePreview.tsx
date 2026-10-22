@@ -7,8 +7,8 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { type FilePreview as Preview, WRITE_CONFLICT_PREFIX } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
-import { browserBridge, openInBrowser } from "../../lib/browser";
-import { imageMimeType, resolveMarkdownAssetUrl, resolveMarkdownPath } from "../../lib/markdown-url";
+import { openInBrowser } from "../../lib/browser";
+import { imageMimeType, resolveMarkdownPath } from "../../lib/markdown-url";
 import { collectSessionFiles } from "../../lib/session-files";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
@@ -47,7 +47,6 @@ export function FilePreview() {
 	const [error, setError] = useState<string | null>(null);
 	const [tab, setTab] = useState<"content" | "changes">("content");
 	const [mode, setMode] = useState<"preview" | "source">("preview");
-	const [markdownOrigin, setMarkdownOrigin] = useState<string | null>(null);
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState("");
 	const [revision, setRevision] = useState(0);
@@ -64,25 +63,6 @@ export function FilePreview() {
 	const editable = file !== null && !file.binary && !file.truncated;
 	/** Markdown 默认渲染预览，工具栏可切到源码；截断文件只显示源码。 */
 	const isMarkdown = file !== null && !file.binary && !file.truncated && isMarkdownPath(path ?? "");
-	/** 本地 Markdown 的相对图片走预览服务；远程项目由 loadMarkdownImage 转成 data URL。 */
-	useEffect(() => {
-		if (!isMarkdown || previewHostId || !cwd) {
-			setMarkdownOrigin(null);
-			return;
-		}
-		let cancelled = false;
-		void api.servePreview(cwd).then(
-			({ origin }) => {
-				if (!cancelled) setMarkdownOrigin(origin);
-			},
-			() => {
-				if (!cancelled) setMarkdownOrigin(null);
-			},
-		);
-		return () => {
-			cancelled = true;
-		};
-	}, [isMarkdown, previewHostId, cwd]);
 	/** HTML / SVG 可以交给内置浏览器渲染；仅本地项目（远程文件在 SSH 后面） */
 	const canPreviewInBrowser = file !== null && !file.binary && !previewHostId && !!cwd && /\.(?:html?|svg)$/i.test(path ?? "");
 
@@ -142,33 +122,27 @@ export function FilePreview() {
 		try {
 			const { origin } = await api.servePreview(cwd);
 			const url = `${origin}/${path.split("/").map(encodeURIComponent).join("/")}`;
-			if (browserBridge()) {
-				setRightPanel("browser");
-				await openInBrowser(url);
-			} else {
-				window.open(url, "_blank", "noopener,noreferrer");
-			}
+			setRightPanel("browser");
+			await openInBrowser(url);
 		} catch (e) {
 			pushNotice("error", `预览失败：${errorText(e)}`);
 		}
 	}, [path, cwd, previewHostId, setRightPanel, pushNotice]);
 
-	/** 本地图片走预览服务；远程图片在 loadMarkdownImage 里转成 data URL。 */
-	const resolveMarkdownImage = useCallback(
-		(src: string) => (markdownOrigin && path ? resolveMarkdownAssetUrl(markdownOrigin, path, src) : src),
-		[markdownOrigin, path],
-	);
-
 	const loadMarkdownImage = useCallback(
 		async (src: string) => {
-			if (!previewHostId || !path) return null;
+			if (!path) return null;
 			const target = resolveMarkdownPath(path, src);
 			const mime = target ? imageMimeType(target) : null;
 			if (!target || !mime) return null;
-			const { dataBase64 } = await api.server.download(previewHostId, target);
-			return `data:${mime};base64,${dataBase64}`;
+			if (previewHostId) {
+				const { dataBase64 } = await api.server.download(previewHostId, target);
+				return `data:${mime};base64,${dataBase64}`;
+			}
+			if (!cwd) return null;
+			return (await api.readWorkspaceImage(cwd, target)).dataUrl;
 		},
-		[previewHostId, path],
+		[previewHostId, cwd, path],
 	);
 
 	/** 相对链接交给应用内文件预览；外链 / 锚点返回 false 走浏览器默认行为。 */
@@ -358,8 +332,7 @@ export function FilePreview() {
 								<Suspense fallback={<div className="term p-4 text-muted">正在渲染 Markdown…</div>}>
 									<MarkdownDocument
 										text={draft}
-										resolveImage={previewHostId ? undefined : resolveMarkdownImage}
-										loadImage={previewHostId ? loadMarkdownImage : undefined}
+										loadImage={loadMarkdownImage}
 										onOpenLink={openMarkdownLink}
 									/>
 								</Suspense>

@@ -7,9 +7,12 @@ import { Icon } from "./Icon";
 import { askText } from "./PromptDialog";
 import { Menu } from "./sidebar/Menu";
 import { ProjectTree } from "./sidebar/ProjectTree";
+import { GalleryTree } from "./imagegen/GalleryTree";
 import { ResizeHandle, usePersistentWidth } from "./ResizeHandle";
 
 export function Sidebar() {
+	const view = useApp((s) => s.view);
+	const inImages = view === "imagegen" || view === "gallery";
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const canNewSession = useApp((s) => s.handleId !== null && hasProject);
 	const { importProjects, setView, setDiscoverOpen, setRemoteOpen, pushNotice, newSession } = useApp.getState();
@@ -35,7 +38,7 @@ export function Sidebar() {
 				label="调整项目栏宽度"
 			/>
 			<div className="flex h-11 shrink-0 items-center gap-0.5 pr-2.5 pl-4">
-				<span className="flex-1 text-[11.5px] font-semibold text-muted">项目</span>
+				<span className="flex-1 text-[11.5px] font-semibold text-muted">{inImages ? "图片库" : "项目"}</span>
 				<button
 					type="button"
 					disabled={!canNewSession}
@@ -79,7 +82,7 @@ export function Sidebar() {
 			</div>
 
 			<nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-				<ProjectTree />
+				{inImages ? <GalleryTree /> : <ProjectTree />}
 			</nav>
 
 			{menu && (
