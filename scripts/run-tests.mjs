@@ -1,7 +1,7 @@
 /**
  * 串行运行全部回归脚本，并汇总结果。
- *   npm test               类型检查 → 构建网页版 → 全部回归
- *   npm test -- --no-build 跳过类型检查与构建（out/web 已是最新时）
+ *   npm test               类型检查 → 构建桌面版与 IPC 测试入口 → 全部回归
+ *   npm test -- --no-build 跳过类型检查与构建（桌面版与测试入口产物已是最新时）
  *   npm test -- hosts ext  只跑名字包含这些关键字的脚本
  *
  * 各回归脚本自起隔离后端，不写真实配置目录、不调用模型。任一步失败时退出码非零。
@@ -22,6 +22,7 @@ const SUITES = [
 	{ name: "hosts", file: "scripts/test-hosts.mjs", needsBuild: false },
 	{ name: "command-risk", file: "scripts/test-command-risk.mjs", needsBuild: false },
 	{ name: "planning", file: "scripts/test-planning.mjs", needsBuild: false },
+	{ name: "markdown", file: "scripts/test-markdown.mjs", needsBuild: false },
 	{ name: "subagent", file: "scripts/test-subagent.mjs", needsBuild: false },
 	// 需要测试主机：未设置 FLOWORK_TEST_SSH 时自动跳过
 	{ name: "ops-tools", file: "scripts/test-ops-tools.mjs", needsBuild: false },
@@ -58,9 +59,12 @@ if (suites.length === 0) {
 const results = [];
 if (!skipBuild) {
 	results.push(await run("类型检查", "npm", ["run", "typecheck"]));
-	if (suites.some((s) => s.needsBuild) && results.every((r) => r.ok)) results.push(await run("构建网页版", "npm", ["run", "build:web"]));
-} else if (suites.some((s) => s.needsBuild) && !existsSync(join(root, "out/web/server/index.js"))) {
-	console.error("--no-build 但 out/web 不存在，请先 npm run build:web");
+	if (suites.some((s) => s.needsBuild) && results.every((r) => r.ok)) {
+		results.push(await run("构建桌面版", "npm", ["run", "build"]));
+		if (results.every((r) => r.ok)) results.push(await run("构建 IPC 测试入口", "npm", ["run", "build:test"]));
+	}
+} else if (suites.some((s) => s.needsBuild) && (!existsSync(join(root, "out/main/pi-worker.js")) || !existsSync(join(root, "out/test-support/electron-test-host.cjs")))) {
+	console.error("--no-build 但桌面回归产物不存在，请先 npm run build && npm run build:test");
 	process.exit(1);
 }
 

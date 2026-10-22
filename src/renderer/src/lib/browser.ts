@@ -3,7 +3,7 @@ import { create } from "zustand";
 import type { BrowserBounds, BrowserBridge, BrowserCommand, BrowserState } from "@shared/browser";
 import { errorText } from "../api/client";
 
-export function browserBridge(): BrowserBridge | undefined {
+export function browserBridge(): BrowserBridge {
 	return window.floworkBrowser;
 }
 
@@ -29,7 +29,7 @@ export const DEFAULT_BROWSER_URL = "https://www.bing.com/";
 
 export async function initializeBrowser(): Promise<void> {
 	const bridge = browserBridge();
-	if (!bridge || initialized) return;
+	if (initialized) return;
 	initialized = true;
 	bridge.onState((state) => {
 		stateVersion++;
@@ -40,7 +40,6 @@ export async function initializeBrowser(): Promise<void> {
 
 export async function browserCommand(command: BrowserCommand): Promise<void> {
 	const bridge = browserBridge();
-	if (!bridge) return;
 	const version = stateVersion;
 	try {
 		const state = await bridge.command(command);
@@ -52,18 +51,13 @@ export async function browserCommand(command: BrowserCommand): Promise<void> {
 
 /** 打开内置浏览器时，如果还没有任何标签页就默认到必应 */
 export async function ensureBrowserDefault(): Promise<void> {
-	if (!browserBridge()) return;
 	await initializeBrowser();
 	if (opening) return;
 	if (useBrowser.getState().state.tabs.length === 0) await browserCommand({ type: "create", url: DEFAULT_BROWSER_URL });
 }
 
-/** 在内置浏览器里打开一个地址：当前是空白页或默认页时复用，否则新开标签；网页版退回系统浏览器 */
+/** 在内置浏览器里打开一个地址：当前是空白页或默认页时复用，否则新开标签 */
 export async function openInBrowser(url: string): Promise<void> {
-	if (!browserBridge()) {
-		window.open(url, "_blank", "noopener,noreferrer");
-		return;
-	}
 	opening = true;
 	try {
 		await initializeBrowser();
@@ -80,7 +74,7 @@ export async function openInBrowser(url: string): Promise<void> {
 const occlusions = new Set<symbol>();
 
 function sendOcclusion(): void {
-	void browserBridge()?.command({ type: "occlusion", blocked: occlusions.size > 0 }).catch(() => undefined);
+	void browserBridge().command({ type: "occlusion", blocked: occlusions.size > 0 }).catch(() => undefined);
 }
 
 export function acquireBrowserOcclusion(): () => void {
@@ -103,7 +97,7 @@ export function useBrowserViewport(host: RefObject<HTMLDivElement | null>, visib
 	useLayoutEffect(() => {
 		const bridge = browserBridge();
 		const element = host.current;
-		if (!bridge || !element) return;
+		if (!element) return;
 		const owner = crypto.randomUUID();
 		let sequence = 0;
 		let frame = 0;

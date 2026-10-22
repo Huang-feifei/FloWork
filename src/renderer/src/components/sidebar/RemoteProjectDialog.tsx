@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { RemoteDirListing, SshHost, SshHostInput, SshTestResult } from "@shared/protocol";
 import { api, errorText, hostKeyErrorHost } from "../../api/client";
-import { isDesktop } from "../../lib/desktop";
 import { useApp } from "../../store";
 import { Badge, Button, Field, Input, Modal, Select } from "../ui";
 
@@ -118,7 +117,7 @@ function HostForm({
 				</Field>
 			)}
 			{form.auth === "password" && (
-				<Field label="密码" hint={isDesktop ? "密码经系统加密（Windows DPAPI）后保存在本机 ~/.flowork/hosts.json。" : "网页版以明文保存在本机 ~/.flowork/hosts.json（桌面版会加密）。"}>
+				<Field label="密码" hint="密码经系统加密后保存在本机 ~/.flowork/hosts.json（Windows 使用 DPAPI）。">
 					<Input type="password" value={form.password ?? ""} onChange={(e) => patch({ password: e.target.value })} />
 				</Field>
 			)}

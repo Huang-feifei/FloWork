@@ -1,5 +1,5 @@
 /**
- * 与外壳无关的冒烟检查：桌面版（src/main/smoke.ts）与网页版（src/server/index.ts --smoke）共用。
+ * 桌面后端冒烟检查，由 src/main/smoke.ts 调用。
  * 不调用模型，也不修改任何配置文件。
  */
 import type { CommandResultMap } from "@shared/protocol";
@@ -31,8 +31,8 @@ export async function runCoreChecks(backend: Backend): Promise<Record<string, un
 	const sessions = (await backend.handle("service.send", { type: "list_sessions" })) as CommandResultMap["list_sessions"];
 	report.sessionsOnDisk = sessions.length;
 
-	const dirs = await backend.handle("fs.listDirs", {});
-	report.listDirs = `${dirs.path}（${dirs.entries.length} 个子目录）`;
+	const dirs = await backend.handle("workspace.list", { root: process.cwd() });
+	report.workspaceEntries = dirs.entries.length;
 
 	const { handleId, state } = await backend.handle("session.open", { cwd: process.cwd() }, "smoke");
 	report.sessionId = state.sessionId;

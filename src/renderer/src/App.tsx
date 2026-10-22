@@ -1,6 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
 import { useApp } from "./store";
-import { FolderPicker } from "./components/FolderPicker";
 import { Notices } from "./components/Notices";
 import { AuthDialog } from "./components/settings/AuthDialog";
 import { Button } from "./components/ui";
@@ -84,7 +83,7 @@ export function App() {
 
 	return (
 		<div className="relative h-full overflow-hidden font-sans text-[13px] text-fg antialiased">
-			{/* 窗口背后的桌面：桌面版由系统材质（Acrylic / vibrancy）透出，网页版用这一层模拟 */}
+			{/* 窗口背景，与系统材质和截图保持一致 */}
 			<div className="fw-wallpaper absolute inset-0" />
 
 			{/* 整个窗口一层毛玻璃（见 .fw-shell）：各区域再用不同透明度叠出层次；图片模式下关掉，否则壁纸会被糊成色斑 */}
@@ -146,7 +145,6 @@ export function App() {
 					</>
 				)}
 
-				<FolderPicker />
 				<DiscoverDialog />
 				<RemoteProjectDialog />
 				<HostKeyDialog />

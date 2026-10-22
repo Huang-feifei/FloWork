@@ -20,6 +20,9 @@ export async function runSmokeTest(backend: Backend, win: BrowserWindow): Promis
 		});
 		report.rendererBridge = await win.webContents.executeJavaScript("typeof window.floworkTransport");
 		if (report.rendererBridge !== "object") throw new Error("preload 未暴露 window.floworkTransport");
+		const ipcInfo = await win.webContents.executeJavaScript(`window.floworkTransport.request("app.info").then(JSON.parse)`);
+		if (ipcInfo.shell !== "electron") throw new Error("renderer → preload → ipcMain 请求失败");
+		report.rendererIpc = ipcInfo.shell;
 
 		Object.assign(report, await runCoreChecks(backend));
 

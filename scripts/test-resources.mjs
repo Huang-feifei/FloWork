@@ -1,11 +1,11 @@
 /**
  * 开发辅助：在隔离后端（out/ 下的临时数据目录与空闲端口，不碰 ~/.flowork）测试项目信任与技能管理（不调用模型）。
  * 测试项目与技能都放在隔离目录里，随隔离后端一起删除，无需手工回滚真实配置。
- *   node scripts/test-resources.mjs（需先 npm run build:web）
+ *   node scripts/test-resources.mjs（需先 npm run build && npm run build:test）
  */
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { connect, createChecks, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
+import { connect, createChecks, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -92,7 +92,7 @@ async function main(checks) {
 }
 
 const checks = createChecks();
-if (!installRelayFromEnv()) await main(checks).then(
+await main(checks).then(
 	() => checks.finish("RESOURCES REGRESSION OK（隔离后端；未调用模型）"),
 	(error) => {
 		console.error(`RESOURCES REGRESSION FAILED\n${error?.stack ?? error}`);

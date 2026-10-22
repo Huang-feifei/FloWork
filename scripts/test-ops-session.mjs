@@ -1,6 +1,6 @@
 /**
  * 回归：运维会话的后端链路（隔离后端，不调用模型）。
- *   node scripts/test-ops-session.mjs（需先 npm run build:web）
+ *   node scripts/test-ops-session.mjs（需先 npm run build && npm run build:test）
  *
  * 需要测试主机（与 test-ops-tools.mjs 相同的环境变量；只用第一台），未设置时跳过：
  *   FLOWORK_TEST_SSH="127.0.0.1:2222"  FLOWORK_TEST_SSH_PASSWORD="..."  [FLOWORK_TEST_SSH_USER=root]
@@ -10,8 +10,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { isMainThread } from "node:worker_threads";
-import { connect, createChecks, deadline, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
+import { connect, createChecks, deadline, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 import { startMockOpenAI } from "./lib/mock-openai.mjs";
 
 const spec = (process.env.FLOWORK_TEST_SSH ?? "").split(",")[0]?.trim();
@@ -169,20 +168,15 @@ async function main(checks) {
 	}
 }
 
-// 本脚本会以 --import 注入隔离 server；远程终端的 node-pty 会起 worker 线程，线程里同样会加载它，必须什么都不做
-if (!isMainThread) {
-	// noop
-} else if (!spec) {
-	if (!process.env.FLOWORK_SESSIONS_TEST_RELAY) console.log("跳过：未设置 FLOWORK_TEST_SSH（见脚本开头的说明）");
+if (!spec) {
+	console.log("跳过：未设置 FLOWORK_TEST_SSH（见脚本开头的说明）");
 } else {
 	const checks = createChecks();
-	if (!installRelayFromEnv()) {
-		await main(checks).then(
-			() => checks.finish("OPS SESSION REGRESSION OK（隔离后端；未调用模型）"),
-			(error) => {
-				console.error(`OPS SESSION REGRESSION FAILED\n${error?.stack ?? error}`);
-				process.exitCode = 1;
-			},
-		);
-	}
+	await main(checks).then(
+		() => checks.finish("OPS SESSION REGRESSION OK（隔离 Electron IPC；未调用模型）"),
+		(error) => {
+			console.error(`OPS SESSION REGRESSION FAILED\n${error?.stack ?? error}`);
+			process.exitCode = 1;
+		},
+	);
 }

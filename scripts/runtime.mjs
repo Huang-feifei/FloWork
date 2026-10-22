@@ -1,33 +1,10 @@
-/** 网页版后端（server + pi worker）的 esbuild 公共配置 */
+/** 开发与发行验证工具使用的 Node 运行时选择；桌面应用始终使用 Electron 自带的 Node。 */
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const pkg = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-
-export function serverBuildOptions(outdir) {
-	return {
-		absWorkingDir: root,
-		entryPoints: {
-			index: "src/server/index.ts",
-			"pi-worker": "src/worker/index.ts",
-		},
-		outdir,
-		bundle: true,
-		platform: "node",
-		format: "esm",
-		target: "node22",
-		// 依赖（pi、ws）保持外部引用，运行时从 node_modules 加载
-		packages: "external",
-		alias: { "@shared": "./src/shared" },
-		define: { __FLOWORK_VERSION__: JSON.stringify(pkg.version) },
-		sourcemap: true,
-		logLevel: "warning",
-	};
-}
-
 /** pi 要求的最低 Node 版本 */
 const MIN_NODE = [22, 19];
 
@@ -73,7 +50,7 @@ function nvmNodeCandidates() {
 }
 
 /**
- * 选择运行网页版后端（以及其中 pi worker）的 Node，依次尝试：
+ * 选择运行开发、测试与内核发行工具的 Node，依次尝试：
  * 1. 当前 Node（≥ 22.19 时）；
  * 2. 环境变量 FLOWORK_NODE 指定的 Node；
  * 3. nvm 已安装的 Node 中满足要求的最高版本；

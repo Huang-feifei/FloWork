@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { KernelUpdateStatus } from "@shared/kernel";
 import { api, errorText } from "../../api/client";
-import { useApp } from "../../store";
 import { Badge, Button, Card } from "../ui";
 
 const PHASE_LABELS: Record<KernelUpdateStatus["phase"], string> = {
@@ -10,13 +9,11 @@ const PHASE_LABELS: Record<KernelUpdateStatus["phase"], string> = {
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 export function KernelTab() {
-	const shell = useApp((s) => s.info?.shell);
 	const [status, setStatus] = useState<KernelUpdateStatus | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [requesting, setRequesting] = useState(false);
 
 	useEffect(() => {
-		if (shell !== "electron") return;
 		let alive = true;
 		let pushed = false;
 		const unsubscribe = api.onPush((push) => {
@@ -24,9 +21,7 @@ export function KernelTab() {
 		});
 		void api.kernel.status().then((next) => { if (alive && !pushed) setStatus(next); }, (e) => { if (alive) setError(errorText(e)); });
 		return () => { alive = false; unsubscribe(); };
-	}, [shell]);
-
-	if (shell !== "electron") return <Card><p className="text-[13.5px] text-muted">独立内核更新目前仅支持桌面版。网页版请由开发者更新依赖并重新构建后端。</p></Card>;
+	}, []);
 
 	const busy = requesting || status?.phase === "checking" || status?.phase === "downloading" || status?.phase === "verifying";
 	const run = async (action: () => Promise<unknown>) => {

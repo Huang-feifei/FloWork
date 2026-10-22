@@ -73,7 +73,7 @@ function LogsTab() {
 
 	const rows: Array<[string, string]> = [
 		["后端", connection === "open" ? "已连接" : connection === "connecting" ? "连接中…" : "已断开"],
-		["外壳", info?.shell === "web" ? "网页版（WebSocket）" : "桌面版（Electron IPC）"],
+		["外壳", "桌面版（Electron IPC）"],
 		["Node", info?.versions.node ?? "…"],
 		["Electron", info?.versions.electron ?? "—"],
 		["pi", info?.versions.pi ?? "1.1.0"],

@@ -1,5 +1,5 @@
 /**
- * worker 子进程的抽象。桌面版用 Electron utilityProcess，网页版用 Node child_process.fork。
+ * Electron utilityProcess worker 的最小接口，可在单元测试中注入替身。
  */
 import type { MainToWorker, WorkerToMain } from "@shared/protocol";
 

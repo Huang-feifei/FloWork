@@ -1,144 +1,38 @@
-/**
- * 开发辅助测试共用：在 out/ 下启动一个隔离的网页版后端（临时数据目录 + 空闲端口 + IPC 优雅关闭），
- * 并提供与 test-sessions.mjs 一致的 WebSocket 客户端与断言计数。
- *
- * 调用方固定骨架（见 scripts/test-*.mjs）：
- *   const checks = createChecks();
- *   if (!installRelayFromEnv()) {
- *     await main(checks).then(
- *       () => checks.finish("XXX REGRESSION OK"),
- *       (error) => { console.error(`XXX REGRESSION FAILED\n${error?.stack ?? error}`); process.exitCode = 1; },
- *     );
- *   }
- */
+/** 隔离 Electron 后端回归：真实 utilityProcess worker + 父子进程 IPC，无应用 HTTP/WebSocket 服务。 */
 import assert from "node:assert/strict";
-import childProcess from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { syncBuiltinESMExports } from "node:module";
-import { createServer } from "node:net";
-import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
-import { setTimeout as sleep } from "node:timers/promises";
-import WebSocket from "ws";
-import { root } from "../web-build-options.mjs";
+import { randomUUID } from "node:crypto";
+import { join } from "node:path";
+import electronPath from "electron";
+import { root } from "../runtime.mjs";
 
-/** 单次等待的默认上限 */
 export const TIMEOUT_MS = 45_000;
-/** wrapper 通过 IPC 请求隔离 server 关闭的消息字段 */
-const SHUTDOWN_MESSAGE = "floworkSessionsShutdown";
-/** 子进程输出保留的尾部长度，出错时用于诊断 */
-const OUTPUT_TAIL = 16_000;
-
 export function deadline(promise, label, ms = TIMEOUT_MS) {
 	let timer;
 	return Promise.race([
 		promise,
-		new Promise((_, reject) => {
-			timer = setTimeout(() => reject(new Error(`${label} 超时（${ms}ms）`)), ms);
-		}),
+		new Promise((_, reject) => { timer = setTimeout(() => reject(new Error(`${label} 超时（${ms}ms）`)), ms); }),
 	]).finally(() => clearTimeout(timer));
 }
 
-export async function freePort() {
-	const server = createServer();
-	await new Promise((resolve, reject) => {
-		server.once("error", reject);
-		server.listen(0, "127.0.0.1", resolve);
-	});
-	const port = server.address().port;
-	await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
-	return port;
-}
-
-/**
- * 在 `--import` 注入的子进程里安装信号转发（由 startIsolatedBackend 使用）：
- * - wrapper：拦截 start-web 启动真实 server 的 spawn，注入 relay 并转发关闭消息；
- * - server：收到关闭消息后给自己发 SIGTERM，交给 start-web 优雅关闭（Windows 下 kill 不是优雅关闭）。
- * 返回 true 表示当前进程是注入的 relay，调用方不应继续跑测试主体。
- */
-export function installRelayFromEnv() {
-	const role = process.env.FLOWORK_SESSIONS_TEST_RELAY;
-	if (!role) return false;
-	delete process.env.FLOWORK_SESSIONS_TEST_RELAY;
-	const entry = process.env.FLOWORK_TEST_RELAY_ENTRY;
-	if (role === "server") {
-		// 去掉 --import，避免 start-web 启动的 server 再次注入
-		const index = process.execArgv.indexOf("--import");
-		if (index !== -1 && process.execArgv[index + 1] === entry) process.execArgv.splice(index, 2);
-		process.on("message", (message) => {
-			if (message?.[SHUTDOWN_MESSAGE]) process.emit("SIGTERM");
-		});
-		return true;
-	}
-	const originalSpawn = childProcess.spawn;
-	let server;
-	childProcess.spawn = (command, args, options) => {
-		server = originalSpawn(command, ["--import", entry, ...args], {
-			...options,
-			stdio: ["inherit", "inherit", "inherit", "ipc"],
-			env: { ...options.env, FLOWORK_SESSIONS_TEST_RELAY: "server" },
-		});
-		return server;
-	};
-	syncBuiltinESMExports();
-	process.on("message", (message) => {
-		if (message?.[SHUTDOWN_MESSAGE] && server?.connected) server.send(message);
-	});
-	return true;
-}
-
 class Client {
-	constructor(socket) {
-		this.socket = socket;
-		this.sequence = 0;
-		this.pending = new Map();
+	constructor(host, id) {
+		this.host = host;
+		this.id = id;
 		this.pushes = [];
 		this.listeners = new Set();
-		socket.on("message", (data) => {
-			try {
-				const frame = JSON.parse(String(data));
-				if (frame.push) {
-					this.pushes.push(frame.push);
-					for (const listener of [...this.listeners]) listener();
-				} else {
-					const pending = this.pending.get(frame.id);
-					if (!pending) return;
-					this.pending.delete(frame.id);
-					frame.ok ? pending.resolve(frame.result) : pending.reject(new Error(frame.error));
-				}
-			} catch (error) {
-				this.fail(error);
-			}
-		});
-		socket.on("error", (error) => this.fail(error));
-		socket.on("close", () => this.fail(new Error("WebSocket 已关闭")));
+		this.closed = false;
 	}
-
-	fail(error) {
-		for (const pending of this.pending.values()) pending.reject(error);
-		this.pending.clear();
+	push(value) {
+		this.pushes.push(value);
+		for (const listener of [...this.listeners]) listener();
 	}
-
 	call(method, params) {
-		const id = String(++this.sequence);
-		const result = new Promise((resolve, reject) => {
-			if (this.socket.readyState !== WebSocket.OPEN) return reject(new Error("WebSocket 未连接"));
-			this.pending.set(id, { resolve, reject });
-			this.socket.send(JSON.stringify({ id, method, params }), (error) => {
-				if (error) {
-					this.pending.delete(id);
-					reject(error);
-				}
-			});
-		});
-		return deadline(result, method).finally(() => this.pending.delete(id));
+		if (this.closed) return Promise.reject(new Error("IPC 客户端已关闭"));
+		return this.host.rpc("request", { clientId: this.id, method, params });
 	}
-
-	send(handleId, command) {
-		return this.call("session.send", { handleId, command });
-	}
-
-	/** predicate(push, index)：index 为 pushes 中的下标，便于按游标推进 */
+	send(handleId, command) { return this.call("session.send", { handleId, command }); }
 	waitPush(predicate, from = 0, label = "推送", timeoutMs = TIMEOUT_MS) {
 		let listener;
 		const result = new Promise((resolve) => {
@@ -151,164 +45,137 @@ class Client {
 		});
 		return deadline(result, label, timeoutMs).finally(() => this.listeners.delete(listener));
 	}
-
 	async close() {
-		if (this.socket.readyState === WebSocket.CLOSED) return;
-		const closed = new Promise((resolve) => this.socket.once("close", resolve));
-		this.socket.close();
-		try {
-			await deadline(closed, "WebSocket 关闭", 3000);
-		} catch {
-			this.socket.terminate();
-			await deadline(closed, "WebSocket terminate", 3000);
-		}
+		if (this.closed) return;
+		this.closed = true;
+		this.host.clients.delete(this.id);
+		await this.host.rpc("close", { clientId: this.id });
 	}
 }
 
-export async function connect(url) {
-	const socket = new WebSocket(url.replace(/^http/, "ws") + "ws", { origin: url.slice(0, -1) });
-	const client = new Client(socket);
-	try {
-		await deadline(new Promise((resolve, reject) => {
-			socket.once("open", resolve);
-			socket.once("error", reject);
-		}), "WebSocket 连接", 2000);
-		return client;
-	} catch (error) {
-		socket.terminate();
-		throw error;
-	}
+/** 创建独立逻辑客户端，保留原有跨客户端 owner、广播和断开清理测试。 */
+export async function connect(endpoint) {
+	await endpoint.ready;
+	const id = randomUUID();
+	const client = new Client(endpoint, id);
+	endpoint.clients.set(id, client);
+	try { await endpoint.rpc("connect", { clientId: id }); return client; }
+	catch (error) { endpoint.clients.delete(id); throw error; }
 }
 
-/**
- * 启动隔离后端：out/ 下新建临时根目录，数据目录与 pi 配置目录都指向它，选空闲端口，
- * 用 `--import` 注入 relay 以便 IPC 优雅关闭。当前进程的 FLOWORK_* 环境变量也会被改写，
- * 使测试里直接 import 的 SDK 落在同一隔离目录。
- */
-export async function startIsolatedBackend({ port, label = "isolated", extraEnv = {}, entry } = {}) {
-	assert.ok(existsSync(join(root, "out/web/server/index.js")), "缺少构建产物 out/web/server/index.js；请先 npm run build:web");
+export async function startIsolatedBackend({ label = "isolated", extraEnv = {} } = {}) {
+	const entry = join(root, "out/test-support/electron-test-host.cjs");
+	assert.ok(existsSync(entry) && existsSync(join(root, "out/main/pi-worker.js")), "缺少桌面回归构建产物；请先 npm run build && npm run build:test");
 	mkdirSync(join(root, "out"), { recursive: true });
-	// 先算出 relay 入口（调用方脚本本身），避免参数非法时留下临时目录
-	const entryPath = entry ?? process.argv[1];
-	assert.ok(entryPath, "startIsolatedBackend 需要由脚本文件调用，或显式传入 entry");
-	const entryUrl = pathToFileURL(resolve(entryPath)).href;
 	const base = mkdtempSync(join(root, "out", `test-${label}-`));
-	const dataDir = join(base, "data");
-	const agentDir = join(base, "agent");
+	const dataDir = join(base, "data"), agentDir = join(base, "agent");
 	mkdirSync(dataDir, { recursive: true });
 	mkdirSync(agentDir, { recursive: true });
-	Object.assign(process.env, {
-		FLOWORK_DATA_DIR: dataDir,
-		FLOWORK_PI_AGENT_DIR: agentDir,
-		PI_CODING_AGENT_DIR: agentDir,
-		PI_SKIP_VERSION_CHECK: "1",
-	});
-	const chosenPort = port ?? await freePort();
-	const url = `http://127.0.0.1:${chosenPort}/`;
-	const child = childProcess.spawn(process.execPath, ["--import", entryUrl, join(root, "scripts/start-web.mjs")], {
-		cwd: root,
-		stdio: ["ignore", "pipe", "pipe", "ipc"],
-		env: {
-			...process.env,
-			FLOWORK_PORT: String(chosenPort),
-			FLOWORK_SESSIONS_TEST_RELAY: "wrapper",
-			FLOWORK_TEST_RELAY_ENTRY: entryUrl,
-			...extraEnv,
-		},
-	});
-	let output = "";
+	Object.assign(process.env, { FLOWORK_DATA_DIR: dataDir, FLOWORK_PI_AGENT_DIR: agentDir, PI_CODING_AGENT_DIR: agentDir, PI_SKIP_VERSION_CHECK: "1" });
+	const env = { ...process.env, ...extraEnv };
+	delete env.ELECTRON_RUN_AS_NODE;
+	const child = spawn(electronPath, [entry], { cwd: root, stdio: ["ignore", "pipe", "pipe", "ipc"], env });
+	const pending = new Map(), clients = new Map();
+	let output = "", exitResult, resolveReady, rejectReady;
+	const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+	ready.catch(() => undefined);
+	const fail = (error) => {
+		rejectReady(error);
+		for (const request of pending.values()) request.reject(error);
+		pending.clear();
+	};
 	for (const stream of [child.stdout, child.stderr]) stream.on("data", (chunk) => {
-		output = (output + chunk.toString()).slice(-OUTPUT_TAIL);
+		output = (output + chunk.toString()).slice(-16_000);
 		process.stdout.write(chunk);
 	});
-	let exitResult;
 	const exited = new Promise((resolve, reject) => {
-		child.once("error", reject);
+		child.once("error", (error) => { fail(error); reject(error); });
 		child.once("exit", (code, signal) => {
 			exitResult = { code, signal };
+			fail(new Error(`Electron 测试进程已退出：${JSON.stringify(exitResult)}\n${output}`));
 			resolve(exitResult);
 		});
 	});
 	exited.catch(() => undefined);
-
-	/** 轮询到后端可连接；signal 中断时抛出 AbortError，供调用方区分 Ctrl-C */
-	const waitReady = async ({ timeoutMs = TIMEOUT_MS, signal } = {}) => {
-		const start = Date.now();
-		for (;;) {
-			if (exitResult) throw new Error(`隔离 server 提前退出：${JSON.stringify(exitResult)}\n${output}`);
-			if (signal?.aborted) {
-				const error = new Error("等待隔离 server 启动时被中断");
-				error.name = "AbortError";
-				throw error;
-			}
-			try {
-				const probe = await connect(url);
-				await probe.close();
-				return url;
-			} catch (error) {
-				if (Date.now() - start > timeoutMs) throw new Error(`隔离 server 启动失败：${error.message}\n${output}`);
-				await sleep(150, undefined, { signal });
-			}
-		}
+	child.on("message", (payload) => {
+		try {
+			const frame = JSON.parse(payload);
+			if (frame.ready) { resolveReady(); return; }
+			if (frame.push) { for (const client of clients.values()) client.push(frame.push); return; }
+			const request = pending.get(frame.id);
+			if (!request) return;
+			pending.delete(frame.id);
+			frame.ok ? request.resolve(frame.result) : request.reject(new Error(frame.error));
+		} catch (error) { fail(error); }
+	});
+	const endpoint = {
+		ready, clients,
+		rpc(kind, params = {}) {
+			if (exitResult || !child.connected) return Promise.reject(new Error("Electron IPC 已断开"));
+			const id = randomUUID();
+			const result = new Promise((resolve, reject) => {
+				pending.set(id, { resolve, reject });
+				child.send(JSON.stringify({ id, kind, ...params }), (error) => {
+					if (error) { pending.delete(id); reject(error); }
+				});
+			});
+			return deadline(result, `${kind} ${params.method ?? ""}`).finally(() => pending.delete(id));
+		},
 	};
-
-	let stopped = false;
-	let cleaned = false;
-	/** 确认子进程退出后才清理临时目录；退出码非 0 视为失败 */
+	const waitReady = async ({ timeoutMs = TIMEOUT_MS, signal } = {}) => {
+		if (signal?.aborted) throw new Error("等待 Electron 时被中断");
+		let abort;
+		try {
+			await deadline(signal ? Promise.race([ready, new Promise((_, reject) => {
+				abort = () => reject(new Error("等待 Electron 时被中断"));
+				signal.addEventListener("abort", abort, { once: true });
+			})]) : ready, "Electron 启动", timeoutMs);
+			return endpoint;
+		} finally { if (abort) signal.removeEventListener("abort", abort); }
+	};
+	let stopped = false, cleaned = false;
+	const cleanup = () => {
+		if (cleaned) return;
+		rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		cleaned = true;
+	};
+	const onExit = () => {
+		if (cleaned) return;
+		if (child.exitCode === null && child.signalCode === null) child.kill();
+		// 未确认退出时不删除活动文件。
+		if (exitResult) cleanup();
+	};
+	process.once("exit", onExit);
 	const stop = async () => {
 		if (stopped) return;
 		stopped = true;
-		let confirmed = false;
-		try {
-			if (child.exitCode === null && child.signalCode === null && child.connected) child.send({ [SHUTDOWN_MESSAGE]: true });
-			const result = await deadline(exited, "隔离 server 与 start-web 子进程退出", 20_000);
-			confirmed = true;
-			assert.equal(result.code, 0, `隔离 server 退出异常：${JSON.stringify(result)}\n${output}`);
+		if (!exitResult && child.connected) child.send(JSON.stringify({ kind: "shutdown" }));
+		let result;
+		try { result = await deadline(exited, "隔离 Electron 退出", 20_000); }
+		catch (error) {
+			child.kill();
+			await deadline(exited, "强制退出 Electron", 5000);
+			throw error;
 		} finally {
-			if (confirmed) {
-				rmSync(base, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
-				cleaned = true;
-				console.log(`CLEANED ${base}`);
-			} else console.error(`未确认子进程退出，保留隔离目录避免清理活动文件：${base}`);
+			if (exitResult) { cleanup(); process.off("exit", onExit); console.log(`CLEANED ${base}`); }
 		}
+		assert.equal(result.code, 0, `Electron 退出异常：${JSON.stringify(result)}\n${output}`);
 	};
-
-	// 兜底：进程异常退出（未捕获异常 / 未处理拒绝）时也要收掉子进程与临时目录，避免留下孤儿 server
-	process.once("exit", () => {
-		if (cleaned) return;
-		if (child.exitCode === null && child.signalCode === null) child.kill();
-		rmSync(base, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
-		process.stderr.write(`异常退出，已清理隔离目录：${base}\n`);
-	});
-
-	return { url, port: chosenPort, root: base, dataDir, agentDir, child, exited, output: () => output, waitReady, stop };
+	return { endpoint, root: base, dataDir, agentDir, child, exited, output: () => output, waitReady, stop };
 }
 
-/** 断言计数：逐条打印 ✓/✗，失败累计，finish() 统一决定退出码 */
 export function createChecks() {
 	let failed = 0;
 	return {
 		check(label, condition) {
-			if (condition) {
-				console.log(`✓ ${label}`);
-				return true;
-			}
-			failed++;
-			console.log(`✗ ${label}`);
-			return false;
+			if (!condition) failed++;
+			console.log(`${condition ? "✓" : "✗"} ${label}`);
+			return !!condition;
 		},
-		get failed() {
-			return failed;
-		},
-		/** 全部通过打印总结行；否则打印失败项数并置 process.exitCode = 1 */
+		get failed() { return failed; },
 		finish(summary) {
-			if (failed > 0) {
-				console.error(`${failed} 项断言失败`);
-				process.exitCode = 1;
-				return false;
-			}
-			console.log(summary);
-			return true;
+			if (failed > 0) { console.error(`${failed} 项断言失败`); process.exitCode = 1; return false; }
+			console.log(summary); return true;
 		},
 	};
 }

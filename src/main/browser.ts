@@ -35,11 +35,9 @@ export class BrowserManager {
 	private readonly retiredOwners = new Set<string>();
 	private blocked = false;
 	private disposed = false;
-	private readonly controlPort: string;
 	private readonly appOrigin: string;
 
 	constructor(private readonly win: BrowserWindow, appUrl: string) {
-		this.controlPort = String(Number(process.env.FLOWORK_PORT || 17321));
 		this.appOrigin = new URL(appUrl).origin;
 		this.guestSession = session.fromPartition(`flowork-browser-${randomUUID()}`, { cache: false });
 		this.guestSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
@@ -55,7 +53,7 @@ export class BrowserManager {
 			const blocked = this.isControlUrl(details.url);
 			if (blocked) {
 				const tab = this.findByContents(details.webContents);
-				if (tab) this.setError(tab, "禁止访问 FloWork 应用及控制服务。");
+				if (tab) this.setError(tab, "禁止访问 FloWork 应用自身地址。");
 			}
 			callback({ cancel: blocked });
 		});
@@ -182,9 +180,7 @@ export class BrowserManager {
 			const url = new URL(input);
 			const httpOrigin = url.protocol === "ws:" || url.protocol === "wss:"
 				? `${url.protocol === "ws:" ? "http:" : "https:"}//${url.host}` : url.origin;
-			if (this.appOrigin !== "null" && httpOrigin === this.appOrigin) return true;
-			const local = url.hostname === "localhost" || url.hostname.endsWith(".localhost") || url.hostname.startsWith("127.") || url.hostname === "[::1]";
-			return local && (url.port || (url.protocol === "https:" || url.protocol === "wss:" ? "443" : "80")) === this.controlPort;
+			return this.appOrigin !== "null" && httpOrigin === this.appOrigin;
 		} catch { return false; }
 	}
 

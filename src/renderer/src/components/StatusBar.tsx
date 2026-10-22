@@ -77,7 +77,7 @@ export function StatusBar() {
 		<footer className="flex h-7 shrink-0 items-center gap-0.5 border-t border-border bg-chrome px-3 text-[11.5px] text-muted select-none">
 			<span className="flex items-center gap-1.5 rounded-full bg-panel-2 px-2.5 py-0.5 font-medium text-fg">
 				<span className="text-primary">✻</span>
-				<span className="tabular-nums">{connection === "open" ? `v${info?.version ?? "…"}` : "离线"}</span>
+				<span className="tabular-nums">{connection === "open" ? `v${info?.version ?? "…"}` : connection === "error" ? "初始化失败" : "启动中"}</span>
 			</span>
 			{project && (
 				<span
@@ -120,7 +120,7 @@ export function StatusBar() {
 				))}
 			{view === "chat" && <Usage />}
 			{node && <span className="px-2.5 text-faint">node {node}</span>}
-			<span className="px-2.5 text-faint">{info?.shell === "web" ? "网页版" : "桌面版"}</span>
+			<span className="px-2.5 text-faint">桌面版</span>
 		</footer>
 	);
 }

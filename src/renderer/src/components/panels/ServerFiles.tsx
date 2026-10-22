@@ -49,7 +49,6 @@ export function ServerFiles() {
 	const hostId = useApp((s) => s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId ?? null);
 	const host = useApp((s) => s.hosts.find((h) => h.id === hostId));
 	const projectCwd = useApp((s) => s.cwd);
-	const nativeDialogs = useApp((s) => s.info?.nativeDialogs ?? false);
 	const { openPreview, pushNotice } = useApp.getState();
 
 	const [listing, setListing] = useState<ServerDirListing | null>(null);
@@ -116,22 +115,10 @@ export function ServerFiles() {
 	const download = async (entry: WorkspaceEntry) => {
 		if (!hostId) return;
 		try {
-			if (nativeDialogs) {
-				const target = await api.pickSavePath(entry.name);
-				if (!target) return;
-				const saved = await api.server.exportToLocal(hostId, entry.path, target);
-				pushNotice("info", `已保存到 ${target}（${formatSize(saved.size)}）`);
-				return;
-			}
-			const file = await api.server.download(hostId, entry.path);
-			const bytes = Uint8Array.from(atob(file.dataBase64), (c) => c.charCodeAt(0));
-			const url = URL.createObjectURL(new Blob([bytes]));
-			const anchor = document.createElement("a");
-			anchor.href = url;
-			anchor.download = file.name;
-			anchor.click();
-			URL.revokeObjectURL(url);
-			pushNotice("info", `已下载 ${file.name}（${formatSize(file.size)}）`);
+			const target = await api.pickSavePath(entry.name);
+			if (!target) return;
+			const saved = await api.server.exportToLocal(hostId, entry.path, target);
+			pushNotice("info", `已保存到 ${target}（${formatSize(saved.size)}）`);
 		} catch (e) {
 			pushNotice("error", `下载失败：${errorText(e)}`);
 		}

@@ -90,7 +90,6 @@ function ResourceRow({ r, cwd, onChanged }: { r: ResourceInfo; cwd: string; onCh
 }
 
 function ImportForm({ kind, cwd, projectTrusted, onDone }: { kind: ResourceKind; cwd: string; projectTrusted: boolean; onDone: () => void }) {
-	const nativeDialogs = useApp((s) => s.info?.nativeDialogs);
 	const pushNotice = useApp((s) => s.pushNotice);
 	const [path, setPath] = useState("");
 	const [scope, setScope] = useState<"user" | "project">("user");
@@ -111,7 +110,7 @@ function ImportForm({ kind, cwd, projectTrusted, onDone }: { kind: ResourceKind;
 	return (
 		<div className="flex items-center gap-2 border-t border-border bg-panel-2/40 px-5 py-3">
 			<Input value={path} onChange={(e) => setPath(e.target.value)} placeholder={IMPORT_HINT[kind]} className="flex-1" />
-			{nativeDialogs && kind !== "prompt" && (
+			{kind !== "prompt" && (
 				<Button size="sm" onClick={() => void api.pickFolder().then((p) => p && setPath(p))}>
 					选择文件夹
 				</Button>

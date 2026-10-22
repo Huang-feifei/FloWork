@@ -10,7 +10,7 @@ import { build } from "esbuild";
 import * as tar from "tar";
 import { buildKernelAdapter } from "./lib/build-kernel-adapter.mjs";
 import { probeKernel } from "./lib/kernel-probe.mjs";
-import { backendRuntime } from "./web-build-options.mjs";
+import { backendRuntime } from "./runtime.mjs";
 
 const runtimeEnvironment = await backendRuntime();
 if (runtimeEnvironment.command !== process.execPath || (runtimeEnvironment.env?.ELECTRON_RUN_AS_NODE === "1" && !process.versions.electron)) {

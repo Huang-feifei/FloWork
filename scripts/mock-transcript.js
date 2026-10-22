@@ -1,4 +1,4 @@
-// 截图 / 样式检查用的示例状态（仅开发模式，由 scripts/screenshot.cjs 注入页面执行）
+// 截图 / 样式检查用的示例状态（由 scripts/shoot-ui.mjs 在隔离桌面应用中注入）
 // 直接改 store，不经过后端：只为了让界面处于有内容的状态，便于肉眼与截图检查。
 (() => {
 	const store = window.__floworkStore;
@@ -112,7 +112,7 @@
 			),
 			tr("c2", "edit", "Successfully replaced 1 block", { diff }),
 			a([{ type: "toolCall", id: "c3", name: "bash", arguments: { command: "npm run typecheck" } }], usage(6500, 40), "toolUse", "n4"),
-			tr("c3", "bash", "> flowork@0.1.0 typecheck\n> tsc --noEmit -p tsconfig.node.json\n> tsc --noEmit -p tsconfig.web.json\n"),
+			tr("c3", "bash", "> flowork@0.1.0 typecheck\n> tsc --noEmit -p tsconfig.node.json\n> tsc --noEmit -p tsconfig.renderer.json\n"),
 			a(
 				[
 					{

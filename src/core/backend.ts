@@ -1,6 +1,6 @@
 /**
  * 后端核心：处理来自界面的请求，管理 worker，向界面推送事件。
- * 桌面版（Electron IPC）与网页版（WebSocket）共用同一个 Backend，外壳只负责传输。
+ * 由 Electron 主进程承载，通过 IPC 服务桌面界面；测试可注入隔离的宿主能力。
  */
 import {
 	type AppInfo,
@@ -17,7 +17,7 @@ import {
 	type SshTestResult,
 } from "@shared/protocol";
 import type { KernelUpdateController } from "@shared/kernel";
-import { isDirectory, listDirs } from "./fs";
+import { isDirectory } from "./fs";
 import { DatabaseManager } from "./database";
 import type { DatabaseBrowseParams, DatabaseInput, DatabaseQueryParams } from "@shared/database";
 import { probeHostMonitor } from "./host-monitor";
@@ -54,23 +54,23 @@ export interface BackendHost {
 	/** 独立内核更新仅由桌面外壳提供。 */
 	kernelUpdates?: KernelUpdateController;
 	restartForKernel?: () => Promise<void>;
-	/** 系统原生文件夹对话框；网页版不提供 */
+	/** 系统原生文件夹对话框 */
 	pickFolder?: () => Promise<string | null>;
-	/** 系统原生文件夹对话框（多选）；网页版不提供 */
+	/** 系统原生文件夹对话框（多选） */
 	pickFolders?: () => Promise<string[]>;
-	/** 把文件 / 文件夹移入系统回收站；网页版不提供（退回永久删除） */
+	/** 把文件 / 文件夹移入系统回收站；隔离测试可不提供 */
 	trashItem?: (absPath: string) => Promise<void>;
-	/** 在系统文件管理器中定位；网页版不提供 */
+	/** 在系统文件管理器中定位 */
 	revealItem?: (absPath: string) => void;
-	/** 在系统终端中打开目录；网页版不提供 */
+	/** 在系统终端中打开目录 */
 	openTerminal?: (absDir: string) => void;
-	/** 系统原生文件选择对话框（挑选 SSH 私钥）；网页版不提供 */
+	/** 系统原生文件选择对话框（挑选 SSH 私钥） */
 	pickFile?: () => Promise<string | null>;
 	/** SQLite 文件选择，与 SSH 私钥过滤器分开。 */
 	pickDatabaseFile?: () => Promise<string | null>;
-	/** 系统「保存到」对话框（下载远端文件用）；网页版不提供（退回浏览器下载） */
+	/** 系统「保存到」对话框（下载远端文件用） */
 	pickSavePath?: (defaultName?: string) => Promise<string | null>;
-	/** 系统级加密（Windows DPAPI / macOS 钥匙串 / libsecret），用于落盘的 SSH 密码；网页版不提供（退回明文） */
+	/** 系统级加密（Windows DPAPI / macOS 钥匙串 / libsecret），用于落盘的 SSH 密码 */
 	secrets?: SecretCodec;
 }
 
@@ -155,7 +155,6 @@ export class Backend {
 					versions: { ...process.versions, pi: this.host.kernelUpdates?.status().current.piVersion },
 					agentDir: getPiAgentDir(),
 					shell: this.host.shell,
-					nativeDialogs: this.host.pickFolder !== undefined,
 					ssh: sshBinary(),
 				} satisfies AppInfo;
 			case "kernel.status":
@@ -228,10 +227,6 @@ export class Backend {
 			}
 			case "projects.discover":
 				return this.discoverProjects();
-			case "fs.listDirs": {
-				const params = rawParams as BackendMethods["fs.listDirs"]["params"];
-				return listDirs(params?.path);
-			}
 			case "workspace.list": {
 				const params = rawParams as BackendMethods["workspace.list"]["params"];
 				const host = await this.hostOf(params.root);

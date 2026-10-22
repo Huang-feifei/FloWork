@@ -3,8 +3,8 @@ import childProcess from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { backendRuntime } from "./web-build-options.mjs";
-import { connect, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
+import { backendRuntime } from "./runtime.mjs";
+import { connect, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 
 const script = fileURLToPath(import.meta.url);
 const root = resolve(dirname(script), "..");
@@ -278,7 +278,7 @@ async function runChecks(client, observer, SessionManager, data) {
 
 async function main() {
 	const args = process.argv.slice(2);
-	if (args.some((arg) => arg !== "--serve")) throw new Error("用法：node scripts/test-sessions.mjs [--serve]（先 npm run build:web）");
+	if (args.length > 0) throw new Error("用法：node scripts/test-sessions.mjs（先 npm run build && npm run build:test）");
 	const runtime = await backendRuntime();
 	if (runtime.command !== process.execPath || runtime.env.ELECTRON_RUN_AS_NODE && process.env.ELECTRON_RUN_AS_NODE !== "1") {
 		const child = childProcess.spawn(runtime.command, [script, ...args], { cwd: root, stdio: "inherit", env: { ...process.env, ...runtime.env } });
@@ -292,39 +292,27 @@ async function main() {
 	let client;
 	let observer;
 	let shutdownRequested = false;
-	let signalResolve;
-	const interrupted = new Promise((resolve) => { signalResolve = resolve; });
 	const controller = new AbortController();
 	const stop = () => {
 		shutdownRequested = true;
 		controller.abort();
-		signalResolve();
 	};
 	for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, stop);
 	try {
 		backend = await startIsolatedBackend({ label: "sessions" });
 		const { SessionManager } = await import("@earendil-works/pi-coding-agent");
 		const data = createFixtures(SessionManager, backend.root, backend.agentDir);
-		let url;
+		let endpoint;
 		try {
-			url = await backend.waitReady({ signal: controller.signal });
+			endpoint = await backend.waitReady({ signal: controller.signal });
 		} catch (error) {
 			if (shutdownRequested) return;
 			throw error;
 		}
-		client = await connect(url);
-		observer = await connect(url);
-		if (args.includes("--serve")) {
-			await client.call("projects.add", { paths: [data.project, data.otherProject] });
-			console.log(`\nSESSION UI URL: ${url}\nSESSION FIXTURE ROOT: ${backend.root}\nPROJECT: ${data.project}\nSIGINT/SIGTERM 后关闭隔离 server，再清理 fixtures。`);
-			await Promise.race([
-				interrupted,
-				backend.exited.then((result) => { throw new Error(`server 意外退出：${JSON.stringify(result)}`); }),
-			]);
-		} else {
-			await runChecks(client, observer, SessionManager, data);
-			console.log("SESSION REGRESSION OK（隔离真实 WebSocket；未调用模型）");
-		}
+		client = await connect(endpoint);
+		observer = await connect(endpoint);
+		await runChecks(client, observer, SessionManager, data);
+		console.log("SESSION REGRESSION OK（隔离 Electron IPC；未调用模型）");
 	} finally {
 		for (const signal of ["SIGINT", "SIGTERM"]) process.off(signal, stop);
 		await observer?.close();
@@ -333,7 +321,7 @@ async function main() {
 	}
 }
 
-if (!installRelayFromEnv()) await main().catch((error) => {
+await main().catch((error) => {
 	console.error(`SESSION REGRESSION FAILED\n${error.stack ?? error}`);
 	process.exitCode = 1;
 });

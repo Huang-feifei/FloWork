@@ -78,7 +78,7 @@ try {
 	const savedD = disk(fileA).hosts[0];
 	checks.check("改为 agent 认证后不再保存口令", savedD.password === undefined && savedD.passwordEnc === undefined);
 
-	// 7. 无 codec（网页版）：保持明文
+	// 7. 无 codec（隔离测试 / 系统加密不可用）：保持明文
 	const fileE = join(root, "e.json");
 	await new HostStore(fileE).add({ host: "web", auth: "password", password: "pw" });
 	checks.check("无 codec 时明文保存", disk(fileE).hosts[0].password === "pw");

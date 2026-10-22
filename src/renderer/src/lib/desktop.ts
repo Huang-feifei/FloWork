@@ -1,4 +1,2 @@
-/** 运行外壳判断：桌面版由 preload 注入 floworkTransport，网页版没有 */
-export const isDesktop = typeof window !== "undefined" && !!window.floworkTransport;
-
+/** 桌面平台差异（macOS 使用系统窗口按钮与 Command 快捷键）。 */
 export const isMac = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent);

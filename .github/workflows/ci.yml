@@ -22,7 +22,15 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      # npm test 已包含类型检查、网页版构建和全部回归脚本。
+      # npm test 包含类型检查、桌面构建及 Electron IPC 回归，不再启动 Web 应用后端。
       - run: npm test
-      - name: Build desktop app
-        run: npm run build
+      - name: Desktop IPC smoke test (isolated)
+        shell: pwsh
+        run: |
+          $testRoot = Join-Path $env:RUNNER_TEMP "flowork-smoke"
+          $env:FLOWORK_DATA_DIR = Join-Path $testRoot "data"
+          $env:FLOWORK_PI_AGENT_DIR = Join-Path $testRoot "agent"
+          $env:PI_CODING_AGENT_DIR = $env:FLOWORK_PI_AGENT_DIR
+          $env:PI_SKIP_VERSION_CHECK = "1"
+          & node_modules/.bin/electron.cmd . --smoke
+          exit $LASTEXITCODE

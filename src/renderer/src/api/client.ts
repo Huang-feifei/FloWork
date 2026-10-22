@@ -69,7 +69,6 @@ export const api = {
 		inspectKey: (id: string) => call("hosts.inspectKey", { id }),
 		acceptKey: (id: string, fingerprints: string[]) => call("hosts.acceptKey", { id, fingerprints }),
 	},
-	listDirs: (path?: string) => call("fs.listDirs", { path }),
 	/** 服务器目录：按主机 + 绝对路径操作，不受项目根限制 */
 	server: {
 		list: (hostId: string, path?: string) => call("server.list", { hostId, path }),
@@ -124,7 +123,6 @@ export const api = {
 	authCancel: (flowId: string) => call("auth.cancel", { flowId }),
 
 	onPush: (listener: (push: BackendPush) => void) => transport.onPush(listener),
-	onStatus: transport.onStatus.bind(transport),
 	/** 图片生成：模型来自 models.json 里各供应商声明的 imageModels */
 	images: {
 		models: () => call("images.models", undefined),

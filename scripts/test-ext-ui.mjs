@@ -2,11 +2,11 @@
  * 开发辅助：在隔离后端（out/ 下的临时数据目录与空闲端口，不碰 ~/.flowork）测试第三方扩展的 ctx.ui（不调用模型）。
  * 在临时项目里放一个注册 /ask 命令的扩展，依次触发 select / confirm / input / editor、超时、
  * setStatus / setWidget / setEditorText / notify，以及在 withSession 中弹出对话框；结束时随隔离后端一起清理。
- *   node scripts/test-ext-ui.mjs（需先 npm run build:web）
+ *   node scripts/test-ext-ui.mjs（需先 npm run build && npm run build:test）
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { connect, createChecks, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
+import { connect, createChecks, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 
 const EXTENSION = `
 export default function (pi) {
@@ -194,7 +194,7 @@ async function main(checks) {
 }
 
 const checks = createChecks();
-if (!installRelayFromEnv()) await main(checks).then(
+await main(checks).then(
 	() => checks.finish("EXT UI REGRESSION OK（隔离后端；未调用模型）"),
 	(error) => {
 		console.error(`EXT UI REGRESSION FAILED\n${error?.stack ?? error}`);

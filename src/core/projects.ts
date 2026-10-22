@@ -1,5 +1,5 @@
 /**
- * 项目注册表：保存在 ~/.flowork/projects.json，桌面版与网页版共用。
+ * 桌面项目注册表：保存在 ~/.flowork/projects.json。
  * 只记录文件夹路径与显示信息，移除项目不会删除任何文件。
  */
 import { randomUUID } from "node:crypto";

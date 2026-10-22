@@ -3,7 +3,7 @@
  *
  *   界面（renderer） ──Transport──▶ 后端核心（core/Backend） ──worker 消息──▶ pi worker
  *
- * - Transport：桌面版走 Electron IPC（preload 暴露），网页版走 WebSocket。两者的信封格式相同。
+ * - Transport：通过 preload 暴露的 Electron IPC 连接桌面主进程。
  * - worker 命令与事件命名沿用 pi RPC 协议（prompt / abort / get_state / get_tree …），
  *   并补充 RPC 没有的命令（navigate_tree / list_sessions / 登录与配置 …）。
  * - 这里只定义 FloWork 自己的数据形状，不 re-export pi 的类型；pi 的类型只在 src/worker/adapter.ts 中解读。
@@ -534,21 +534,10 @@ export interface AppInfo {
 	version: string;
 	versions: Record<string, string | undefined>;
 	agentDir: string;
-	/** 当前外壳 */
-	shell: "electron" | "web";
-	/** 是否支持系统原生文件夹对话框（仅桌面版） */
-	nativeDialogs: boolean;
+	/** Electron 桌面应用 */
+	shell: "electron";
 	/** 本机 ssh 可执行文件路径；为 null 时无法使用远程功能 */
 	ssh: string | null;
-}
-
-export interface DirListing {
-	path: string;
-	parent: string | null;
-	entries: Array<{ name: string; path: string }>;
-	/** Windows 盘符或 / */
-	roots: string[];
-	home: string;
 }
 
 export interface WorkspaceEntry {
@@ -805,7 +794,6 @@ export interface BackendMethods extends DatabaseMethods {
 	"hosts.inspectKey": { params: { id: string }; result: HostKeyReport };
 	/** 用户确认后更新 known_hosts（只接受与 fingerprints 一致的公钥） */
 	"hosts.acceptKey": { params: { id: string; fingerprints: string[] }; result: { removedFrom: string[] } };
-	"fs.listDirs": { params: { path?: string }; result: DirListing };
 	"workspace.list": { params: { root: string; path?: string }; result: WorkspaceDirListing };
 	"workspace.read": { params: { root: string; path: string }; result: FilePreview };
 	/** 保存文件；expectedMtime 与磁盘不一致时拒绝（文件已被 AI 或外部修改） */
@@ -818,7 +806,7 @@ export interface BackendMethods extends DatabaseMethods {
 	"workspace.rename": { params: { root: string; path: string; name: string }; result: { path: string } };
 	/** 在 path 下新建文件或文件夹；文件夹会自动创建父目录 */
 	"workspace.create": { params: { root: string; path: string; type: "file" | "dir" }; result: { path: string } };
-	/** 删除文件/文件夹；桌面版移入系统回收站，网页版永久删除 */
+	/** 删除文件/文件夹，移入系统回收站 */
 	"workspace.delete": { params: { root: string; path: string }; result: { trashed: boolean } };
 	/** 移动到工作区内的另一个目录（targetDir 为相对路径，"" 表示根） */
 	"workspace.move": { params: { root: string; path: string; targetDir: string }; result: { path: string } };
@@ -911,13 +899,6 @@ export type BackendPush =
 	/** 终端输出；不做回放，重连后只收到之后的数据 */
 	| { type: "terminal_data"; terminalId: string; data: string }
 	| { type: "terminal_exit"; terminalId: string; code: number };
-
-/** 网页版 WebSocket 帧 */
-export type ClientFrame = { id: string; method: BackendMethod; params: unknown };
-export type ServerFrame =
-	| { id: string; ok: true; result: unknown }
-	| { id: string; ok: false; error: string }
-	| { push: BackendPush };
 
 /** 渲染进程看到的传输层；桌面版由 preload 以 window.floworkTransport 暴露 */
 export interface Transport {

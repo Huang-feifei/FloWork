@@ -3,7 +3,7 @@ import { fork } from "node:child_process";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { backendRuntime } from "../web-build-options.mjs";
+import { backendRuntime } from "../runtime.mjs";
 
 function exchange(child, message, predicate) {
 	return new Promise((resolve, reject) => {

@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
-import { backendRuntime } from './web-build-options.mjs';
+import { backendRuntime } from './runtime.mjs';
 // Windows 会在 Electron 退出前保持 ASAR 文件句柄；由普通 Node 父进程负责最终清理。
 if(process.env.FLOWORK_TEST_DATABASE_ASAR==='1' && !process.versions.electron){
  const {default:electron}=await import('electron');const base=await mkdtemp(resolve('out/test-database-asar-'));let code=1;

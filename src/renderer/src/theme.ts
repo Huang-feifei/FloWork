@@ -43,9 +43,9 @@ export function storeTheme(mode: ThemeMode): void {
 	}
 }
 
-/** 通知桌面版主进程跟随主题（窗口背景、原生控件深浅色）；网页版没有这个桥，静默跳过 */
+/** 通知主进程跟随主题（窗口背景、原生控件深浅色） */
 export function syncDesktopTheme(mode: ThemeMode): void {
-	void window.floworkTheme?.set(mode).catch(() => undefined);
+	void window.floworkTheme.set(mode).catch(() => undefined);
 }
 
 /** 监听系统深浅色变化；仅在 mode = system 时需要重新应用 */

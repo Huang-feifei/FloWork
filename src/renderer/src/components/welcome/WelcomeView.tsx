@@ -104,7 +104,7 @@ export function WelcomeView() {
 					<span className="text-[52px] leading-none text-primary">✻</span>
 					<span className="text-[40px] font-semibold tracking-tight text-fg">flowork</span>
 					<span className="rounded-full bg-primary-soft px-3 py-1 text-[12.5px] font-medium text-primary">
-						v{info?.version ?? "…"} · {info?.shell === "web" ? "网页版" : "桌面版"}
+						v{info?.version ?? "…"} · 桌面版
 					</span>
 				</div>
 				<p className="mt-4 max-w-[600px] text-[17px] leading-relaxed text-muted">

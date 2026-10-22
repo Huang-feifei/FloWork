@@ -5,7 +5,7 @@
  *
  * 口令：外壳提供 SecretCodec（桌面版用 Electron safeStorage，即 Windows DPAPI 等系统加密）时，
  * 落盘为 passwordEnc（"enc:v1:" + base64 密文），旧的明文 password 在读取后自动迁移；
- * 没有 codec（网页版）时仍以明文存放。桌面版加密过的口令，网页版无法解密，需要在网页版重新填写。
+ * 未提供 codec（隔离测试）或系统加密不可用时仍以明文存放；无法解密的口令需重新填写。
  * 内存里只用解密后的 password；解密失败的密文原样保留，避免把用户数据写丢。
  */
 import { randomUUID } from "node:crypto";

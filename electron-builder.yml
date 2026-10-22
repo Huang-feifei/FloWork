@@ -7,7 +7,7 @@ productName: FloWork
 directories:
   output: release
 
-# 只打包构建产物与生产依赖：源码、脚本、配置、网页版产物都不进安装包。
+# 只打包桌面构建产物与生产依赖：源码、脚本、配置、测试入口都不进安装包。
 # 生产依赖的 node_modules 由 electron-builder 按 package.json 的 dependencies 单独收集，无需在此列出。
 files:
   - out/main/**

@@ -10,9 +10,14 @@ import { KernelUpdater } from "../core/kernel-updater";
 import { BrowserManager } from "./browser";
 import { registerIpc } from "./ipc";
 import { runSmokeTest } from "./smoke";
+import { runUIScreenshot } from "./screenshot";
 import { bundledAdapterEntry, bundledWorkerEntry, createUtilitySpawner, probeUtilityKernel } from "./spawn";
 
 const isSmoke = process.argv.includes("--smoke");
+const isUIShot = process.argv.includes("--ui-screenshot");
+// 测试和截图隔离 Electron 自身的数据，不读取真实用户的缓存与内核选择。
+if (process.env.FLOWORK_DATA_DIR) app.setPath("userData", join(process.env.FLOWORK_DATA_DIR, "electron"));
+if (isUIShot && (app.isPackaged || !process.env.FLOWORK_DATA_DIR)) throw new Error("界面截图仅支持隔离数据目录下的未打包应用");
 let mainWindow: BrowserWindow | undefined;
 const browsers = new WeakMap<BrowserWindow, BrowserManager>();
 
@@ -169,6 +174,9 @@ function createWindow(show = true): BrowserWindow {
 			sandbox: true,
 			contextIsolation: true,
 			nodeIntegration: false,
+			additionalArguments: isUIShot ? ["--flowork-ui-screenshot"] : [],
+			// 隐藏的截图窗口也要提交 React 的异步视图，不能被后台帧率限制挂起。
+			backgroundThrottling: !isUIShot,
 		},
 	});
 
@@ -201,10 +209,10 @@ function createWindow(show = true): BrowserWindow {
 app.whenReady().then(async () => {
 	await kernelUpdates.initialize();
 	registerIpc(backend, () => mainWindow, (win) => browsers.get(win), isAppUrl);
-	mainWindow = createWindow(!isSmoke);
+	mainWindow = createWindow(!isSmoke && !isUIShot);
 
-	if (isSmoke) {
-		const code = await runSmokeTest(backend, mainWindow);
+	if (isSmoke || isUIShot) {
+		const code = isUIShot ? await runUIScreenshot(mainWindow) : await runSmokeTest(backend, mainWindow);
 		await backend.shutdown();
 		app.exit(code);
 		return;

@@ -1,13 +1,13 @@
 /**
  * 开发辅助：在隔离后端测试本地预览服务（preview.serve）。
- *   node scripts/test-preview.mjs（需先 npm run build:web）
+ *   node scripts/test-preview.mjs（需先 npm run build && npm run build:test）
  *
  * 覆盖：静态文件与目录 index.html、MIME、404、路径越界、跨站与伪造 Host 拦截、方法限制、端口复用。
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import http from "node:http";
 import { join } from "node:path";
-import { connect, createChecks, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
+import { connect, createChecks, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 
 function request(url, { method = "GET", headers = {} } = {}) {
 	return new Promise((resolve, reject) => {
@@ -88,7 +88,7 @@ async function main(checks) {
 }
 
 const checks = createChecks();
-if (!installRelayFromEnv()) await main(checks).then(
+await main(checks).then(
 	() => checks.finish("PREVIEW REGRESSION OK（隔离后端；未调用模型）"),
 	(error) => {
 		console.error(`PREVIEW REGRESSION FAILED\n${error?.stack ?? error}`);

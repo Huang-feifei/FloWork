@@ -26,7 +26,7 @@ export function registerIpc(
 
 	// 请求与推送都先序列化成字符串再跨进程：contextBridge 只允许 1000 层嵌套，
 	// 而会话树这种「每多一条记录就深一层」的数据很容易越界（实测 330 层左右就报错）。
-	// 网页版本来就是 JSON over WebSocket，桌面版保持同一形态。
+	// 将结果序列化后跨 contextBridge，避免长会话树触发对象嵌套深度限制。
 	ipcMain.handle(ELECTRON_CHANNELS.request, async (event, method: BackendMethod, params: unknown) => {
 		requireAppFrame(event);
 		if (typeof method !== "string") throw new Error("无效后端请求。");

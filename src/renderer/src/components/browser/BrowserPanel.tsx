@@ -15,15 +15,13 @@ function NavigationButton({ icon, label, disabled, onClick }: { icon: IconName; 
 
 export function BrowserPanel() {
 	const { state, ready, error } = useBrowser();
-	const desktop = !!browserBridge();
 	const active = state.tabs.find((tab) => tab.id === state.activeTabId);
 	const [address, setAddress] = useState("");
 	const [addressError, setAddressError] = useState<string | null>(null);
 	const input = useRef<HTMLInputElement>(null);
 	const host = useRef<HTMLDivElement>(null);
-	const externalUrl = normalizeBrowserUrl(address);
 	const hasPage = !!active?.url && active.url !== "about:blank" && !active.error;
-	useBrowserViewport(host, desktop && hasPage);
+	useBrowserViewport(host, hasPage);
 
 	useEffect(() => { void ensureBrowserDefault(); }, []);
 	useEffect(() => {
@@ -42,10 +40,10 @@ export function BrowserPanel() {
 			}
 		};
 		window.addEventListener("keydown", key);
-		const unsubscribe = browserBridge()?.onFocusAddress(focus);
+		const unsubscribe = browserBridge().onFocusAddress(focus);
 		return () => {
 			window.removeEventListener("keydown", key);
-			unsubscribe?.();
+			unsubscribe();
 		};
 	}, []);
 
@@ -56,13 +54,11 @@ export function BrowserPanel() {
 			return;
 		}
 		setAddressError(null);
-		if (desktop) void browserCommand(active ? { type: "navigate", tabId: active.id, url } : { type: "create", url });
-		else window.open(url, "_blank", "noopener,noreferrer");
+		void browserCommand(active ? { type: "navigate", tabId: active.id, url } : { type: "create", url });
 	};
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col" data-browser-panel>
-			{desktop && (
 				<div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
 					<div className="flex min-w-0 flex-1 gap-1 overflow-x-auto">
 						{state.tabs.map((tab) => (
@@ -78,32 +74,22 @@ export function BrowserPanel() {
 					</div>
 					<NavigationButton icon="plus" label="新建标签页" disabled={!ready} onClick={() => void browserCommand({ type: "create" })} />
 				</div>
-			)}
 			<form className="flex shrink-0 items-center gap-1 border-b border-border px-3 py-2.5" onSubmit={(event) => { event.preventDefault(); navigate(); }}>
-				{desktop && <>
 					<NavigationButton icon="arrow-left" label="后退" disabled={!active?.canGoBack} onClick={() => active && void browserCommand({ type: "back", tabId: active.id })} />
 					<NavigationButton icon="arrow-right" label="前进" disabled={!active?.canGoForward} onClick={() => active && void browserCommand({ type: "forward", tabId: active.id })} />
 					<NavigationButton icon={active?.loading ? "x" : "refresh"} label={active?.loading ? "停止加载" : "刷新"} disabled={!active}
 						onClick={() => active && void browserCommand({ type: active.loading ? "stop" : "reload", tabId: active.id })} />
-				</>}
 				<input ref={input} value={address} onChange={(event) => { setAddress(event.target.value); setAddressError(null); }} aria-label="网页地址"
 					placeholder="输入网址或 localhost:端口" spellCheck={false} autoComplete="off"
 					className="h-8 min-w-0 flex-1 rounded-full bg-panel-2 px-3.5 font-mono text-[12px] outline-none placeholder:text-muted/70 focus:ring-4 focus:ring-primary/10" />
-				<button type="submit" title={desktop ? "打开地址" : "在外部浏览器打开"} aria-label={desktop ? "打开地址" : "在外部浏览器打开"}
+				<button type="submit" title="打开地址" aria-label="打开地址"
 					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg">
 					<Icon name="arrow-right" className="size-3.5" />
 				</button>
 			</form>
 			{(addressError || error) && <div role="alert" className="shrink-0 border-b border-border px-3 py-2 text-xs break-words text-err">{addressError || error}</div>}
 			<div ref={host} data-browser-viewport className="relative min-h-0 flex-1 bg-bg">
-				{!desktop ? (
-					<div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
-						<Icon name="globe" className="size-8 text-faint" />
-						<h2 className="text-[15px] font-semibold tracking-tight">内置浏览器仅在桌面版可用</h2>
-						<p className="max-w-sm text-[12.5px] leading-relaxed text-muted">Web 版无法可靠嵌入任意网站。请使用 FloWork 桌面版，或在外部浏览器中打开地址。</p>
-						{externalUrl && <a href={externalUrl} target="_blank" rel="noopener noreferrer" className="rounded-full bg-panel-2 px-4 py-1.5 text-[12.5px] hover:bg-highlight">在外部浏览器打开</a>}
-					</div>
-				) : !hasPage && (
+				{!hasPage && (
 					<div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
 						<Icon name="globe" className="size-8 text-faint" />
 						<h2 className="text-[15px] font-semibold tracking-tight">{active?.error ? "网页加载失败" : !ready ? "正在连接浏览器…" : "打开一个网页"}</h2>

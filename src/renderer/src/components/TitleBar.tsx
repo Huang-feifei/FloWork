@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { displayUserText } from "@shared/skill-text";
-import { isDesktop, isMac } from "../lib/desktop";
+import { isMac } from "../lib/desktop";
 import { projectName, useApp } from "../store";
 import { Icon, type IconName } from "./Icon";
 import { Menu, type MenuItem } from "./sidebar/Menu";
@@ -263,11 +263,11 @@ export function TitleBar() {
 			</div>
 
 			{/* Windows / Linux：系统风格的窗口按钮，贴右上角；macOS 用系统自带的红绿灯 */}
-			{isDesktop && !isMac && (
+			{!isMac && (
 				<div className="-mr-4 flex shrink-0 items-stretch self-stretch">
-					<WindowButton icon="minus" title="最小化" onClick={() => void window.floworkWindow?.minimize()} />
-					<WindowButton icon="square" title="最大化" onClick={() => void window.floworkWindow?.toggleMaximize()} />
-					<WindowButton icon="x" title="关闭" close onClick={() => void window.floworkWindow?.close()} />
+					<WindowButton icon="minus" title="最小化" onClick={() => void window.floworkWindow.minimize()} />
+					<WindowButton icon="square" title="最大化" onClick={() => void window.floworkWindow.toggleMaximize()} />
+					<WindowButton icon="x" title="关闭" close onClick={() => void window.floworkWindow.close()} />
 				</div>
 			)}
 

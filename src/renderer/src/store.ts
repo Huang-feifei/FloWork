@@ -28,7 +28,6 @@ import {
 	type WorkMode,
 } from "@shared/protocol";
 import { api, errorText, setHostKeyChangedHandler } from "./api/client";
-import type { ConnectionStatus } from "./api/transport";
 import { askConfirm } from "./components/ConfirmDialog";
 import { disposeTerminal } from "./components/terminal/terminal-disposer";
 import { getRecentCwds } from "./lib/recent";
@@ -81,7 +80,7 @@ export interface ProjectStatus {
 
 interface AppState extends SessionSlice {
 	info: AppInfo | null;
-	connection: ConnectionStatus;
+	connection: "connecting" | "open" | "error";
 	view: View;
 	settingsTab: SettingsTab;
 	/** 界面主题：深色 / 浅色 / 跟随系统 */
@@ -100,8 +99,6 @@ interface AppState extends SessionSlice {
 	pendingImages: ImageAttachment[];
 	/** 配置变更计数，设置页据此刷新 */
 	configVersion: number;
-	/** 网页版文件夹选择器；mode = add 时导入为项目 */
-	folderPicker: { open: boolean };
 	discoverOpen: boolean;
 
 	projects: ProjectsState;
@@ -183,7 +180,6 @@ interface AppState extends SessionSlice {
 
 	// 项目
 	importProjects(): Promise<void>;
-	closeFolderPicker(): void;
 	addProjects(paths: string[], open?: boolean): Promise<void>;
 	/** 添加并打开一个远程项目（服务器上的目录） */
 	addRemoteProject(hostId: string, path: string, name?: string): Promise<void>;
@@ -596,7 +592,6 @@ export const useApp = create<AppState>()((set, get) => {
 		pendingImages: [],
 		resolvedTheme: resolveTheme(storedTheme()),
 		configVersion: 0,
-		folderPicker: { open: false },
 		discoverOpen: false,
 		projects: { projects: [], groups: [] },
 		hosts: [],
@@ -631,17 +626,6 @@ export const useApp = create<AppState>()((set, get) => {
 			initialized = true;
 			void restoreBackgroundImage();
 			api.onPush((push) => get().applyPush(push));
-			let everOpened = false;
-			api.onStatus((connection) => {
-				set({ connection });
-				// 网页版断线重连后，后端已关闭所有会话：清空后台会话，重新打开当前项目
-				if (connection === "open" && everOpened) {
-					const pid = get().activeProjectId;
-					set({ background: {}, projectHandles: {}, projectActive: {}, ...emptySlice(), activeProjectId: null });
-					if (pid) void get().openProject(pid);
-				}
-				if (connection === "open") everOpened = true;
-			});
 			try {
 				const [info, projects] = await Promise.all([api.info(), api.projects.get()]);
 				set({ info, projects, connection: "open" });
@@ -649,10 +633,10 @@ export const useApp = create<AppState>()((set, get) => {
 				const lastVersion = localStorage.getItem(LAST_VERSION_KEY);
 				localStorage.setItem(LAST_VERSION_KEY, info.version);
 				if (lastVersion && lastVersion !== info.version) set({ updatedTo: info.version });
-				everOpened = true;
 				void api.hosts.list().then((hosts) => set({ hosts })).catch(() => undefined);
 			} catch (error) {
-				get().pushNotice("error", `无法连接本地后端：${errorText(error)}`);
+				set({ connection: "error" });
+				get().pushNotice("error", `桌面后端初始化失败：${errorText(error)}`);
 				return;
 			}
 			// 从旧版本的“最近工作区”迁移为项目
@@ -728,22 +712,14 @@ export const useApp = create<AppState>()((set, get) => {
 		// ----- 项目 -----
 
 		async importProjects() {
-			if (get().info?.nativeDialogs) {
-				const dirs = await api.pickFolders().catch(() => []);
-				if (dirs.length > 0) await get().addProjects(dirs, true);
-			} else {
-				set({ folderPicker: { open: true } });
-			}
-		},
-
-		closeFolderPicker() {
-			set({ folderPicker: { open: false } });
+			const dirs = await api.pickFolders().catch(() => []);
+			if (dirs.length > 0) await get().addProjects(dirs, true);
 		},
 
 		async addProjects(paths, open = true) {
 			try {
 				const r = await api.projects.add(paths);
-				set({ projects: r.state, folderPicker: { open: false } });
+				set({ projects: r.state });
 				const existing = r.skipped
 					.map((p) => r.state.projects.find((x) => x.path.toLowerCase() === p.toLowerCase().replace(/[\\/]+$/, "")))
 					.filter((p): p is Project => !!p);
@@ -1275,6 +1251,6 @@ setHostKeyChangedHandler((hostId) => {
 	if (!useApp.getState().hostKeyPrompt) useApp.getState().setHostKeyPrompt(hostId);
 });
 
-// 开发模式下暴露 store，便于截图脚本注入示例数据检查样式
-if (import.meta.env.DEV) (window as unknown as { __floworkStore: typeof useApp }).__floworkStore = useApp;
+// 仅开发或主进程明确开启的隔离截图模式暴露 store，普通生产运行不暴露。
+if (import.meta.env.DEV || window.floworkScreenshot) (window as unknown as { __floworkStore: typeof useApp }).__floworkStore = useApp;
 if (import.meta.env.DEV) (window as unknown as { __floworkApi: typeof api }).__floworkApi = api;

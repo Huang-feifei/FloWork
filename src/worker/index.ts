@@ -2,7 +2,7 @@
  * pi worker 入口。
  *
  * - 桌面版：Electron utilityProcess 启动，经 process.parentPort 通信，运行在 Electron 自带的 Node 中
- * - 网页版：Node child_process.fork 启动，经 process.send / "message" 事件通信
+ * - 内核发行自检工具可用 Node fork 经 process.send / "message" 验证同一协议（非应用服务）
  *
  * role = "service"：常驻一个，处理会话列表、供应商、登录与配置等无会话命令
  * role = "session"：每个打开的工作区一个，承载 pi AgentSessionRuntime
@@ -123,7 +123,7 @@ channel.onMessage((message) => {
 	}
 });
 
-// 网页版：父进程退出时一并退出
+// 内核发行自检：Node fork 的父进程退出时一并退出
 process.on("disconnect", () => process.exit(0));
 
 process.on("uncaughtException", (error) => {

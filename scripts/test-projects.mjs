@@ -1,10 +1,10 @@
 /**
  * 开发辅助：在隔离后端（out/ 下的临时数据目录与空闲端口，不碰 ~/.flowork）测试项目注册表接口。
- *   node scripts/test-projects.mjs（需先 npm run build:web）
+ *   node scripts/test-projects.mjs（需先 npm run build && npm run build:test）
  */
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { connect, createChecks, installRelayFromEnv, startIsolatedBackend } from "./lib/isolated-backend.mjs";
+import { connect, createChecks, startIsolatedBackend } from "./lib/isolated-backend.mjs";
 
 async function main(checks) {
 	const backend = await startIsolatedBackend({ label: "projects" });
@@ -58,7 +58,7 @@ async function main(checks) {
 }
 
 const checks = createChecks();
-if (!installRelayFromEnv()) await main(checks).then(
+await main(checks).then(
 	() => checks.finish("PROJECTS REGRESSION OK（隔离后端；未调用模型）"),
 	(error) => {
 		console.error(`PROJECTS REGRESSION FAILED\n${error?.stack ?? error}`);

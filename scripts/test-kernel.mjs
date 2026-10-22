@@ -1,7 +1,7 @@
 /** 离线回归：GitHub 完整内核包、签名、私有测试认证与离线回退。 */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { backendRuntime } from "./web-build-options.mjs";
+import { backendRuntime } from "./runtime.mjs";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { cp, link, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

@@ -1,6 +1,6 @@
 /**
- * 桌面版传输层与窗口控制：与网页版的 WebSocket 传输层实现同一个 Transport 接口。
- * 窗口控制只在桌面版存在（自绘标题栏的窗口按钮）。
+ * 桌面 IPC 桥与窗口控制：通过 contextBridge 暴露受限的主进程能力。
+ * 包括自绘标题栏的窗口控制。
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import { type ElectronBridge, ELECTRON_CHANNELS } from "@shared/protocol";
@@ -45,3 +45,5 @@ contextBridge.exposeInMainWorld("floworkBrowser", browser);
 contextBridge.exposeInMainWorld("floworkTransport", transport);
 contextBridge.exposeInMainWorld("floworkWindow", windowControls);
 contextBridge.exposeInMainWorld("floworkTheme", theme);
+// 仅由未打包应用的隔离截图模式传入，不在普通桌面运行时暴露调试状态。
+if (process.argv.includes("--flowork-ui-screenshot")) contextBridge.exposeInMainWorld("floworkScreenshot", true);

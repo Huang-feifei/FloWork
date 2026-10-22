@@ -31,7 +31,6 @@ export function ProjectFiles() {
 	const [filter, setFilter] = useState("");
 	const search = useFileSearch(filter);
 	const [menu, setMenu] = useState<{ x: number; y: number; entry: WorkspaceEntry | null } | null>(null);
-	const isDesktop = useApp((s) => s.info?.shell === "electron");
 	const isRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const { pushNotice } = useApp.getState();
 
@@ -90,7 +89,7 @@ export function ProjectFiles() {
 		const ok = await askConfirm({
 			title: "删除",
 			message: `删除${entry.type === "dir" ? "文件夹" : "文件"}「${entry.name}」？\n${
-				isRemote ? "这是远程文件，删除后无法恢复。" : isDesktop ? "会移入系统回收站，可从回收站恢复。" : "此操作不可恢复。"
+				isRemote ? "这是远程文件，删除后无法恢复。" : "会移入系统回收站，可从回收站恢复。"
 			}`,
 			confirmLabel: "删除",
 			danger: true,
@@ -243,11 +242,11 @@ export function ProjectFiles() {
 			items.push({ label: "引用到 Agent", onClick: () => insertIntoPrompt(entry.path) });
 			items.push({ label: "复制相对路径", onClick: () => copyPath(entry.path, false) });
 			items.push({ label: "复制绝对路径", onClick: () => copyPath(entry.path, true) });
-			if (isDesktop && !isRemote) items.push({ label: "在文件夹中显示", onClick: () => void runShell(api.revealWorkspaceEntry, entry.path, "定位") });
+			if (!isRemote) items.push({ label: "在文件夹中显示", onClick: () => void runShell(api.revealWorkspaceEntry, entry.path, "定位") });
 			items.push({ separator: true, label: "" });
 		}
 		if (dir !== null) {
-			if (isDesktop && !isRemote) items.push({ label: "在终端中打开此文件夹", onClick: () => void runShell(api.openTerminalAt, dir, "打开终端") });
+			if (!isRemote) items.push({ label: "在终端中打开此文件夹", onClick: () => void runShell(api.openTerminalAt, dir, "打开终端") });
 			items.push({ label: "新建文件", onClick: () => void createEntry(dir, "file") });
 			items.push({ label: "新建文件夹", onClick: () => void createEntry(dir, "dir") });
 		}
