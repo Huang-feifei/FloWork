@@ -2,7 +2,7 @@
 
 按版本倒序记录。应用在检测到版本与上次运行不同时，会弹窗显示当前版本的条目（见 `src/renderer/src/components/UpdateDialog.tsx`）。
 
-## 未发布
+## 1.1.1 — 2026-10-22
 
 - 移除早期网页版，仅保留 Electron 桌面应用：删除 Web 启动 / 构建入口、HTTP / WebSocket 应用外壳与前端兼容分支，回归测试改走隔离 Electron / IPC；保留内置浏览器、HTML / Markdown 预览和桌面热更新
 - 首屏按需加载设置、数据库、图片生成 / 图库、代码评审和终端面板，终端不再把 xterm 带进启动 chunk
