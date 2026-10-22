@@ -22,6 +22,7 @@ const SUITES = [
 	{ name: "hosts", file: "scripts/test-hosts.mjs", needsBuild: false },
 	{ name: "command-risk", file: "scripts/test-command-risk.mjs", needsBuild: false },
 	{ name: "planning", file: "scripts/test-planning.mjs", needsBuild: false },
+	{ name: "prompt-cache", file: "scripts/test-prompt-cache.mjs", needsBuild: false },
 	{ name: "markdown", file: "scripts/test-markdown.mjs", needsBuild: false },
 	{ name: "subagent", file: "scripts/test-subagent.mjs", needsBuild: false },
 	// 需要测试主机：未设置 FLOWORK_TEST_SSH 时自动跳过

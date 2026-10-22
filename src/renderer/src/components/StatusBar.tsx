@@ -2,6 +2,7 @@
  *  Apple 体系：安静的一行小字，版本是灰色胶囊、健康点用绿、待确认用琥珀。 */
 import { useMemo } from "react";
 import { formatTokens } from "../lib/format";
+import { summarizeUsage } from "../lib/usage";
 import { projectName, useApp, waitingCount } from "../store";
 import { Icon } from "./Icon";
 
@@ -9,20 +10,7 @@ function Usage() {
 	const state = useApp((s) => s.state);
 	const messages = useApp((s) => s.messages);
 
-	const totals = useMemo(() => {
-		let input = 0;
-		let output = 0;
-		let cost = 0;
-		let lastContext = 0;
-		for (const m of messages) {
-			if (m.role !== "assistant" || !m.usage) continue;
-			input += m.usage.input + m.usage.cacheRead;
-			output += m.usage.output;
-			cost += m.usage.cost.total;
-			if (m.usage.totalTokens > 0) lastContext = m.usage.totalTokens;
-		}
-		return { input, output, cost, lastContext };
-	}, [messages]);
+	const totals = useMemo(() => summarizeUsage(messages), [messages]);
 
 	const contextWindow = state?.model?.contextWindow;
 	const contextPct = contextWindow && totals.lastContext ? Math.min(100, Math.round((totals.lastContext / contextWindow) * 100)) : null;
@@ -32,7 +20,7 @@ function Usage() {
 			{totals.input + totals.output > 0 && (
 				<span
 					className="shrink-0 px-2.5 tabular-nums"
-					title="累计输入 / 输出 token 与费用"
+					title={`累计输入 ${totals.input.toLocaleString()}（含缓存读 ${totals.cacheRead.toLocaleString()} / 写 ${totals.cacheWrite.toLocaleString()}）/ 输出 ${totals.output.toLocaleString()} token 与费用`}
 				>
 					↑{formatTokens(totals.input)} ↓{formatTokens(totals.output)}
 					{totals.cost > 0 ? ` $${totals.cost.toFixed(3)}` : ""}

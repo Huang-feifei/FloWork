@@ -34,15 +34,17 @@ export function createPlanningExtension(host: PlanningHost): ExtensionFactory {
 		pi.on("user_bash", () => {
 			if (host.getMode() === "plan") throw new Error("计划模式禁止 Shell 命令，请先确认计划或切换执行模式");
 		});
-		// 每次模型请求都使用实时状态，包括 submit_plan 在同一轮中获批之后的下一次请求。
+		// 每次请求读取实时模式（含 submit_plan 同轮获批），但提示必须固定在历史之前。
+		// 若临时追加在末尾，下一次请求会将它移到新消息之后，破坏上一轮的缓存前缀；
+		// 置于开头后，同一模式下只有真实历史增长。切换模式时的一次缓存失效是预期行为。
 		pi.on("context", (event) => ({
-			messages: [...event.messages, {
+			messages: [{
 				role: "user" as const,
 				content: [{ type: "text" as const, text: host.getMode() === "plan"
 					? "[FloWork 工作流：计划模式] 只读分析，不要修改文件或执行 Shell/其他有副作用的工具。需求或实现取舍不明确时调用 ask_user，等待用户决策，不要替用户做关键选择。明确需求后调用 submit_plan，提交包含目标、实施步骤、涉及文件、风险和验证方法的完整计划。只有 submit_plan 返回用户已确认并切换执行模式，才能实施。用户拒绝或取消时保持计划模式，按反馈调整，不要反复强迫确认。"
 					: "[FloWork 工作流：执行模式] 可以按用户要求实施，仍须遵循工具审批。需求或关键取舍不明确时调用 ask_user 等待用户决策。如果 submit_plan 刚刚获批，按已批准的计划执行；不要扩大范围。" }],
 				timestamp: 0,
-			}],
+			}, ...event.messages],
 		}));
 
 		pi.registerTool({
