@@ -109,13 +109,13 @@ function ImportForm({ kind, cwd, projectTrusted, onDone }: { kind: ResourceKind;
 	};
 	return (
 		<div className="flex items-center gap-2 border-t border-border bg-panel-2/40 px-5 py-3">
-			<Input value={path} onChange={(e) => setPath(e.target.value)} placeholder={IMPORT_HINT[kind]} className="flex-1" />
+			<Input value={path} onChange={(e) => setPath(e.target.value)} placeholder={IMPORT_HINT[kind]} className="min-w-0 flex-1" />
 			{kind !== "prompt" && (
 				<Button size="sm" onClick={() => void api.pickFolder().then((p) => p && setPath(p))}>
 					选择文件夹
 				</Button>
 			)}
-			<Select value={scope} onChange={(e) => setScope(e.target.value as "user" | "project")} className="w-36">
+			<Select value={scope} onChange={(e) => setScope(e.target.value as "user" | "project")} className="w-40! shrink-0">
 				<option value="user">全局（所有项目）</option>
 				<option value="project" disabled={!projectTrusted}>
 					仅当前项目{projectTrusted ? "" : "（需先信任）"}
@@ -270,8 +270,8 @@ export function ResourcesTab() {
 							</div>
 						))}
 						<div className="flex items-center gap-2 bg-panel-2/40 px-5 py-3">
-							<Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="npm:@scope/pi-skills" className="flex-1" />
-							<Select value={pkgScope} onChange={(e) => setPkgScope(e.target.value as "user" | "project")} className="w-36">
+							<Input value={pkg} onChange={(e) => setPkg(e.target.value)} placeholder="npm:@scope/pi-skills" className="min-w-0 flex-1" />
+							<Select value={pkgScope} onChange={(e) => setPkgScope(e.target.value as "user" | "project")} className="w-40! shrink-0">
 								<option value="user">全局（所有项目）</option>
 								<option value="project" disabled={!projectTrusted}>
 									仅当前项目
