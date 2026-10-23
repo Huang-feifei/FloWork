@@ -6,8 +6,11 @@
  * 草稿类型与序列化函数和端点编辑器共用（放在本文件里，避免循环依赖）。
  */
 import { THINKING_LEVELS } from "@shared/protocol";
+import type { ModelSyncState } from "@shared/model-metadata";
 import { thinkingLabel } from "../../lib/format";
+import { CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, parseTokenLimit } from "../../lib/token-limit";
 import { Button, Field, Input, Modal, TextArea, Toggle } from "../ui";
+import { TokenLimitField } from "./TokenLimitField";
 import { useState } from "react";
 
 /** 每个模型的配置；未填的字段不会写入 models.json，pi 会用自己的默认值 */
@@ -18,6 +21,10 @@ export interface ModelDraft {
 	maxTokens: string;
 	reasoning: boolean;
 	image: boolean;
+	/** 区分未声明与用户明确关闭，避免同步重新打开能力。 */
+	reasoningSet?: boolean;
+	imageSet?: boolean;
+	sync?: ModelSyncState;
 	cost: { input: string; output: string; cacheRead: string; cacheWrite: string };
 	/** thinkingLevelMap：等级 → 发送给服务端的值。空 = 不写；null 文本 = 隐藏该等级 */
 	thinking: Record<string, string>;
@@ -47,6 +54,7 @@ export function toModelDraft(entry: Record<string, unknown>): ModelDraft {
 	const draft = emptyModel(String(entry.id ?? ""));
 	draft.name = typeof entry.name === "string" ? entry.name : "";
 	draft.reasoning = entry.reasoning === true;
+	draft.reasoningSet = typeof entry.reasoning === "boolean";
 	const cost = (entry.cost ?? {}) as Record<string, unknown>;
 	for (const key of COST_KEYS) if (cost[key] !== undefined) draft.cost[key] = String(cost[key]);
 	const map = (entry.thinkingLevelMap ?? {}) as Record<string, unknown>;
@@ -57,8 +65,10 @@ export function toModelDraft(entry: Record<string, unknown>): ModelDraft {
 	}
 	const known = new Set(FORM_MODEL_KEYS);
 	// 只写 text 或 text+image 时可以用开关表示，其他组合保留在 JSON 里
-	if (Array.isArray(entry.input) && entry.input.every((v) => v === "text" || v === "image")) draft.image = entry.input.includes("image");
-	else known.delete("input");
+	if (Array.isArray(entry.input) && entry.input.every((v) => v === "text" || v === "image")) {
+		draft.image = entry.input.includes("image");
+		draft.imageSet = true;
+	} else known.delete("input");
 	if (entry.contextWindow !== undefined) draft.contextWindow = String(entry.contextWindow);
 	if (entry.maxTokens !== undefined) draft.maxTokens = String(entry.maxTokens);
 	const rest: Record<string, unknown> = {};
@@ -73,15 +83,20 @@ export function toModelEntry(model: ModelDraft): Record<string, unknown> {
 	const entry: Record<string, unknown> = { ...advanced, id: model.id.trim() };
 	if (model.name.trim()) entry.name = model.name.trim();
 	else delete entry.name;
-	if (model.contextWindow.trim()) entry.contextWindow = Number(model.contextWindow);
-	else delete entry.contextWindow;
-	if (model.maxTokens.trim()) entry.maxTokens = Number(model.maxTokens);
-	else delete entry.maxTokens;
-	if (model.reasoning) entry.reasoning = true;
+	for (const [key, label] of [["contextWindow", "上下文窗口"], ["maxTokens", "最大输出"]] as const) {
+		if (!model[key].trim()) {
+			delete entry[key];
+			continue;
+		}
+		const tokens = parseTokenLimit(model[key]);
+		if (tokens === undefined) throw new Error(`${label}必须是正整数 token 数，可使用 K / M 单位`);
+		entry[key] = tokens;
+	}
+	if (model.reasoning || model.reasoningSet) entry.reasoning = model.reasoning;
 	else delete entry.reasoning;
 	if (model.image) entry.input = ["text", "image"];
-	else if (advanced.input === undefined) delete entry.input;
-	else entry.input = ["text"];
+	else if (model.imageSet || advanced.input !== undefined) entry.input = ["text"];
+	else delete entry.input;
 	if (COST_KEYS.some((key) => model.cost[key].trim())) {
 		// pi 要求 cost 的四项齐全，未填的按 0 计
 		entry.cost = Object.fromEntries(COST_KEYS.map((key) => [key, model.cost[key].trim() ? Number(model.cost[key]) : 0]));
@@ -97,18 +112,12 @@ export function toModelEntry(model: ModelDraft): Record<string, unknown> {
 	return entry;
 }
 
-function positiveInt(text: string): boolean {
-	if (!text.trim()) return true;
-	const value = Number(text);
-	return Number.isFinite(value) && value > 0;
-}
-
 /** 校验单个模型；返回第一条错误 */
 export function validateModel(model: ModelDraft): string | undefined {
 	const id = model.id.trim();
 	if (!id) return "模型 ID 不能为空";
-	if (!positiveInt(model.contextWindow)) return `${id}：上下文窗口必须是正数`;
-	if (!positiveInt(model.maxTokens)) return `${id}：最大输出必须是正数`;
+	if (model.contextWindow.trim() && parseTokenLimit(model.contextWindow) === undefined) return `${id}：上下文窗口必须是正整数 token 数，可填写 128000、128K 或 1M`;
+	if (model.maxTokens.trim() && parseTokenLimit(model.maxTokens) === undefined) return `${id}：最大输出必须是正整数 token 数，可填写 16384、16K 或 0.5M`;
 	for (const key of COST_KEYS) {
 		const value = model.cost[key].trim();
 		if (value && !(Number.isFinite(Number(value)) && Number(value) >= 0)) return `${id}：价格 ${key} 必须是非负数`;
@@ -175,24 +184,43 @@ export function ModelDialog({
 			</div>
 
 			<div className="mt-5 grid grid-cols-2 gap-5">
-				<Field label="上下文窗口" hint="token 数，留空用默认值 128000。">
-					<Input value={d.contextWindow} onChange={(e) => patch({ contextWindow: e.target.value })} placeholder="128000" className="font-mono" />
-				</Field>
-				<Field label="最大输出" hint="单次最大输出 token，留空用默认值 16384。">
-					<Input value={d.maxTokens} onChange={(e) => patch({ maxTokens: e.target.value })} placeholder="16384" className="font-mono" />
-				</Field>
+				<TokenLimitField
+					label="上下文窗口"
+					value={d.contextWindow}
+					onChange={(contextWindow) => patch({ contextWindow })}
+					placeholder="128000 / 128K / 1M"
+					presets={CONTEXT_WINDOW_PRESETS}
+					hint="模型可接受的上下文 token 数，留空用默认值 128000。"
+				/>
+				<TokenLimitField
+					label="最大输出"
+					value={d.maxTokens}
+					onChange={(maxTokens) => patch({ maxTokens })}
+					placeholder="16384 / 16K / 128K"
+					presets={MAX_OUTPUT_PRESETS}
+					hint="单次最大输出 token 数，留空用默认值 16384。"
+				/>
+			</div>
+			<div className="mt-2 text-[11.5px] leading-4 text-muted">
+				支持整数或 K / M 简写（1K = 1000，1M = 1000000），保存为整数；16K = 16000，不等于默认值 16384。请按供应商实际限制填写，设置更大值不会扩展模型能力。
 			</div>
 
 			<div className="mt-5 flex items-center gap-6">
 				<div className="flex items-center gap-3">
 					<span className="text-[12.5px] font-medium text-fg">支持思考</span>
-					<Toggle on={d.reasoning} onChange={(reasoning) => patch({ reasoning })} />
+					<Toggle on={d.reasoning} onChange={(reasoning) => patch({ reasoning, reasoningSet: true })} />
 				</div>
 				<div className="flex items-center gap-3">
 					<span className="text-[12.5px] font-medium text-fg">支持图片输入</span>
-					<Toggle on={d.image} onChange={(image) => patch({ image })} />
+					<Toggle on={d.image} onChange={(image) => patch({ image, imageSet: true })} />
 				</div>
 			</div>
+
+			{d.sync && Object.keys(d.sync.sources).length > 0 && (
+				<div className="mt-4 rounded-xl bg-panel-2 px-3.5 py-2.5 text-[11.5px] text-muted">
+					自动补全来源：{[...new Set(Object.values(d.sync.sources))].join("、")}。同步不会覆盖手动修改；models.dev 价格是参考价，不代表本端点报价。
+				</div>
+			)}
 
 			<div className="mt-5">
 				<div className="mb-2 text-[12.5px] font-medium text-fg">价格（美元 / 百万 token）</div>

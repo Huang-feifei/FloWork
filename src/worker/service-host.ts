@@ -25,6 +25,7 @@ import type {
 import { displayUserText } from "@shared/skill-text";
 import { toModelInfo } from "./adapter";
 import { writeConfigFile } from "./config-file";
+import { ModelMetadataService } from "./model-metadata";
 import { importResource, installPackage, listResources, removePackage, removeResource, setResourceEnabled } from "./resources";
 import { deleteSession, renameSession, validateSession } from "./session-files";
 
@@ -45,6 +46,7 @@ type PiAuthEvent = Parameters<LoginInteraction["notify"]>[0];
 
 export class ServiceHost {
 	private modelRuntime: Promise<ModelRuntime> | undefined;
+	private readonly modelMetadata = new ModelMetadataService(join(getAgentDir(), "cache", "models-dev.json"));
 	private readonly flows = new Map<string, AbortController>();
 	private readonly prompts = new Map<string, PendingPrompt>();
 
@@ -91,7 +93,7 @@ export class ServiceHost {
 			case "save_config_file":
 				return this.saveConfig(command.name, command.text, command.expectedMtime);
 			case "fetch_remote_models":
-				return this.fetchRemoteModels(command.baseUrl, command.apiKey);
+				return this.modelMetadata.discover(command);
 			case "get_shell_info":
 				return this.shellInfo();
 			case "list_resources":
@@ -309,21 +311,6 @@ export class ServiceHost {
 		const runtime = await this.getModelRuntime();
 		await runtime.refresh();
 		return this.readConfig(name);
-	}
-
-	private async fetchRemoteModels(baseUrl: string, apiKey?: string): Promise<string[]> {
-		const url = `${baseUrl.replace(/\/+$/, "")}/models`;
-		const response = await fetch(url, {
-			headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
-			signal: AbortSignal.timeout(20_000),
-		});
-		if (!response.ok) throw new Error(`GET ${url} 返回 ${response.status} ${response.statusText}`);
-		const body = (await response.json()) as { data?: Array<{ id?: unknown }>; models?: Array<{ id?: unknown; name?: unknown }> };
-		const list = body.data ?? body.models ?? [];
-		return list
-			.map((m) => (typeof m.id === "string" ? m.id : typeof (m as { name?: unknown }).name === "string" ? String((m as { name: string }).name) : ""))
-			.filter(Boolean)
-			.sort();
 	}
 }
 

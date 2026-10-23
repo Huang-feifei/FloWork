@@ -307,8 +307,10 @@ export function toSessionEvents(event: AgentSessionEvent): SessionEvent[] {
 			return [
 				{
 					type: "notice",
-					level: e.errorMessage ? "error" : "info",
-					text: e.errorMessage ? `上下文压缩失败：${str(e.errorMessage)}` : "上下文压缩完成",
+					level: e.errorMessage ? "error" : e.aborted || e.result ? "info" : "warning",
+					text: e.errorMessage ? `上下文压缩失败：${str(e.errorMessage)}`
+						: e.aborted ? "上下文压缩已停止，未写入新摘要"
+							: e.result ? "上下文压缩完成" : "上下文压缩未完成，未写入新摘要",
 				},
 			];
 		case "auto_retry_start":

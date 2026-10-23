@@ -35,6 +35,7 @@ import {
 } from "@shared/protocol";
 import { readSubagentSettings } from "@shared/subagent-settings";
 import { toChatMessage, toContentBlocks, toModelInfo, toSessionEvents, toSessionState, toTree } from "./adapter";
+import { createCompactionExtension } from "./compaction";
 import { ExtensionUI } from "./extension-ui";
 import { type ApprovalRequest, createFloworkExtension } from "./flowork-extension";
 import { BackupLog, createOpsExtension, type OpsTarget, probeHostProfile } from "./ops-tools";
@@ -159,6 +160,7 @@ export class SessionHost {
 		const settingsManager = SettingsManager.create(cwd, getAgentDir(), { projectTrusted: !ops && isProjectTrusted(cwd) });
 		const subagentSettings = readSubagentSettings(settingsManager.getGlobalSettings());
 		const extensionFactories = [
+			createCompactionExtension(() => this.session),
 			createFloworkExtension({ approve: (req, signal) => this.approve(req, signal), skipWriteDiff: !!ops }),
 			createPlanningExtension({
 				getMode: () => this.workMode,

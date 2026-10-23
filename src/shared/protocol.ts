@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import type { DatabaseMethods } from "./database";
+import type { ModelMetadataResult } from "./model-metadata";
 
 export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 export const THINKING_LEVELS: ThinkingLevel[] = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -358,7 +359,7 @@ export type ServiceCommand =
 	| { type: "test_model"; provider: string; modelId: string }
 	| { type: "get_config_file"; name: ConfigFileName }
 	| { type: "save_config_file"; name: ConfigFileName; text: string; expectedMtime?: number }
-	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string }
+	| { type: "fetch_remote_models"; baseUrl: string; apiKey?: string; provider?: string; ids?: string[]; force?: boolean }
 	| { type: "get_shell_info" }
 	| { type: "list_resources"; cwd: string }
 	| { type: "set_resource_enabled"; cwd: string; kind: ResourceKind; path: string; enabled: boolean }
@@ -404,7 +405,7 @@ export interface CommandResultMap {
 	test_model: TestResult;
 	get_config_file: ConfigFile;
 	save_config_file: ConfigFile;
-	fetch_remote_models: string[];
+	fetch_remote_models: ModelMetadataResult;
 	get_shell_info: ShellInfo;
 	list_resources: ResourcesResult;
 	set_resource_enabled: null;
