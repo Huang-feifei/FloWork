@@ -4,11 +4,13 @@
 
 ## 本轮交付状态
 
-- 图库改动完成后重新执行类型检查与完整回归：**20 PASS / 4 SKIP / 0 FAIL / 0 BLOCKED**（PASS 包含类型检查、桌面构建和 IPC 入口构建）。4 个跳过项为 3 套 SSH 集成及数据库套件内的 PostgreSQL / MySQL 网络集成；不能视为全量外部集成验证通过。
+- 桌面加固（单实例锁、主进程日志、会话回收、窗口底色统一、主题启动同步、图库收藏持久化）完成后重新执行类型检查与完整回归：**22 PASS / 4 SKIP / 0 FAIL / 0 BLOCKED**（PASS 包含类型检查、桌面构建、IPC 入口构建与新增的 `desktop-hardening`）。4 个跳过项为 3 套 SSH 集成及数据库套件内的 PostgreSQL / MySQL 网络集成；不能视为全量外部集成验证通过。
 - 隔离真实桌面 smoke 再次通过，确认 renderer → preload → ipcMain、service / session utilityProcess；未配置供应商、未调用外部模型。
+- 单实例锁已用真实应用二次启动验证：第二个进程 244ms 内退出并在 `logs/main.log` 留下「已有 FloWork 实例在运行」，第一个实例不受影响。
+- 会话回收已用 CDP `Page.reload` 在真实生产构建上触发主框架重载验证：日志出现「已回收会话：页面重载」，首次加载不会误触发。
 - 此前图库字段未齐全、`store.ts` 图片方法区重复声明和分隔符造成的验收阻塞已消除。最新诊断在 `out/stability-tests.log` / `out/stability-typecheck.log` / `out/stability-smoke.log`。
 - 另以隔离 agent 缓存中的 3 张本地 PNG 做真实桌面图库复核：全部 / 近 7 天 / 按模型 / 收藏筛选、收藏与取消收藏、筛选空状态、PNG 实际解码、插入会话附件、清空缓存及保留已插入附件均通过。通过实际图片 IPC 读写，不调用图片生成接口；结果在 `out/gallery-review.json` / `.log` / `.png`。
-- 图库收藏当前保存在 store 内存中，本次只验证运行期间的收藏切换，不代表重启后持久化。图片生成外部接口及实际文件下载未在此次图库复核中验证。
+- 图库收藏现已持久化到本机 localStorage（此前只在内存中，重启即丢）；`test-desktop-hardening` 覆盖「启动时过滤非 true 条目 / 收藏与取消收藏立即落盘 / 清空缓存不影响收藏 / 重启后恢复」。图片生成外部接口及实际文件下载未在此次图库复核中验证。
 - 本次复核未修改图库或其他业务代码，仅更新验证记录；没有提交或推送。
 
 ## 修复与测试分层
@@ -22,6 +24,9 @@
 | 不确定副作用 | 超时或已发送后的 AbortSignal 取消停用 worker，拒绝 pending 并尝试终止，不自动重试；真实 exit 前不释放文件锁 | 替身覆盖迟到响应、协调队列恢复、kill 后未退出，以及会话切换的原文件 / 目标文件双重保锁 |
 | 测试状态 | 结构化 JSONL 区分整套 / 部分跳过；非零退出优先 FAIL；构建等前置失败使相关套件 BLOCKED | `test-test-results.mjs` 验证分类、跨进程报告、严格门禁真实退出码 |
 | 首屏依赖 | Markdown 的 CodeBlock 按需加载；等待时显示纯文本代码，语言包仍按需加载 | 桌面回归确认打开代码块之前未生成高亮预加载请求，打开之后高亮 span 实际出现 |
+| 单实例与崩溃 | 启动申请单实例锁，二次启动聚焦已有窗口后退出；主进程异常与渲染进程崩溃写 `logs/main.log`（2 MiB 轮换），渲染崩溃提示重载，连续 3 次直接退出 | 真实应用二次启动验证退出码与日志；真实构建上 CDP `Page.reload` 触发会话回收 |
+| 窗口底色与日志 | `src/shared/window-colors.ts` 是窗口底色的唯一来源，`styles.css` 的 `--color-window` 必须一致 | `test-desktop-hardening.mjs` 解析 CSS 比对常量，并验证日志落盘、含堆栈和超限轮换 |
+| 图库收藏 | 收藏写入 localStorage `flowork.imageFavorites`，取消时删除条目而不是写 `false` | `test-desktop-hardening` 用真实 store 验证启动过滤、实时落盘、清空缓存不受影响、重启恢复 |
 
 超时 / 取消不保证已执行的文件写入、包安装或远端操作已经回滚。错误会提示操作可能已经生效，用户应先检查再重试。杀进程请求也不等于进程已退出。
 

@@ -1,12 +1,18 @@
 import { type BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeTheme } from "electron";
 import { BROWSER_CHANNELS } from "@shared/browser";
 import { type BackendMethod, ELECTRON_CHANNELS } from "@shared/protocol";
+// 窗口背景色只在页面渲染前可见，必须与 styles.css 的 --color-window 一致；三处取值统一从这里来。
+import { windowColor } from "@shared/window-colors";
 import type { Backend } from "../core/backend";
 import type { BrowserManager } from "./browser";
 
-/** 窗口背景色：只在页面渲染前可见，需与 styles.css 的 --color-window 一致 */
-const DARK_WINDOW_BG = "#0d1222";
-const LIGHT_WINDOW_BG = "#eef1f6";
+/**
+ * 渲染进程的后端客户端标识。
+ *
+ * 界面只有一个窗口，所有请求都挂在同一个 clientId 下；页面重载 / 渲染进程崩溃时
+ * 主进程调 backend.releaseClient() 回收它名下的会话，避免 worker 跑着却再没人能连上。
+ */
+export const RENDERER_CLIENT_ID = "renderer";
 
 /** 桌面版传输层：渲染进程的 request 走 ipcMain.handle，推送走 webContents.send */
 export function registerIpc(
@@ -30,7 +36,7 @@ export function registerIpc(
 	ipcMain.handle(ELECTRON_CHANNELS.request, async (event, method: BackendMethod, params: unknown) => {
 		requireAppFrame(event);
 		if (typeof method !== "string") throw new Error("无效后端请求。");
-		return JSON.stringify(await backend.handle(method, params as never));
+		return JSON.stringify(await backend.handle(method, params as never, RENDERER_CLIENT_ID));
 	});
 
 	ipcMain.handle(BROWSER_CHANNELS.command, (event, command: unknown) => {
@@ -52,7 +58,7 @@ export function registerIpc(
 		if (mode !== "dark" && mode !== "light" && mode !== "system") throw new Error("无效主题。");
 		const win = requireAppFrame(event);
 		nativeTheme.themeSource = mode;
-		win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? DARK_WINDOW_BG : LIGHT_WINDOW_BG);
+		win.setBackgroundColor(windowColor(nativeTheme.shouldUseDarkColors));
 	});
 
 	backend.onPush((push) => {

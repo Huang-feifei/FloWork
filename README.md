@@ -166,6 +166,8 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - **外链白名单**：主进程只把 `http:` / `https:` 链接交给系统浏览器（`setWindowOpenHandler`），其它协议一律拒绝并打日志；页面内导航（`will-navigate`）只允许留在应用自身，其余同样交给白名单处理。
 - **内置浏览器**：网页运行在独立隔离 session（独立 partition、禁缓存），权限请求、设备权限、屏幕共享与下载一律拒绝；只允许 HTTP(S)，`will-frame-navigate` / `will-redirect` 拦截非白名单导航与重定向；禁止访问 FloWork 应用自身地址（包括开发时的 Vite 地址）；弹窗需用户手势（1 秒内点击 / 回车）才开新标签，否则拒绝。
 - **凭据**：hosts.json 里的 SSH 密码在桌面版经 Electron `safeStorage`（Windows 上为 DPAPI，绑定当前系统用户）加密后落盘为 `passwordEnc`，旧的明文密码在首次读取时自动迁移。auth.json 由 pi SDK 直接读写，目前仍是明文，见路线图。
+- **单实例**：启动时申请单实例锁，重复启动会把已有窗口叫到前台后退出。projects.json / hosts.json / databases.json 的写入队列都在进程内，双开会互相覆盖。
+- **崩溃与日志**：主进程未捕获异常 / 未处理的 Promise 拒绝、渲染进程崩溃都会写入 `~/.flowork/logs/main.log`（超过 2 MiB 轮换为 main.log.1）。渲染进程崩溃时提示重新加载，重载 / 崩溃都会回收该界面名下的会话（后台 worker 不会变成没人能连的孤儿进程）；连续崩溃 3 次直接退出不再弹框。
 
 ## 独立内核更新（桌面版）
 
@@ -240,6 +242,7 @@ node scripts/test-command-risk.mjs # 运维命令风险分级（不需要构建�
 node scripts/test-session-store.mjs # 真实 store 的延迟响应、跨标签与草稿归属（不需要构建）
 node scripts/test-worker-manager.mjs # 可控 worker 的超时、取消、交互等待与会话保锁（不需要构建）
 node scripts/test-test-results.mjs   # PASS / SKIP / FAIL 分类与严格模式退出码
+node scripts/test-desktop-hardening.mjs # 窗口底色常量⇄CSS、主进程日志轮换、图库收藏持久化（不需要构建）
 node scripts/test-markdown-desktop.mjs # 生产 CSP 下 PNG / SVG 实际解码、越界限制与高亮按需加载
 
 npm test -- --require-all          # 严格门禁：有任何 SKIP 也非零退出

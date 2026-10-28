@@ -68,6 +68,7 @@
 	--color-win-close: #ff5f57;
 
 	/* ---------- 不透明表面、投影与行内代码 ---------- */
+	/* 与 src/shared/window-colors.ts 的 WINDOW_COLORS.light 一致（主进程窗口底色） */
 	--color-window: #f5f5f7;
 	--color-surface-solid: #ffffff;
 	--color-scrollbar: rgb(0 0 0 / 0.18);
@@ -130,6 +131,7 @@ html[data-theme="dark"] {
 
 	--color-scrim: rgb(0 0 0 / 0.35);
 
+	/* 与 src/shared/window-colors.ts 的 WINDOW_COLORS.dark 一致（主进程窗口底色） */
 	--color-window: #141417;
 	--color-surface-solid: #1e232c;
 	--color-scrollbar: rgb(255 255 255 / 0.16);

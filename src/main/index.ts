@@ -5,10 +5,12 @@ import { pathToFileURL } from "node:url";
 import { app, BrowserWindow, dialog, nativeTheme, safeStorage, shell } from "electron";
 import kernelConfig from "../../kernel.config.json";
 import appPackage from "../../package.json";
+import { windowColor } from "@shared/window-colors";
 import { Backend } from "../core/backend";
 import { KernelUpdater } from "../core/kernel-updater";
 import { BrowserManager } from "./browser";
-import { registerIpc } from "./ipc";
+import { registerIpc, RENDERER_CLIENT_ID } from "./ipc";
+import { logError, logLine, currentLogFile } from "./log";
 import { runSmokeTest } from "./smoke";
 import { runUIScreenshot } from "./screenshot";
 import { bundledAdapterEntry, bundledWorkerEntry, createUtilitySpawner, probeUtilityKernel } from "./spawn";
@@ -18,7 +20,22 @@ const isUIShot = process.argv.includes("--ui-screenshot");
 // 测试和截图隔离 Electron 自身的数据，不读取真实用户的缓存与内核选择。
 if (process.env.FLOWORK_DATA_DIR) app.setPath("userData", join(process.env.FLOWORK_DATA_DIR, "electron"));
 if (isUIShot && (app.isPackaged || !process.env.FLOWORK_DATA_DIR)) throw new Error("界面截图仅支持隔离数据目录下的未打包应用");
+
+// 主进程的未捕获异常必须留痕：默认行为会直接弹崩溃框或静默退出，用户拿不到任何线索。
+process.on("uncaughtException", (error) => logError("main", error));
+process.on("unhandledRejection", (reason) => logError("main", reason));
+
+// 单实例：projects.json / hosts.json / databases.json 的写入队列都在进程内，两个实例会互相覆盖。
+// smoke / 截图模式要能与已打开的正式实例并存，因此跳过锁。
+const primaryInstance = isSmoke || isUIShot ? true : app.requestSingleInstanceLock();
+if (!primaryInstance) {
+	// app.exit 会立即终止进程；下面的初始化不会再执行，这里只留一行日志便于排查。
+	logLine("main", "已有 FloWork 实例在运行，本次启动退出");
+	app.exit(0);
+}
 let mainWindow: BrowserWindow | undefined;
+/** 渲染进程连续崩溃次数：只用于阻止「重载→再崩」的无限弹框循环 */
+let rendererCrashes = 0;
 const browsers = new WeakMap<BrowserWindow, BrowserManager>();
 
 /** 开发模式下的窗口图标；打包后 exe 图标由 electron-builder 从 build/icon.ico 设置，窗口自动沿用 */
@@ -152,6 +169,21 @@ const backend = new Backend({
 	},
 });
 
+/**
+ * 回收渲染进程名下的会话。
+ *
+ * 界面重载或崩溃后，渲染进程里的 handleId 全部作废；不释放的话 worker 会一直在后台跑，
+ * 用户再也看不到它、也不能中断它。终端不在此列（由 backend.releaseClient 内部保留）。
+ */
+async function releaseRendererClient(reason: string): Promise<void> {
+	try {
+		await backend.releaseClient(RENDERER_CLIENT_ID);
+		logLine("renderer", `已回收会话：${reason}`);
+	} catch (error) {
+		logError("renderer", error);
+	}
+}
+
 function createWindow(show = true): BrowserWindow {
 	const isMac = process.platform === "darwin";
 	const win = new BrowserWindow({
@@ -163,7 +195,7 @@ function createWindow(show = true): BrowserWindow {
 		title: "FloWork",
 		...(windowIcon ? { icon: windowIcon } : {}),
 		// 页面渲染前可见的窗口底色，需与 styles.css 的 --color-window 一致
-		backgroundColor: nativeTheme.shouldUseDarkColors ? "#141417" : "#f5f5f7",
+		backgroundColor: windowColor(nativeTheme.shouldUseDarkColors),
 		autoHideMenuBar: true,
 		// 自绘标题栏：整条栏为拖拽区，最小化 / 最大化 / 关闭由界面自绘（与设计稿一致），
 		// 因此 Windows / Linux 不再使用系统 titleBarOverlay；macOS 保留红绿灯。
@@ -181,6 +213,43 @@ function createWindow(show = true): BrowserWindow {
 	});
 
 	if (show) win.once("ready-to-show", () => win.show());
+
+	// 一次加载完成后，任何再次触发的主动导航都等于「页面重载」：渲染进程内存里的会话句柄会全部丢失，
+	// 此时必须释放它名下的会话，否则后台 worker 会一直跑着却再也无人能连上。
+	let loadedOnce = false;
+	win.webContents.on("did-finish-load", () => {
+		loadedOnce = true;
+		// 能完整加载说明界面是健康的，清零崩溃计数
+		rendererCrashes = 0;
+	});
+	win.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+		if (!isMainFrame || isInPlace || !loadedOnce) return;
+		void releaseRendererClient("页面重载");
+	});
+
+	// 渲染进程崩溃 / 被杀：先释放会话，再问用户要不要重载。
+	// 连续崩溃（重载后立刻又崩）不再弹框，直接退出，避免无限循环。
+	win.webContents.on("render-process-gone", async (_event, details) => {
+		if (details.reason === "clean-exit") return;
+		logLine("renderer", `渲染进程已退出：${details.reason}（exitCode ${details.exitCode}）`);
+		await releaseRendererClient("渲染进程退出");
+		if (win.isDestroyed()) return;
+		rendererCrashes++;
+		if (rendererCrashes > 2) {
+			logLine("renderer", `连续崩溃 ${rendererCrashes} 次，退出应用`);
+			app.quit();
+			return;
+		}
+		const options = {
+			type: "error" as const,
+			buttons: ["退出", "重新加载界面"], defaultId: 1, cancelId: 0,
+			message: "界面进程意外退出",
+			detail: `原因：${details.reason}。重新加载只恢复界面，正在运行的会话已经被关闭；可从会话历史里重新打开。日志：${currentLogFile()}`,
+		};
+		const result = await dialog.showMessageBox(win, options);
+		if (result.response === 1 && !win.isDestroyed()) win.webContents.reload();
+		else app.quit();
+	});
 
 	// 外部链接（包括 OAuth 授权页）用系统浏览器打开，其它协议一律拒绝
 	win.webContents.setWindowOpenHandler(({ url }) => {
@@ -207,6 +276,8 @@ function createWindow(show = true): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
+	if (!primaryInstance) return;
+	logLine("main", `启动 FloWork ${app.getVersion()}（Electron ${process.versions.electron}）`);
 	await kernelUpdates.initialize();
 	registerIpc(backend, () => mainWindow, (win) => browsers.get(win), isAppUrl);
 	mainWindow = createWindow(!isSmoke && !isUIShot);
@@ -221,6 +292,15 @@ app.whenReady().then(async () => {
 	app.on("activate", () => {
 		if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow();
 	});
+});
+
+// 第二个实例被拦住时，把已有窗口叫到前台（而不是什么都不发生）
+app.on("second-instance", () => {
+	const win = mainWindow;
+	if (!win || win.isDestroyed()) return;
+	if (win.isMinimized()) win.restore();
+	win.show();
+	win.focus();
 });
 
 app.on("window-all-closed", () => {

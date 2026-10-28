@@ -261,6 +261,8 @@ const RAIL_KEY = "flowork.sessionRail";
 const FOLD_PROCESS_KEY = "flowork.foldProcess";
 const SIDEBAR_KEY = "flowork.sidebarOpen";
 const EXPANDED_KEY = "flowork.expandedProjects";
+/** 图库收藏：按图片 id 记录，与缓存文件生命周期解耦（清空缓存后收藏保留） */
+const IMAGE_FAVORITES_KEY = "flowork.imageFavorites";
 
 function storedPanel(): RightPanel | null {
 	const v = localStorage.getItem(PANEL_KEY);
@@ -286,6 +288,19 @@ function storedExpanded(): Record<string, boolean> {
 	try {
 		const v = JSON.parse(localStorage.getItem(EXPANDED_KEY) ?? "{}") as unknown;
 		return v && typeof v === "object" ? (v as Record<string, boolean>) : {};
+	} catch {
+		return {};
+	}
+}
+
+function storedImageFavorites(): Record<string, boolean> {
+	try {
+		const v = JSON.parse(localStorage.getItem(IMAGE_FAVORITES_KEY) ?? "{}") as unknown;
+		if (!v || typeof v !== "object") return {};
+		// 只保留 true，避免旧数据里的 false / 非布尔值把文件撑大
+		const out: Record<string, boolean> = {};
+		for (const [id, value] of Object.entries(v)) if (value === true) out[id] = true;
+		return out;
 	} catch {
 		return {};
 	}
@@ -627,7 +642,7 @@ export const useApp = create<AppState>()((set, get) => {
 		imageBusy: false,
 		pendingImages: [],
 		imageFilter: "all",
-		imageFavorites: {},
+		imageFavorites: storedImageFavorites(),
 		resolvedTheme: resolveTheme(storedTheme()),
 		configVersion: 0,
 		discoverOpen: false,
@@ -752,8 +767,15 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		toggleImageFavorite(id) {
-			const next = { ...get().imageFavorites, [id]: !get().imageFavorites[id] };
+			const next = { ...get().imageFavorites };
+			if (next[id]) delete next[id];
+			else next[id] = true;
 			set({ imageFavorites: next });
+			try {
+				localStorage.setItem(IMAGE_FAVORITES_KEY, JSON.stringify(next));
+			} catch {
+				// 配额耗尽时收藏只在本次运行有效，不阻断界面操作
+			}
 		},
 
 		// ----- 项目 -----
