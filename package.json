@@ -22,7 +22,8 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:renderer",
     "test": "node scripts/run-tests.mjs",
     "kernel:keygen": "node scripts/kernel-keygen.mjs",
-    "kernel:approve": "node scripts/approve-kernel.mjs"
+    "kernel:approve": "node scripts/approve-kernel.mjs",
+    "kernel:publish": "node scripts/publish-kernel-release.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "1.4.0",
