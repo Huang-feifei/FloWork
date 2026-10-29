@@ -83,7 +83,7 @@ pi worker ── src/worker（Electron utilityProcess）
 
 - pi 以 **SDK** 方式运行在独立子进程中：可以使用 SDK 的完整能力（会话树导航、OAuth 登录、资源重载等），pi 或扩展崩溃不会影响界面和后端。
 - 内部协议的命令和事件命名沿用 pi RPC，并补充了 RPC 没有的能力（`navigate_tree`、`list_sessions`、交互式登录、配置读写等）。
-- **适配层**：pi 的类型只在 `src/worker/adapter.ts` 中解读，界面只依赖 `src/shared/protocol.ts`。升级 pi 时优先检查适配层。pi 版本锁定在 `1.1.0`。
+- **适配层**：pi 的类型只在 `src/worker/adapter.ts` 中解读，界面只依赖 `src/shared/protocol.ts`。升级 pi 时优先检查适配层。pi 版本锁定在 `1.4.0`。
 - **应用请求安全边界**：仅通过 preload 的 Electron IPC 暴露类型化 API，主进程校验请求来自应用窗口的主框架与合法应用地址；不监听应用控制端口。
 - **内置浏览器**：网页由主进程的 Electron `WebContentsView` 承载，渲染进程只通过 IPC 下发标签命令与视口矩形，网页内容不进入应用渲染进程；网页运行在独立隔离 session 中，权限、下载、非 HTTP(S) 导航与应用自身地址一律拒绝（详见「发布版的安全边界」）。
 - **运行时**：桌面主进程与 pi worker 使用 Electron 自带的 Node，不依赖用户另行安装 Node。源码开发要求 Node ≥ 22.19（项目 `.nvmrc` 为 24.21.0）。内核发行与部分独立测试工具通过 `scripts/runtime.mjs` 选择合适的 Node（当前 Node → `FLOWORK_NODE` → nvm → Electron Node 模式），这不提供独立应用后端。

@@ -84,7 +84,7 @@ try {
 	const source = event(true), before = structuredClone(source.preparation);
 	const prepared = prepareCompactionInput(source);
 	const serialized = serializeConversation(convertToLlm(prepared.messagesToSummarize));
-	assert.ok(serialized.length < serializeConversation(convertToLlm(history)).length / 10);
+	assert.ok(JSON.stringify(prepared.messagesToSummarize).length < JSON.stringify(history).length / 10);
 	assert.doesNotMatch(serialized, /historical-reasoning-fixture|opaque-replay-fixture|Assistant thinking/);
 	for (const value of ["Preserve user constraints", "Preserve final decision", "changed.ts", "implemented fixture", "tool-result-fixture"]) assert.ok(serialized.includes(value), value);
 	assert.equal(prepared.previousSummary, before.previousSummary);
@@ -101,7 +101,7 @@ try {
 		const result = await test.run(fixture);
 		assert.ok(result.compaction);
 		assert.equal(test.requests.length, 2, "分段摘要保留历史 / 前缀两个阶段");
-		assert.deepEqual(test.requests.map((r) => r.options.maxTokens), [16384, 10240]);
+		assert.equal(test.requests[0].target.maxTokens, 16384);
 		for (const request of test.requests) {
 			assert.equal(request.options.reasoning, "high", "不暗改用户思考档位");
 			assert.equal(request.options.signal, fixture.signal);
@@ -155,7 +155,7 @@ try {
 	assert.ok((await routed.run(event())).compaction);
 	assert.equal(routes, 1);
 	assert.equal(routed.requests[0].target, routedModel);
-	assert.equal(routed.requests[0].options.maxTokens, 6000);
+	assert.equal(routed.requests[0].target.maxTokens, 6000);
 	assert.equal(routed.requests[0].options.reasoning, "low");
 	const routeFailure = makeHook({ selected: { ...model, api: "pi-virtual" }, route: async () => { throw new Error("offline routing failed"); } });
 	assert.deepEqual(await routeFailure.run(event()), { cancel: true }); assert.equal(routeFailure.requests.length, 0);

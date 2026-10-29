@@ -98,27 +98,52 @@ try {
 	let total = 0;
 	let failure;
 	const controller = new AbortController();
-	const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(5 * 60_000)]);
+	const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(15 * 60_000)]);
 	console.log(`从官方 npm 验证 ${packages.length} 个固定依赖…`);
+	let completed = 0;
 	await Promise.all(Array.from({ length: Math.min(6, packages.length) }, async () => {
 		try {
 			while (next < packages.length && !signal.aborted) {
 				const index = next++;
 				const p = packages[index];
-				const response = await requestNpm(p.url, signal);
-				if (!response.body) throw new Error(`npm 包 ${p.name} 返回空响应`);
+				let lastErr;
+				let success = false;
 				const file = join(cacheDirectory, `${index}.tgz`);
-				const out = await open(file, "wx");
-				const hash = createHash("sha512");
-				try {
-					for await (const chunk of response.body) {
-						p.size += chunk.byteLength; total += chunk.byteLength;
+				for (let attempt = 0; attempt < 3 && !success && !signal.aborted; attempt++) {
+					try {
+						const reqSignal = AbortSignal.any([signal, AbortSignal.timeout(180_000)]);
+						const response = await requestNpm(p.url, reqSignal);
+						if (!response.body) throw new Error(`npm 包 ${p.name} 返回空响应`);
+						const out = await open(file, "w");
+						const hash = createHash("sha512");
+						let pkgSize = 0;
+						try {
+							for await (const chunk of response.body) {
+								pkgSize += chunk.byteLength;
+								hash.update(chunk);
+								await out.writeFile(chunk);
+							}
+						} finally {
+							await out.close();
+						}
+						if (`sha512-${hash.digest("base64")}` !== p.integrity) {
+							throw new Error(`${p.name} 的官方 tarball 与测试 lockfile 不一致`);
+						}
+						p.size = pkgSize;
+						total += pkgSize;
 						if (total > MAX_KERNEL_BYTES) throw new Error("官方包下载总量超出限制");
-						hash.update(chunk); await out.writeFile(chunk);
+						cached.set(p.url, file);
+						success = true;
+						completed++;
+						if (completed % 15 === 0 || completed === packages.length) {
+							console.log(`已验证 ${completed}/${packages.length} 个依赖 (${(total / 1024 / 1024).toFixed(1)} MB)`);
+						}
+					} catch (err) {
+						lastErr = err;
+						if (signal.aborted) break;
 					}
-				} finally { await out.close(); }
-				if (`sha512-${hash.digest("base64")}` !== p.integrity) throw new Error(`${p.name} 的官方 tarball 与测试 lockfile 不一致`);
-				cached.set(p.url, file);
+				}
+				if (!success) throw lastErr ?? new Error(`下载 ${p.name} 失败`);
 			}
 		} catch (error) { failure ??= error; controller.abort(error); }
 	}));
