@@ -88,7 +88,7 @@ function getDiff(details: unknown): string | undefined {
 	return undefined;
 }
 
-function DiffView({ diff }: { diff: string }) {
+export function DiffView({ diff }: { diff: string }) {
 	const lines = diff.split("\n");
 	return (
 		<div className="mt-2 overflow-x-auto rounded-xl border border-border bg-pre-bg py-1">

@@ -2,46 +2,24 @@
  * 终端风格的会话记录：
  *   ❯ 用户输入
  *   ● 回复文本（Markdown）
- *   ✻ 思考过程（可展开）
- *   ● tool(参数)  ⎿ 结果
+ *   🌲 任务执行进度树（聚合思考与工具调用）
  *
- * 历史轮次里连续的「思考 + 工具调用」会收成一行摘要（会话头部「展开过程」可关掉），
- * 正在运行的那一轮始终展开，这样长会话不会满屏都是过程。
+ * 彻底重构了历史轮次与运行中过程的展示：
+ * - 连续的思考与工具调用聚合为单个结构化的「任务执行进度树」，去除了零碎割裂的黑胶囊与悬空圆点；
+ * - 折叠状态为精致的单行状态栏，展开状态为优雅的树状导轨线；
+ * - 支持一键跳转右侧面板查看全景执行树。
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ContentBlock, ImageAttachment } from "@shared/protocol";
 import { parseSkillInvocation } from "@shared/skill-text";
 import { buildTurns, turnChangedFiles, turnKey, type Turn } from "../../lib/session-turns";
+import { buildTurnFlowBlocks, type ToolResultMap, type TurnContentBlock } from "../../lib/session-flow";
 import type { SessionFile } from "../../lib/session-files";
 import { useApp } from "../../store";
+import { ExecutionTree } from "./ExecutionTree";
 import { ImageThumb } from "./ImageThumb";
 import { Markdown } from "./Markdown";
-import { ToolBlock } from "./ToolBlock";
 import { TurnFooter } from "./TurnFooter";
-
-type ToolResultMap = Map<string, { content: ContentBlock[]; details?: unknown; isError: boolean }>;
-type AssistantMessage = Extract<ChatMessage, { role: "assistant" }>;
-type ThinkingBlock = Extract<ContentBlock, { type: "thinking" }>;
-type ToolCallBlock = Extract<ContentBlock, { type: "toolCall" }>;
-type ProcessBlock = ThinkingBlock | ToolCallBlock;
-
-/** 一轮回复拆成「正文」和「过程」两类片段，过程片段由连续的思考 / 工具调用组成 */
-type Segment = { kind: "text"; text: string } | { kind: "process"; blocks: ProcessBlock[] };
-
-function segmentsOf(content: ContentBlock[]): Segment[] {
-	const out: Segment[] = [];
-	for (const block of content) {
-		if (block.type === "text") {
-			if (block.text.trim()) out.push({ kind: "text", text: block.text });
-			continue;
-		}
-		if (block.type !== "thinking" && block.type !== "toolCall") continue;
-		const prev = out[out.length - 1];
-		if (prev?.kind === "process") prev.blocks.push(block);
-		else out.push({ kind: "process", blocks: [block] });
-	}
-	return out;
-}
 
 function Gutter({ mark, className = "", children }: { mark: React.ReactNode; className?: string; children: React.ReactNode }) {
 	return (
@@ -99,186 +77,83 @@ function SkillInvocation({ skill }: { skill: { skill: string; args: string; body
 	);
 }
 
-function ThinkingLine({ text, live }: { text: string; live: boolean }) {
-	const [open, setOpen] = useState(false);
-	if (!text.trim()) return null;
-	const lines = text.trim().split("\n");
-	const tail = lines.slice(-3).join("\n");
+function NoteLine({ kind, text }: { kind: string; text: string }) {
 	return (
-		<Gutter mark="✻" className="text-muted">
-			<button type="button" onClick={() => setOpen(!open)} className="text-[12.5px] text-muted hover:text-fg">
-				{live ? "思考中…" : `思考过程（${text.length} 字）`} {open ? "▾" : "▸"}
-			</button>
-			{(open || live) && (
-				<div className="mt-1.5 max-h-72 overflow-y-auto border-l-2 border-border pl-3 font-mono text-[12.5px] leading-[1.7] whitespace-pre-wrap text-muted">
-					{open ? text : tail}
-				</div>
-			)}
+		<Gutter mark="※" className="text-muted">
+			<div className="text-[13px] leading-relaxed whitespace-pre-wrap text-muted">
+				<span className="mr-2 font-mono">[{kind}]</span>
+				{text}
+			</div>
 		</Gutter>
 	);
 }
 
-/**
- * 一组连续的思考 / 工具调用。
- * folded 时只留一行摘要（思考字数与工具名），点击再展开；不折叠时保持原来的逐条展示。
- */
-const ProcessGroup = memo(function ProcessGroup({
+/** 单个轮次内聚合后的内容流视图 */
+const TurnBlocksView = memo(function TurnBlocksView({
 	blocks,
-	toolResults,
 	folded,
+	onOpenPanel,
 }: {
-	blocks: ProcessBlock[];
-	toolResults: ToolResultMap;
+	blocks: TurnContentBlock[];
 	folded: boolean;
+	onOpenPanel: () => void;
 }) {
-	const [open, setOpen] = useState(false);
-	// 关掉折叠时清掉逐组的展开状态，避免下次再折叠时残留展开
-	useEffect(() => {
-		if (!folded) setOpen(false);
-	}, [folded]);
-
-	const thinking = blocks.filter((b): b is ThinkingBlock => b.type === "thinking");
-	const calls = blocks.filter((b): b is ToolCallBlock => b.type === "toolCall");
-	const thinkingChars = thinking.reduce((n, b) => n + b.thinking.trim().length, 0);
-	const names = [...new Set(calls.map((c) => c.name))];
-	const parts: string[] = [];
-	if (thinkingChars > 0) parts.push(`思考 ${thinkingChars} 字`);
-	if (calls.length > 0) parts.push(`${calls.length} 个工具调用（${names.join("、")}）`);
-
-	const body = blocks.map((block, i) =>
-		block.type === "thinking" ? (
-			// biome-ignore lint/suspicious/noArrayIndexKey: 内容块按位置稳定，没有独立 id
-			<ThinkingLine key={i} text={block.thinking} live={false} />
-		) : (
-			<ToolBlock key={i} call={block} result={toolResults.get(block.id)} />
-		),
-	);
-
-	if (parts.length === 0) return null;
-	if (!folded) return <>{body}</>;
-
 	return (
-		<>
-			<Gutter mark={calls.length > 0 ? "●" : "✻"} className="text-muted">
-				<button
-					type="button"
-					onClick={() => setOpen(!open)}
-					title={open ? "折叠思考与工具调用" : "展开思考与工具调用"}
-					className="inline-flex items-center gap-1.5 rounded-full bg-panel-2 px-3 py-1 text-[12.5px] text-muted hover:text-fg"
-				>
-					<span className="text-[10px]">{open ? "▾" : "▸"}</span>
-					{parts.join(" · ")}
-				</button>
-			</Gutter>
-			{open && <div className="mt-2 ml-3 space-y-3 border-l-2 border-border pl-3">{body}</div>}
-		</>
-	);
-});
+		<div className="space-y-3">
+			{blocks.map((block) => {
+				if (block.type === "execution") {
+					return (
+						<ExecutionTree
+							key={block.group.id}
+							group={block.group}
+							folded={folded}
+							onOpenPanel={onOpenPanel}
+						/>
+					);
+				}
 
-/**
- * 历史消息用 memo 包住：流式输出时 messages 数组不变，只有正在生成的那条（streaming）重渲染，
- * 不会把整段会话记录重新算一遍。
- */
-const AssistantBlocks = memo(function AssistantBlocks({
-	message,
-	toolResults,
-	live,
-	foldProcess,
-	foldOverride,
-}: {
-	message: AssistantMessage;
-	toolResults: ToolResultMap;
-	live: boolean;
-	foldProcess: boolean;
-	/** 本轮显式指定的折叠状态；undefined 表示跟随全局设置 */
-	foldOverride?: boolean;
-}) {
-	const segments = useMemo(() => segmentsOf(message.content), [message.content]);
-	// 流式光标跟在最后一段正文后面
-	let lastText = -1;
-	segments.forEach((seg, i) => {
-		if (seg.kind === "text") lastText = i;
-	});
-	const folded = (foldOverride ?? foldProcess) && !live;
-
-	return (
-		<>
-			{segments.map((seg, i) =>
-				seg.kind === "text" ? (
-					// biome-ignore lint/suspicious/noArrayIndexKey: 内容块按位置稳定，没有独立 id
-					<Gutter key={i} mark="●">
-						<div className="text-[14.5px] leading-relaxed">
-							<Markdown text={seg.text} />
+				if (block.type === "text") {
+					return (
+						<div key={block.id} className="text-[14.5px] leading-relaxed">
+							{block.text && (
+								<Gutter mark="●">
+									<Markdown text={block.text} />
+									{block.live && <span className="term-cursor" />}
+								</Gutter>
+							)}
+							{block.stopReason === "error" && (
+								<Gutter mark="✗" className="text-err">
+									<span className="text-err">{block.errorMessage || "请求失败"}</span>
+								</Gutter>
+							)}
+							{block.stopReason === "aborted" && (
+								<Gutter mark="⎿" className="text-muted">
+									<span className="text-muted">已中断</span>
+								</Gutter>
+							)}
 						</div>
-						{live && i === lastText && <span className="term-cursor" />}
-					</Gutter>
-				) : (
-					<ProcessGroup key={i} blocks={seg.blocks} toolResults={toolResults} folded={folded} />
-				),
-			)}
-			{message.stopReason === "error" && (
-				<Gutter mark="✗" className="text-err">
-					<span className="text-err">{message.errorMessage || "请求失败"}</span>
-				</Gutter>
-			)}
-			{message.stopReason === "aborted" && (
-				<Gutter mark="⎿" className="text-muted">
-					<span className="text-muted">已中断</span>
-				</Gutter>
-			)}
-		</>
+					);
+				}
+
+				if (block.type === "note") {
+					return <NoteLine key={block.id} kind={block.kind} text={block.text} />;
+				}
+
+				return null;
+			})}
+		</div>
 	);
 });
 
-const MessageView = memo(function MessageView({
-	message,
-	toolResults,
-	foldProcess,
-	foldOverride,
-}: {
-	message: ChatMessage;
-	toolResults: ToolResultMap;
-	foldProcess: boolean;
-	foldOverride?: boolean;
-}) {
-	switch (message.role) {
-		case "user":
-			return <UserLine message={message} />;
-		case "assistant":
-			return (
-				<AssistantBlocks
-					message={message}
-					toolResults={toolResults}
-					live={false}
-					foldProcess={foldProcess}
-					foldOverride={foldOverride}
-				/>
-			);
-		case "toolResult":
-			// 工具结果合并显示在对应的工具调用下方
-			return null;
-		case "note":
-			return (
-				<Gutter mark="※" className="text-muted">
-					<div className="text-[13px] leading-relaxed whitespace-pre-wrap text-muted">
-						<span className="mr-2">[{message.kind}]</span>
-						{message.text}
-					</div>
-				</Gutter>
-			);
-	}
-});
-
 /**
- * 长会话分段渲染：首次只挂最近 INITIAL_ROWS 条可见消息（工具结果不单独成行，不计数），
- * 往上滚到顶部再每次多挂 MORE_ROWS 条。按条数而不是按轮数切：一轮里 agent 可能连续回复几十上百次。
+ * 长会话分段渲染：首次只挂最近 INITIAL_ROWS 条可见消息，
+ * 往上滚到顶部再每次多挂 MORE_ROWS 条。
  */
 const INITIAL_ROWS = 80;
 const MORE_ROWS = 80;
 
 const isRow = (m: ChatMessage | undefined) => !!m && m.role !== "toolResult";
 
-/** 从末尾往前数 rows 条可见消息，返回开始渲染的下标；不足时从 0 开始 */
 function windowStart(messages: readonly ChatMessage[], rows: number): number {
 	let seen = 0;
 	for (let i = messages.length - 1; i >= 0; i--) {
@@ -293,14 +168,11 @@ function countRows(messages: readonly ChatMessage[], end: number): number {
 	return n;
 }
 
-/** 顶部的「更早内容」入口：滚到可见时自动加载，也可以点击一次加载全部 */
 function LoadEarlier({ hidden, onMore, onAll }: { hidden: number; onMore: () => void; onAll: () => void }) {
 	const ref = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
-		// root 为视口：会话滚动容器的裁剪同样计入相交判断；内容插在上方时浏览器的滚动锚定保持当前画面不跳
-		// 只在「离开过可视区再回来」时自动加载：刚挂载时会话还没贴底，哨兵可能短暂可见，不能因此连锁加载全部
 		let armed = false;
 		const observer = new IntersectionObserver((entries) => {
 			const visible = entries.some((e) => e.isIntersecting);
@@ -331,14 +203,13 @@ export function Transcript() {
 	const streaming = useApp((s) => s.streaming);
 	const foldProcess = useApp((s) => s.foldProcess);
 	const isRunning = useApp((s) => s.isRunning);
+	const setRightPanel = useApp((s) => s.setRightPanel);
 	const cwd = useApp((s) => s.cwd);
 	const sessionKey = useApp((s) => s.state?.sessionId ?? "");
 	const [rows, setRows] = useState(INITIAL_ROWS);
-	/** 每轮过程折叠状态的显式覆盖：key 为轮次 key，未设置时跟随全局 foldProcess */
+	/** 每轮过程折叠状态的显式覆盖：key 为轮次 key */
 	const [turnFold, setTurnFold] = useState<Record<string, boolean>>({});
 
-	// 切换会话时回到只显示最近的一段，并清掉上一会话的折叠覆盖
-	// biome-ignore lint/correctness/useExhaustiveDependencies: 只在会话变化时重置
 	useEffect(() => {
 		setRows(INITIAL_ROWS);
 		setTurnFold({});
@@ -349,16 +220,10 @@ export function Transcript() {
 	const showMore = useCallback(() => setRows((n) => n + MORE_ROWS), []);
 	const showAll = useCallback(() => setRows(Number.POSITIVE_INFINITY), []);
 
-	// 每轮汇总条挂在「本轮最后一条会单独成行的消息」之后
 	const turns = useMemo(() => buildTurns(messages), [messages]);
-	const turnByRow = useMemo(() => {
-		const map = new Map<number, Turn>();
-		for (const turn of turns) map.set(turn.lastRowIndex, turn);
-		return map;
-	}, [turns]);
 	const lastTurn = turns[turns.length - 1];
 	const live = isRunning || !!streaming;
-	// 本轮修改过的文件：既用于文件 chip，也用于决定是否显示汇总条
+
 	const turnChanges = useMemo(() => {
 		const map = new Map<string, SessionFile[]>();
 		for (const turn of turns) map.set(turnKey(turn), turnChangedFiles(turn, cwd));
@@ -373,29 +238,59 @@ export function Transcript() {
 		return map;
 	}, [messages]);
 
+	const handleOpenExecutionPanel = useCallback(() => {
+		setRightPanel("execution");
+	}, [setRightPanel]);
+
+	// 前置的纯系统 note 消息（若在第一轮提问之前出现）
+	const leadingNotes = useMemo(() => {
+		const out: Extract<ChatMessage, { role: "note" }>[] = [];
+		for (const m of messages) {
+			if (m.role === "user") break;
+			if (m.role === "note") out.push(m);
+		}
+		return out;
+	}, [messages]);
+
 	return (
-		<div className="flex flex-col gap-4">
+		<div className="flex flex-col gap-6">
 			{hidden > 0 && <LoadEarlier hidden={hidden} onMore={showMore} onAll={showAll} />}
-			{messages.map((m, i) => {
-				// 窗口之前的消息不挂载；工具结果不单独成行，不需要 data-entry-id
-				if (i < start || m.role === "toolResult") return null;
-				const turn = turnByRow.get(i);
-				const key = turn ? turnKey(turn) : "";
-				const effectiveFold = turn ? (turnFold[key] ?? foldProcess) : foldProcess;
-				const changed = turn ? (turnChanges.get(key) ?? []) : [];
-				// 正在运行的最后一轮不显示；其余只在「最后一轮」或「本轮改过文件」时显示，避免长会话里太密
-				const showFooter = !!turn && !(turn === lastTurn && live) && (turn === lastTurn || changed.length > 0);
+
+			{leadingNotes.map((n, i) => (
+				<NoteLine key={n.entryId ?? `leading-note-${i}`} kind={n.kind} text={n.text} />
+			))}
+
+			{turns.map((turn) => {
+				// 该轮如果完全在窗口起始下标之前，跳过挂载
+				if (turn.endIndex < start) return null;
+
+				const key = turnKey(turn);
+				const isLast = turn === lastTurn;
+				const isLiveThisTurn = isLast && live;
+				const effectiveFold = turnFold[key] ?? foldProcess;
+				const changed = turnChanges.get(key) ?? [];
+				const showFooter = !isLiveThisTurn && (isLast || changed.length > 0);
+
+				const flowBlocks = buildTurnFlowBlocks(
+					turn.messages,
+					toolResults,
+					isLiveThisTurn ? streaming : null,
+				);
+
 				return (
-					// biome-ignore lint/suspicious/noArrayIndexKey: 消息按时间追加，索引稳定
-					// data-entry-id 让会话树窄轨知道哪条消息在屏幕上
-					<div key={i} data-entry-id={m.entryId}>
-						<MessageView
-							message={m}
-							toolResults={toolResults}
-							foldProcess={foldProcess}
-							foldOverride={turn ? turnFold[key] : undefined}
+					<div key={key} data-entry-id={turn.user.entryId} className="space-y-4">
+						{/* 用户提问行 */}
+						<UserLine message={turn.user} />
+
+						{/* 轮次内的内容流（任务执行进度树 + 助手正文） */}
+						<TurnBlocksView
+							blocks={flowBlocks}
+							folded={effectiveFold}
+							onOpenPanel={handleOpenExecutionPanel}
 						/>
-						{showFooter && turn && (
+
+						{/* 轮次汇总条 */}
+						{showFooter && (
 							<TurnFooter
 								turn={turn}
 								changed={changed}
@@ -406,7 +301,15 @@ export function Transcript() {
 					</div>
 				);
 			})}
-			{streaming && <AssistantBlocks message={streaming} toolResults={toolResults} live foldProcess={foldProcess} />}
+
+			{/* 如果对话刚开始且仅有 streaming 产生 */}
+			{turns.length === 0 && streaming && (
+				<TurnBlocksView
+					blocks={buildTurnFlowBlocks([], toolResults, streaming)}
+					folded={foldProcess}
+					onOpenPanel={handleOpenExecutionPanel}
+				/>
+			)}
 		</div>
 	);
 }

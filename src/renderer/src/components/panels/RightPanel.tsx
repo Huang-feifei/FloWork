@@ -4,6 +4,7 @@ import { type RightPanel as Panel, useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
 import { Icon } from "../Icon";
 import { Segmented } from "../ui";
+import { ExecutionTreePanel } from "./ExecutionTreePanel";
 import { ProjectFiles } from "./ProjectFiles";
 import { ServerFiles } from "./ServerFiles";
 import { ServerStatus } from "./ServerStatus";
@@ -11,15 +12,17 @@ import { SessionFiles } from "./SessionFiles";
 
 export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteOnly?: boolean }> = [
 	{ id: "files", label: "项目文件", hint: "浏览工作区目录" },
-	{ id: "server", label: "服务器目录", hint: "浏览服务器上的任意目录、上传下载", remoteOnly: true },
-	{ id: "services", label: "服务状态", hint: "远端主机的负载、服务与端口（只读）", remoteOnly: true },
+	{ id: "execution", label: "执行树", hint: "查看任务执行进度树、工具链与每步输出" },
 	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
 	{ id: "browser", label: "内置浏览器", hint: "在聊天旁浏览网页、预览本地 HTML（桌面版）" },
+	{ id: "server", label: "服务器目录", hint: "浏览服务器上的任意目录、上传下载", remoteOnly: true },
+	{ id: "services", label: "服务状态", hint: "远端主机的负载、服务与端口（只读）", remoteOnly: true },
 ];
 
 /** 300px 宽的面板里放不下完整页签名，分段控件用短名，完整名字放 title */
 const SHORT: Record<string, string> = {
 	files: "项目",
+	execution: "执行树",
 	server: "目录",
 	services: "服务",
 	session: "会话",
@@ -123,6 +126,7 @@ export function RightPanel() {
 				</button>
 			</div>
 			{active === "files" && <ProjectFiles />}
+			{active === "execution" && <ExecutionTreePanel />}
 			{active === "server" && isRemote && <ServerFiles />}
 			{active === "services" && isRemote && <ServerStatus />}
 			{active === "session" && <SessionFiles />}
