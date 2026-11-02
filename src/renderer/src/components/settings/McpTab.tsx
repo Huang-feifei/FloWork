@@ -14,6 +14,7 @@ export function McpTab() {
 
 	const [dialogOpen, setDialogOpen] = useState(false);
 	const [editingServer, setEditingServer] = useState<{ name: string; config: McpServerConfig } | null>(null);
+	const [testStatus, setTestStatus] = useState<Record<string, { ok: boolean; msg: string; time?: number } | "testing">>({});
 
 	const parsedConfig: McpConfig = useMemo(() => {
 		if (!file || !file.text) return { mcpServers: {} };
@@ -70,6 +71,39 @@ export function McpTab() {
 			[name]: config,
 		};
 		await saveMcpConfig({ ...parsedConfig, mcpServers: nextServers });
+	};
+
+	const handleTest = async (name: string, conf: McpServerConfig) => {
+		setTestStatus((prev) => ({ ...prev, [name]: "testing" }));
+		const start = performance.now();
+		try {
+			if (conf.url) {
+				const controller = new AbortController();
+				const timer = setTimeout(() => controller.abort(), 4000);
+				try {
+					await fetch(conf.url, { method: "HEAD", signal: controller.signal, mode: "no-cors" });
+					clearTimeout(timer);
+					const duration = Math.round(performance.now() - start);
+					setTestStatus((prev) => ({ ...prev, [name]: { ok: true, msg: "端点连通正常", time: duration } }));
+				} catch (err: unknown) {
+					clearTimeout(timer);
+					const isTimeout = err instanceof Error && err.name === "AbortError";
+					setTestStatus((prev) => ({
+						...prev,
+						[name]: { ok: false, msg: isTimeout ? "连接超时（>4s）" : "连接失败，请确认服务已启动并可访问" },
+					}));
+				}
+			} else {
+				const cmd = conf.command?.trim();
+				if (!cmd) {
+					setTestStatus((prev) => ({ ...prev, [name]: { ok: false, msg: "未指定 command 启动命令" } }));
+					return;
+				}
+				setTestStatus((prev) => ({ ...prev, [name]: { ok: true, msg: `命令格式正确 (${cmd})` } }));
+			}
+		} catch (e: unknown) {
+			setTestStatus((prev) => ({ ...prev, [name]: { ok: false, msg: errorText(e) } }));
+		}
 	};
 
 	return (
@@ -168,9 +202,32 @@ export function McpTab() {
 											)}
 											{conf.timeout && <span>超时: {conf.timeout}s</span>}
 										</div>
+
+										{testStatus[name] && (
+											<div className="mt-2 text-[12px]">
+												{testStatus[name] === "testing" ? (
+													<span className="text-muted">正在探测连通性…</span>
+												) : testStatus[name].ok ? (
+													<span className="text-ok font-medium">
+														✓ {testStatus[name].msg}
+														{testStatus[name].time !== undefined && ` (${testStatus[name].time}ms)`}
+													</span>
+												) : (
+													<span className="text-err font-medium">✗ {testStatus[name].msg}</span>
+												)}
+											</div>
+										)}
 									</div>
 
 									<div className="flex shrink-0 items-center gap-2">
+										<Button
+											size="sm"
+											disabled={testStatus[name] === "testing"}
+											onClick={() => void handleTest(name, conf)}
+											title="测试该服务的连通性"
+										>
+											{testStatus[name] === "testing" ? "测试中…" : "测试"}
+										</Button>
 										<Toggle
 											on={isEnabled}
 											onChange={() => void handleToggleEnable(name, conf)}
