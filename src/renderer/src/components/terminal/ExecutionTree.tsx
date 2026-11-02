@@ -4,7 +4,7 @@
  *
  * - 折叠状态：紧凑的一体化进度胶囊/摘要卡片，去除了悬空突兀的圆点，显示步骤总数、工具链流向与耗时；
  * - 展开状态：优美的垂直树形导轨线，每个步骤具备专属语义图标、状态徽标、耗时统计与可展开的输出结果；
- * - 运行状态：动态 Spinner 与实时更新，与流式输出无缝接驳。
+ * - 快捷操作：支持一键复制命令/输出、文件即时预览、智能耗时格式化（ms/s）。
  */
 import { memo, useEffect, useState } from "react";
 import type { ImageAttachment } from "@shared/protocol";
@@ -64,24 +64,58 @@ function toolColor(toolName: string): string {
 	}
 }
 
+export function formatMs(ms: number | undefined): string {
+	if (ms === undefined || ms <= 0) return "";
+	if (ms < 1000) return `${Math.round(ms)}ms`;
+	return `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** 快捷复制按钮 */
+function CopyButton({ text, title = "复制" }: { text: string; title?: string }) {
+	const [copied, setCopied] = useState(false);
+	const handleCopy = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		void navigator.clipboard.writeText(text).then(() => {
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1500);
+		});
+	};
+	return (
+		<button
+			type="button"
+			onClick={handleCopy}
+			title={copied ? "已复制" : title}
+			className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-panel-2 hover:text-fg transition-colors"
+		>
+			<Icon name={copied ? "check" : "copy"} className={`size-3 ${copied ? "text-ok" : ""}`} />
+			{copied && <span className="text-[10px] text-ok">已复制</span>}
+		</button>
+	);
+}
+
 /** 单个工具调用的树节点 */
 const ToolStepNode = memo(function ToolStepNode({
 	step,
 	isLast,
-	defaultExpanded = false,
+	forceExpand,
 }: {
 	step: ToolExecutionStep;
 	isLast: boolean;
-	defaultExpanded?: boolean;
+	forceExpand?: boolean;
 }) {
-	const [expanded, setExpanded] = useState(defaultExpanded);
-	const call = step.toolCall;
+	const [expanded, setExpanded] = useState(false);
 
+	useEffect(() => {
+		if (forceExpand !== undefined) setExpanded(forceExpand);
+	}, [forceExpand]);
+
+	const call = step.toolCall;
 	const cwd = useApp((s) => s.cwd);
 	const argsText = useApp((s) => s.toolArgsText[call.id]);
 	const run: ToolRun | undefined = useApp((s) => s.toolRuns[call.id]);
 	const awaiting = useApp((s) => s.pendingApprovals.some((p) => p.toolCallId === call.id));
 	const isRunning = useApp((s) => s.isRunning);
+	const openPreview = useApp((s) => s.openPreview);
 
 	const status = run?.status ?? (step.toolResult ? (step.toolResult.isError ? "error" : "done") : isRunning || step.live ? "running" : "done");
 	const final = run?.result ?? step.toolResult;
@@ -91,6 +125,8 @@ const ToolStepNode = memo(function ToolStepNode({
 	const lines = output ? output.split("\n") : [];
 	const summary = describe(call.name, call.arguments, cwd) || argsText || "";
 
+	const filePath = typeof call.arguments.path === "string" ? call.arguments.path : typeof call.arguments.file_path === "string" ? call.arguments.file_path : undefined;
+
 	const hasOutput = lines.length > 0 || !!diff || images.length > 0;
 	const icon = toolIcon(call.name);
 	const color = toolColor(call.name);
@@ -98,6 +134,10 @@ const ToolStepNode = memo(function ToolStepNode({
 	const added = diff ? diff.split("\n").filter((l: string) => l.startsWith("+")).length : 0;
 	const removed = diff ? diff.split("\n").filter((l: string) => l.startsWith("-")).length : 0;
 	const created = diff && (final?.details as { created?: unknown } | undefined)?.created === true;
+
+	const copyText = (call.name === "bash" || call.name === "powershell") && typeof call.arguments.command === "string"
+		? call.arguments.command
+		: output || summary;
 
 	return (
 		<div className="relative flex gap-3 text-[12.5px]">
@@ -133,7 +173,7 @@ const ToolStepNode = memo(function ToolStepNode({
 					}`}
 				>
 					<span className="font-mono font-medium text-fg">{call.name}</span>
-					{summary && <span className="truncate font-mono text-muted max-w-[480px]" title={summary}>{summary}</span>}
+					{summary && <span className="truncate font-mono text-muted max-w-[440px]" title={summary}>{summary}</span>}
 
 					{/* 变更行数标记 */}
 					{diff && (
@@ -149,13 +189,29 @@ const ToolStepNode = memo(function ToolStepNode({
 						</span>
 					)}
 
+					{/* 文件预览快捷操作 */}
+					{filePath && (
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								openPreview(filePath);
+							}}
+							title={`预览文件 ${filePath}`}
+							className="rounded px-1.5 py-0.5 text-[11px] text-primary hover:bg-primary/10 transition-colors"
+						>
+							预览
+						</button>
+					)}
+
 					{/* 等待确认 / 运行态 */}
 					{awaiting && <span className="text-[11px] font-medium text-warn">等待确认…</span>}
 					{status === "running" && !awaiting && <span className="text-[11px] text-muted">执行中…</span>}
 
 					<div className="ml-auto flex items-center gap-2 text-faint text-[11px]">
-						{run?.durationMs !== undefined && run.durationMs > 200 && (
-							<span className="tabular-nums">{(run.durationMs / 1000).toFixed(1)}s</span>
+						{copyText && <CopyButton text={copyText} title="复制内容" />}
+						{run?.durationMs !== undefined && run.durationMs > 20 && (
+							<span className="tabular-nums font-mono">{formatMs(run.durationMs)}</span>
 						)}
 						{hasOutput && (
 							<span className="text-muted hover:text-fg">
@@ -168,6 +224,10 @@ const ToolStepNode = memo(function ToolStepNode({
 				{/* 展开的输出详情 */}
 				{expanded && hasOutput && (
 					<div className="mt-1.5 ml-1 rounded-lg border border-border/60 bg-pre-bg/60 p-2.5">
+						<div className="mb-1 flex items-center justify-between text-[11px] text-faint">
+							<span>输出详情：</span>
+							{output && <CopyButton text={output} title="复制输出" />}
+						</div>
 						{images.length > 0 && (
 							<div className="mb-2 flex flex-wrap gap-2">
 								{images.map((image: ImageAttachment, i: number) => (
@@ -197,13 +257,18 @@ const ToolStepNode = memo(function ToolStepNode({
 const ThinkingStepNode = memo(function ThinkingStepNode({
 	step,
 	isLast,
-	defaultExpanded = false,
+	forceExpand,
 }: {
 	step: ThinkingExecutionStep;
 	isLast: boolean;
-	defaultExpanded?: boolean;
+	forceExpand?: boolean;
 }) {
-	const [expanded, setExpanded] = useState(defaultExpanded);
+	const [expanded, setExpanded] = useState(false);
+
+	useEffect(() => {
+		if (forceExpand !== undefined) setExpanded(forceExpand);
+	}, [forceExpand]);
+
 	const text = step.thinkingText ?? "";
 	if (!text.trim()) return null;
 
@@ -233,8 +298,9 @@ const ThinkingStepNode = memo(function ThinkingStepNode({
 				>
 					<span className="font-medium text-accent">深度思考</span>
 					<span className="text-[11.5px] text-muted">{step.live ? "思考中…" : `${chars} 字`}</span>
-					<div className="ml-auto text-faint text-[11px]">
-						{expanded ? "▴" : "▾"}
+					<div className="ml-auto flex items-center gap-2 text-faint text-[11px]">
+						<CopyButton text={text} title="复制思考过程" />
+						<span>{expanded ? "▴" : "▾"}</span>
 					</div>
 				</div>
 
@@ -258,6 +324,7 @@ export const ExecutionTree = memo(function ExecutionTree({
 	onOpenPanel?: () => void;
 }) {
 	const [open, setOpen] = useState(!folded);
+	const [allDetailsExpanded, setAllDetailsExpanded] = useState<boolean | undefined>(undefined);
 	const isRunning = useApp((s) => s.isRunning);
 
 	useEffect(() => {
@@ -277,7 +344,7 @@ export const ExecutionTree = memo(function ExecutionTree({
 
 	const summaryItems: string[] = [];
 	if (toolSteps.length > 0) {
-		summaryItems.push(`${toolSteps.length} 个执行步骤（${toolNames.join("、")}）`);
+		summaryItems.push(`${toolSteps.length} 个步骤（${toolNames.join("、")}）`);
 	}
 	if (totalThinkingChars > 0) {
 		summaryItems.push(`思考 ${totalThinkingChars} 字`);
@@ -314,6 +381,19 @@ export const ExecutionTree = memo(function ExecutionTree({
 				</div>
 
 				<div className="ml-auto flex items-center gap-2 text-faint text-[12px]">
+					{open && (
+						<button
+							type="button"
+							onClick={(e) => {
+								e.stopPropagation();
+								setAllDetailsExpanded(!allDetailsExpanded);
+							}}
+							title={allDetailsExpanded ? "折叠所有步骤输出" : "展开所有步骤输出"}
+							className="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-panel-2 hover:text-fg"
+						>
+							{allDetailsExpanded ? "折叠详情" : "展开详情"}
+						</button>
+					)}
 					{onOpenPanel && (
 						<button
 							type="button"
@@ -340,9 +420,9 @@ export const ExecutionTree = memo(function ExecutionTree({
 					{steps.map((step: ExecutionStep, index: number) => {
 						const isLast = index === steps.length - 1;
 						if (step.kind === "thinking") {
-							return <ThinkingStepNode key={step.id} step={step} isLast={isLast} />;
+							return <ThinkingStepNode key={step.id} step={step} isLast={isLast} forceExpand={allDetailsExpanded} />;
 						}
-						return <ToolStepNode key={step.id} step={step} isLast={isLast} />;
+						return <ToolStepNode key={step.id} step={step} isLast={isLast} forceExpand={allDetailsExpanded} />;
 					})}
 				</div>
 			)}

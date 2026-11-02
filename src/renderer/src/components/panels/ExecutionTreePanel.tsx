@@ -9,8 +9,6 @@ import {
 	buildTurnFlowBlocks,
 	type ExecutionStep,
 	type ToolResultMap,
-	type ThinkingExecutionStep,
-	type ToolExecutionStep,
 } from "../../lib/session-flow";
 import { describe, getDiff, imagesOf, textOf } from "../../lib/tool-format";
 import { type ToolRun, useApp } from "../../store";
@@ -18,6 +16,7 @@ import { Icon, type IconName } from "../Icon";
 import { Spinner } from "../terminal/Spinner";
 import { ImageThumb } from "../terminal/ImageThumb";
 import { DiffView } from "../terminal/ToolBlock";
+import { formatMs } from "../terminal/ExecutionTree";
 
 function toolIcon(toolName: string): IconName {
 	switch (toolName) {
@@ -42,6 +41,29 @@ function toolIcon(toolName: string): IconName {
 	}
 }
 
+/** 快捷复制按钮 */
+function CopyButton({ text, title = "复制" }: { text: string; title?: string }) {
+	const [copied, setCopied] = useState(false);
+	const handleCopy = (e: React.MouseEvent) => {
+		e.stopPropagation();
+		void navigator.clipboard.writeText(text).then(() => {
+			setCopied(true);
+			setTimeout(() => setCopied(false), 1500);
+		});
+	};
+	return (
+		<button
+			type="button"
+			onClick={handleCopy}
+			title={copied ? "已复制" : title}
+			className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-panel-2 hover:text-fg transition-colors"
+		>
+			<Icon name={copied ? "check" : "copy"} className={`size-3 ${copied ? "text-ok" : ""}`} />
+			{copied && <span className="text-[10px] text-ok">已复制</span>}
+		</button>
+	);
+}
+
 /** 单个步骤卡片 */
 const DetailStepRow = memo(function DetailStepRow({
 	step,
@@ -56,6 +78,7 @@ const DetailStepRow = memo(function DetailStepRow({
 	const cwd = useApp((s) => s.cwd);
 	const run: ToolRun | undefined = useApp((s) => (step.kind === "tool" ? s.toolRuns[step.toolCall.id] : undefined));
 	const isRunning = useApp((s) => s.isRunning);
+	const openPreview = useApp((s) => s.openPreview);
 
 	if (step.kind === "thinking") {
 		const text = step.thinkingText ?? "";
@@ -71,7 +94,10 @@ const DetailStepRow = memo(function DetailStepRow({
 						className="flex cursor-pointer items-center justify-between font-medium text-accent select-none"
 					>
 						<span>深度思考 ({text.trim().length} 字)</span>
-						<span className="text-muted">{expanded ? "收起" : "查看思考"}</span>
+						<div className="flex items-center gap-2">
+							<CopyButton text={text} title="复制思考过程" />
+							<span className="text-muted">{expanded ? "收起" : "查看思考"}</span>
+						</div>
 					</div>
 					{expanded && (
 						<div className="mt-2 max-h-60 overflow-y-auto font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap text-muted">
@@ -92,6 +118,8 @@ const DetailStepRow = memo(function DetailStepRow({
 	const summary = describe(call.name, call.arguments, cwd);
 	const icon = toolIcon(call.name);
 
+	const filePath = typeof call.arguments.path === "string" ? call.arguments.path : typeof call.arguments.file_path === "string" ? call.arguments.file_path : undefined;
+
 	return (
 		<div className="relative pl-6 pb-4">
 			{index < total - 1 && <div className="absolute top-4 bottom-0 left-2.5 w-[2px] bg-border/60" />}
@@ -111,11 +139,23 @@ const DetailStepRow = memo(function DetailStepRow({
 				>
 					<div className="flex items-center gap-1.5 truncate">
 						<span className="font-mono font-medium text-fg">{call.name}</span>
-						{summary && <span className="truncate font-mono text-muted max-w-[200px]" title={summary}>{summary}</span>}
+						{summary && <span className="truncate font-mono text-muted max-w-[180px]" title={summary}>{summary}</span>}
 					</div>
 					<div className="flex items-center gap-2 text-faint text-[11px]">
-						{run?.durationMs !== undefined && run.durationMs > 200 && (
-							<span className="tabular-nums">{(run.durationMs / 1000).toFixed(1)}s</span>
+						{filePath && (
+							<button
+								type="button"
+								onClick={(e) => {
+									e.stopPropagation();
+									openPreview(filePath);
+								}}
+								className="text-primary hover:underline"
+							>
+								预览
+							</button>
+						)}
+						{run?.durationMs !== undefined && run.durationMs > 20 && (
+							<span className="tabular-nums font-mono">{formatMs(run.durationMs)}</span>
 						)}
 						<span className="text-muted">{expanded ? "收起" : "详情"}</span>
 					</div>
@@ -124,7 +164,10 @@ const DetailStepRow = memo(function DetailStepRow({
 				{expanded && (
 					<div className="mt-2 space-y-2 pt-2 border-t border-border/50">
 						<div>
-							<div className="text-[11px] font-medium text-muted">调用参数：</div>
+							<div className="flex items-center justify-between text-[11px] font-medium text-muted">
+								<span>调用参数：</span>
+								<CopyButton text={JSON.stringify(call.arguments, null, 2)} title="复制参数" />
+							</div>
 							<pre className="mt-1 max-h-36 overflow-auto rounded bg-pre-bg/70 p-2 font-mono text-[11px] text-fg/80">
 								{JSON.stringify(call.arguments, null, 2)}
 							</pre>
@@ -140,7 +183,10 @@ const DetailStepRow = memo(function DetailStepRow({
 						{diff && <DiffView diff={diff} />}
 						{!diff && output && (
 							<div>
-								<div className="text-[11px] font-medium text-muted">执行输出：</div>
+								<div className="flex items-center justify-between text-[11px] font-medium text-muted">
+									<span>执行输出：</span>
+									<CopyButton text={output} title="复制输出" />
+								</div>
 								<pre className="mt-1 max-h-48 overflow-auto rounded bg-pre-bg/70 p-2 font-mono text-[11px] text-fg/80 whitespace-pre-wrap break-all">
 									{output}
 								</pre>

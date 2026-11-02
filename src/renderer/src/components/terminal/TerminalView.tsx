@@ -12,7 +12,9 @@ import { ImageThumb } from "./ImageThumb";
 import { Spinner, useElapsed } from "./Spinner";
 import { Picker } from "./Picker";
 import { SessionRail } from "./SessionRail";
+import { PlanBoard } from "./PlanBoard";
 import { SlashMenu, useSlashMenu } from "./SlashMenu";
+import { MentionMenu, useMentionMenu, type MentionItem } from "./MentionMenu";
 import { Transcript } from "./Transcript";
 import { TrustBanner } from "./TrustBanner";
 import { FilePreview } from "../panels/FilePreview";
@@ -380,6 +382,31 @@ function PromptInput() {
 		ref.current?.focus();
 	};
 
+	const [cursor, setCursor] = useState(0);
+	const mentionMenu = useMentionMenu(text, cursor);
+
+	const pickMention = (item: MentionItem) => {
+		const el = ref.current;
+		const atIdx = mentionMenu.atIndex;
+		const currentCursor = el?.selectionStart ?? cursor;
+		const before = text.slice(0, atIdx);
+		const after = text.slice(currentCursor);
+		const nextText = `${before}${item.insertText} ${after}`;
+		setText(nextText);
+		const newCursor = atIdx + item.insertText.length + 1;
+		setCursor(newCursor);
+		requestAnimationFrame(() => {
+			if (el) {
+				el.focus();
+				el.setSelectionRange(newCursor, newCursor);
+			}
+		});
+	};
+
+	const updateCursor = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+		setCursor(e.currentTarget.selectionStart);
+	};
+
 	const addImageFiles = async (files: File[]) => {
 		const accepted: ImageAttachment[] = [];
 		for (const file of files) {
@@ -423,6 +450,7 @@ function PromptInput() {
 	return (
 		<div className="fw-float relative rounded-[22px] focus-within:ring-2 focus-within:ring-primary/20">
 			<SlashMenu menu={menu} onPick={(c) => pickCommand(c.name)} />
+			<MentionMenu menu={mentionMenu} onPick={pickMention} />
 			{images.length > 0 && (
 				<div className="flex flex-wrap gap-2 px-5 pt-4 pb-1">
 					{images.map((image, i) => (
@@ -447,9 +475,35 @@ function PromptInput() {
 					value={text}
 					rows={1}
 					disabled={!ready}
-					onChange={(e) => setText(e.target.value)}
+					onChange={(e) => {
+						setText(e.target.value);
+						setCursor(e.target.selectionStart);
+					}}
+					onClick={updateCursor}
+					onKeyUp={updateCursor}
+					onSelect={updateCursor}
 					onPaste={onPaste}
 					onKeyDown={(e) => {
+						if (mentionMenu.open && !e.nativeEvent.isComposing) {
+							const picked = mentionMenu.items[mentionMenu.active];
+							if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+								e.preventDefault();
+								const n = mentionMenu.items.length;
+								mentionMenu.setActive((mentionMenu.active + (e.key === "ArrowDown" ? 1 : n - 1)) % n);
+								return;
+							}
+							if ((e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) && picked) {
+								e.preventDefault();
+								pickMention(picked);
+								return;
+							}
+							if (e.key === "Escape") {
+								e.preventDefault();
+								e.stopPropagation();
+								mentionMenu.dismiss();
+								return;
+							}
+						}
 						if (menu.open && !e.nativeEvent.isComposing) {
 							const picked = menu.matches[menu.active];
 							if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -729,6 +783,7 @@ export function TerminalView() {
 						>
 							<Welcome />
 							<TrustBanner />
+							<PlanBoard />
 							{connecting ? (
 								<div className="text-muted">
 									<Spinner /> 正在启动 pi…
