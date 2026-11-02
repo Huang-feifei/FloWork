@@ -140,6 +140,7 @@ export function EndpointDialog({
 	const [syncNotice, setSyncNotice] = useState("");
 	const requestId = useRef(0);
 	const [fetchFilter, setFetchFilter] = useState("");
+	const [imageFetchFilter, setImageFetchFilter] = useState("");
 	const [bulk, setBulk] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -188,6 +189,21 @@ export function EndpointDialog({
 		} finally {
 			if (token === requestId.current) setFetching(false);
 		}
+	};
+
+	const addImageModel = (id: string) => {
+		const existingIndex = d.imageModels.findIndex((m) => m.id.trim() === id);
+		if (existingIndex >= 0) {
+			const existing = d.imageModels[existingIndex];
+			if (existing) setImageEdit({ index: existingIndex, draft: existing });
+			return;
+		}
+		const name = id.split(/[-_]/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
+		const newDraft: ImageModelDraft = {
+			...emptyImageModel(id),
+			name,
+		};
+		update({ imageModels: [...d.imageModels, newDraft] });
 	};
 
 	const applySync = () => {
@@ -425,12 +441,55 @@ export function EndpointDialog({
 						<Toggle on={d.imageEnabled} onChange={(imageEnabled) => update({ imageEnabled })} />
 					</div>
 
-					<div className="flex items-center gap-2">
+					<div className="flex flex-wrap items-center gap-2">
+						<Button size="sm" disabled={fetching} onClick={() => void fetchModels(false)}>
+							{fetching && !syncMode ? "正在拉取…" : "从端点拉取模型清单"}
+						</Button>
 						<Button size="sm" variant="primary" onClick={() => setImageEdit({ index: -1, draft: emptyImageModel() })}>
 							<Icon name="plus" className="size-4" />
 							添加图片模型
 						</Button>
 					</div>
+
+					{fetched && (
+						<div className="rounded-xl border border-border bg-panel-2 p-3">
+							<div className="mb-2 flex items-center justify-between text-[11.5px] text-muted">
+								<span>从端点已拉取 {fetched.models.length} 个模型。点击直接添加为图片模型：</span>
+							</div>
+							<div className="mb-2 flex items-center gap-2">
+								<Input
+									value={imageFetchFilter}
+									onChange={(e) => setImageFetchFilter(e.target.value)}
+									placeholder="筛选端点模型（如 dall-e、flux、midjourney 等）"
+								/>
+							</div>
+							<div className="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto">
+								{fetched.models
+									.filter((m) => m.id.toLowerCase().includes(imageFetchFilter.toLowerCase()))
+									.map((m) => {
+										const isImage = /(?:dall-?e|image|flux|midjourney|\bmj\b|stable-?diffusion|\bsd\b|sdxl|recraft|ideogram|cogview)/i.test(m.id);
+										const added = d.imageModels.some((im) => im.id.trim() === m.id);
+										return (
+											<button
+												type="button"
+												key={m.id}
+												onClick={() => addImageModel(m.id)}
+												className={`rounded-full px-2.5 py-1 font-mono text-[11.5px] transition-colors ${
+													added
+														? "bg-primary text-primary-foreground font-medium"
+														: isImage
+															? "bg-accent-soft text-accent border border-accent/30 font-medium hover:bg-accent/20"
+															: "bg-panel-2 text-muted hover:text-fg"
+												}`}
+											>
+												{m.id}
+												{added ? " (已添加)" : isImage ? " · 推荐" : ""}
+											</button>
+										);
+									})}
+							</div>
+						</div>
+					)}
 
 					{d.imageModels.length === 0 ? (
 						<div className="flex flex-col items-center gap-1.5 rounded-xl border border-dashed border-border-strong px-4 py-8">
@@ -501,6 +560,7 @@ export function EndpointDialog({
 			{imageEdit && (
 				<ImageModelDialog
 					initial={imageEdit.draft}
+					candidateIds={fetched ? fetched.models.map((m) => m.id) : []}
 					onCancel={() => setImageEdit(null)}
 					onSave={(next) => {
 						const list = [...d.imageModels];

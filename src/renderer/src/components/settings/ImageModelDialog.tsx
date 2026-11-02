@@ -6,7 +6,7 @@
  * 不在这里写死。保存后写入 models.json 里该供应商的 imageModels。
  */
 import { useState } from "react";
-import { Button, Field, Input, Modal, TextArea, Toggle } from "../ui";
+import { Button, Field, Input, Modal, Select, TextArea, Toggle } from "../ui";
 
 export interface ImageModelDraft {
 	id: string;
@@ -82,10 +82,12 @@ export function validateImageModel(model: ImageModelDraft): string | undefined {
 
 export function ImageModelDialog({
 	initial,
+	candidateIds = [],
 	onCancel,
 	onSave,
 }: {
 	initial: ImageModelDraft;
+	candidateIds?: string[];
 	onCancel: () => void;
 	onSave: (model: ImageModelDraft) => void;
 }) {
@@ -122,7 +124,32 @@ export function ImageModelDialog({
 		>
 			<div className="grid grid-cols-2 gap-5">
 				<Field label="模型 ID" hint="请求里的 model 字段，例如 gpt-image-1。">
-					<Input value={d.id} onChange={(e) => patch({ id: e.target.value })} placeholder="gpt-image-1" className="font-mono" />
+					<div className="space-y-1.5">
+						<Input value={d.id} onChange={(e) => patch({ id: e.target.value })} placeholder="如 dall-e-3、flux-schnell、gpt-image-1" className="font-mono" />
+						{candidateIds.length > 0 && (
+							<div className="flex items-center gap-1.5">
+								<Select
+									value=""
+									onChange={(e) => {
+										const val = e.target.value;
+										if (val) {
+											patch({
+												id: val,
+												name: d.name ? d.name : val.split(/[-_]/).map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" "),
+											});
+										}
+									}}
+								>
+									<option value="">从端点拉取的模型中选择…</option>
+									{candidateIds.map((cid) => (
+										<option key={cid} value={cid}>
+											{cid}
+										</option>
+									))}
+								</Select>
+							</div>
+						)}
+					</div>
 				</Field>
 				<Field label="显示名称" hint="留空则显示模型 ID。">
 					<Input value={d.name} onChange={(e) => patch({ name: e.target.value })} placeholder="GPT Image 1" />
