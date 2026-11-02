@@ -114,6 +114,11 @@ export function RawConfigTab() {
 				title="models.json"
 				hint="自定义供应商与模型覆盖（providers / modelOverrides）。字段说明见 pi 文档 docs/models.md。"
 			/>
+			<FileEditor
+				name="mcp"
+				title="mcp.json"
+				hint="MCP（Model Context Protocol）服务器配置。字段说明见 docs/mcp.md；保存后新建或切换会话时自动连接。"
+			/>
 			<div className="text-[12px] leading-5 text-faint">
 				auth.json 含密钥，不在页面中显示；请通过“模型供应商”页登录或登出。
 			</div>

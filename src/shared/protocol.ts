@@ -275,7 +275,24 @@ export type AuthFlowEvent =
 // ---------------------------------------------------------------------------
 
 /** 允许界面直接读写的 pi 配置文件（auth.json 含密钥，不开放） */
-export type ConfigFileName = "settings" | "models";
+export type ConfigFileName = "settings" | "models" | "mcp";
+
+export interface McpServerConfig {
+	command?: string;
+	args?: string[];
+	env?: Record<string, string>;
+	cwd?: string;
+	url?: string;
+	headers?: Record<string, string>;
+	timeout?: number;
+	enabled?: boolean;
+	description?: string;
+	exposure?: "direct" | "codemode" | "deferred" | "hidden";
+}
+
+export interface McpConfig {
+	mcpServers?: Record<string, McpServerConfig>;
+}
 
 export interface ConfigFile {
 	name: ConfigFileName;

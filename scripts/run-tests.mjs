@@ -33,6 +33,7 @@ const SUITES = [
 	{ name: "test-results", file: "scripts/test-test-results.mjs", needsBuild: false },
 	{ name: "desktop-hardening", file: "scripts/test-desktop-hardening.mjs", needsBuild: false },
 	{ name: "subagent", file: "scripts/test-subagent.mjs", needsBuild: false },
+	{ name: "mcp", file: "scripts/test-mcp.mjs", needsBuild: false },
 	// 外部环境不足由脚本 reportSkip，不把退出码 0 直接等同于通过。
 	{ name: "ops-tools", file: "scripts/test-ops-tools.mjs", needsBuild: false },
 	{ name: "host-key", file: "scripts/test-host-key.mjs", needsBuild: false },

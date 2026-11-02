@@ -4,6 +4,12 @@
 
 ## 未发布
 
+- 支持接入 Model Context Protocol（MCP）服务：
+  - 运行时接入：SessionHost 注入 `createMcpExtension()`，自动读取全局 `~/.flowork/agent/mcp.json` 与受信任项目的 `.pi/mcp.json`，支持 stdio 与 streamable-http 类型的 MCP 工具挂载
+  - 设置页可视化管理：新增「设置 → MCP 服务」（`McpTab`），提供服务列表展示、一键启用/禁用切换、删除确认与新增/编辑弹窗（`McpDialog`），内置 Fetch、Filesystem、Git、Puppeteer、SQLite 等官方常用模板
+  - 底层配置文件支持：`protocol.ts` 与 `service-host.ts` 将 `mcp.json` 纳入原子并发安全读写管线，支持在「设置 → 配置文件」直接进行 JSON 编辑与语法校验
+  - 工具审批安全边界：MCP 工具（`mcp__*`）完整接入 FloWork 审批体系与计划模式防护，修改类工具默认逐次确认，杜绝未授权副作用
+  - 新增 `test-mcp` 离线回归测试套件，全面覆盖配置校验、并发锁与扩展注册
 - 升级 Pi 内核至官方最新版 1.4.0（从 1.1.0 升级，包含上游摘要思考过滤修复、上下文优化及最新依赖），并通过完整离线回归与真实桌面 Smoke 自检
 - 增强内核签名打包脚本（`scripts/approve-kernel.mjs`）：增加单包超时与重试保护、下载进度回显，并成功签名放行内核批次 1.0.1 完整运行包
 - 新增单实例锁：重复启动会把已有窗口叫到前台后退出，避免两个实例同时写 projects.json / hosts.json / databases.json 互相覆盖

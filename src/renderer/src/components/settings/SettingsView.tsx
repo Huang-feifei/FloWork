@@ -11,6 +11,7 @@ import { AppearanceTab } from "./AppearanceTab";
 import { CustomProvidersTab } from "./CustomProvidersTab";
 import { PreferencesTab } from "./PreferencesTab";
 import { SubagentTab } from "./SubagentTab";
+import { McpTab } from "./McpTab";
 import { KernelTab } from "./KernelTab";
 import { RawConfigTab } from "./RawConfigTab";
 import { ResourcesTab } from "./ResourcesTab";
@@ -33,6 +34,7 @@ const GROUPS: Array<{ title: string; tabs: Tab[] }> = [
 		title: "能力",
 		tabs: [
 			{ id: "resources", label: "技能与扩展", icon: "files", desc: "当前项目可用的技能、扩展、提示模板与 pi 包；导入、启用 / 禁用、删除。" },
+			{ id: "mcp", label: "MCP 服务", icon: "server", desc: "接入 Model Context Protocol 服务器，扩展本地与网络工具；写入 mcp.json。" },
 			{ id: "subagent", label: "子代理", icon: "git-fork", desc: "子代理总开关、并行任务上限、并发数与默认模型；写入 settings.json。" },
 		],
 	},
@@ -114,6 +116,7 @@ export function SettingsView() {
 						<p className="mt-1.5 mb-5 text-[13.5px] leading-relaxed text-muted">{current?.desc}</p>
 						{tab === "custom" && <CustomProvidersTab />}
 						{tab === "resources" && <ResourcesTab />}
+						{tab === "mcp" && <McpTab />}
 						{tab === "subagent" && <SubagentTab />}
 						{tab === "preferences" && <PreferencesTab />}
 						{tab === "appearance" && <AppearanceTab />}

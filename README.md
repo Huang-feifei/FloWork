@@ -68,6 +68,14 @@ model: provider/model-id
 
 限制：子代理只在本地会话可用，运维（SSH）会话不注册；计划模式下 `subagent` 会被阻止；子会话不落盘，父会话中断会同时中止子代理；单个任务输出上限 50KB。
 
+## MCP 服务（Model Context Protocol）
+
+支持通过 [Model Context Protocol](https://modelcontextprotocol.io) 接入任意本地命令行（stdio）或远程（streamable-http）工具服务器。
+
+- **配置入口**：进入 **设置 → MCP 服务**，可视化添加、编辑、启用/禁用或删除 MCP 服务；提供 Fetch、Filesystem、Git、Puppeteer、SQLite 等常用官方模板一键填入。也可以在 **设置 → 配置文件** 直接编辑 `mcp.json`。
+- **配置范围**：全局服务保存在 `~/.flowork/agent/mcp.json`；项目专属服务可在项目根目录创建 `.pi/mcp.json`（需受信任项目）。
+- **工具挂载与审批**：服务连接后，导出的工具自动映射为 `mcp__<服务名>__<工具名>` 注册给模型调用。MCP 工具完全接入 FloWork 的审批流，默认模式下修改与非只读工具需逐次确认，计划模式下默认阻止未放行工具，保障系统安全。
+
 ## 架构
 
 ```text
@@ -131,7 +139,8 @@ FloWork 自己的数据放在 `~/.flowork/`：projects.json（项目与分组）
 | 自定义端点 | models.json 的 `providers` |
 | 偏好设置 | settings.json |
 | 子代理 | settings.json 的 `flowork.subagent` |
-| 配置文件 | 直接编辑 settings.json / models.json（auth.json 不在页面中显示） |
+| MCP 服务 | mcp.json 的 `mcpServers` |
+| 配置文件 | 直接编辑 settings.json / models.json / mcp.json（auth.json 不在页面中显示） |
 
 ## 命令
 
@@ -243,6 +252,7 @@ node scripts/test-session-store.mjs # 真实 store 的延迟响应、跨标签�
 node scripts/test-worker-manager.mjs # 可控 worker 的超时、取消、交互等待与会话保锁（不需要构建）
 node scripts/test-test-results.mjs   # PASS / SKIP / FAIL 分类与严格模式退出码
 node scripts/test-desktop-hardening.mjs # 窗口底色常量⇄CSS、主进程日志轮换、图库收藏持久化（不需要构建）
+node scripts/test-mcp.mjs          # MCP 服务配置读写、格式校验与 SessionHost 扩展注入
 node scripts/test-markdown-desktop.mjs # 生产 CSP 下 PNG / SVG 实际解码、越界限制与高亮按需加载
 
 npm test -- --require-all          # 严格门禁：有任何 SKIP 也非零退出

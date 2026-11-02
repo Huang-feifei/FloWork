@@ -32,6 +32,7 @@ import { deleteSession, renameSession, validateSession } from "./session-files";
 const CONFIG_FILES: Record<ConfigFileName, string> = {
 	settings: "settings.json",
 	models: "models.json",
+	mcp: "mcp.json",
 };
 
 interface PendingPrompt {

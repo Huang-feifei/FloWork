@@ -9,6 +9,7 @@ import {
 	createAgentSessionFromServices,
 	createAgentSessionRuntime,
 	createAgentSessionServices,
+	createMcpExtension,
 	getAgentDir,
 	SessionManager,
 	SettingsManager,
@@ -175,10 +176,12 @@ export class SessionHost {
 			}),
 		];
 		if (ops) extensionFactories.push(createOpsExtension(ops.target, () => this.opsProfile, ops.backups));
-		// 子代理只在本地会话可用：运维会话的工具在远端，不能把本地子会话当作远程子代理。
-		// 设置关闭时新会话不注册这个工具；已打开的会话需要重开或切换会话。
-		else if (subagentSettings.enabled) {
-			extensionFactories.push(createSubagentExtension({ getModelRuntime: () => this.session.modelRuntime }, subagentSettings));
+		// 子代理与 MCP 服务只在本地会话可用：运维会话的工具在远端，不能把本地子会话或本地 MCP 混入远程。
+		else {
+			extensionFactories.push(createMcpExtension());
+			if (subagentSettings.enabled) {
+				extensionFactories.push(createSubagentExtension({ getModelRuntime: () => this.session.modelRuntime }, subagentSettings));
+			}
 		}
 		const services = await createAgentSessionServices({
 			cwd,
