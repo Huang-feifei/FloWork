@@ -945,3 +945,47 @@ export const ELECTRON_CHANNELS = {
 	/** 界面主题（深色 / 浅色 / 跟随系统）：同步 nativeTheme 与窗口背景色 */
 	theme: "flowork:theme",
 } as const;
+
+// ---------------------------------------------------------------------------
+// 子代理 (Subagent) 执行结果与嵌套流协议
+// ---------------------------------------------------------------------------
+
+export type SubagentMode = "single" | "parallel" | "chain";
+
+export interface SubagentToolCall {
+	name: string;
+	argsSummary: string;
+	status: "running" | "done" | "error";
+	durationMs?: number;
+}
+
+export interface SubagentUsage {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	cost: number;
+	contextTokens: number;
+	turns: number;
+}
+
+export interface SubagentResult {
+	agent: string;
+	agentSource: "user" | "project" | "unknown";
+	task: string;
+	output: string;
+	error?: string;
+	aborted?: boolean;
+	usage: SubagentUsage;
+	model?: string;
+	step?: number;
+	toolCalls?: SubagentToolCall[];
+}
+
+export interface SubagentDetails {
+	mode: SubagentMode;
+	agentScope: "user" | "project" | "both";
+	projectAgentsDir: string | null;
+	results: SubagentResult[];
+}
+

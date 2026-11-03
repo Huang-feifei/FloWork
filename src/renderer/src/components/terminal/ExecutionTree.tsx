@@ -20,6 +20,8 @@ import { Icon, type IconName } from "../Icon";
 import { ImageThumb } from "./ImageThumb";
 import { Spinner } from "./Spinner";
 import { DiffView } from "./ToolBlock";
+import { SubagentNestedTree } from "./SubagentNestedTree";
+import type { SubagentDetails } from "@shared/protocol";
 
 function toolIcon(toolName: string): IconName {
 	switch (toolName) {
@@ -127,7 +129,15 @@ const ToolStepNode = memo(function ToolStepNode({
 
 	const filePath = typeof call.arguments.path === "string" ? call.arguments.path : typeof call.arguments.file_path === "string" ? call.arguments.file_path : undefined;
 
-	const hasOutput = lines.length > 0 || !!diff || images.length > 0;
+	const subagentDetails =
+		call.name === "subagent" &&
+		final?.details &&
+		typeof final.details === "object" &&
+		"results" in final.details
+			? (final.details as SubagentDetails)
+			: undefined;
+
+	const hasOutput = lines.length > 0 || !!diff || images.length > 0 || !!subagentDetails;
 	const icon = toolIcon(call.name);
 	const color = toolColor(call.name);
 
@@ -224,27 +234,33 @@ const ToolStepNode = memo(function ToolStepNode({
 				{/* 展开的输出详情 */}
 				{expanded && hasOutput && (
 					<div className="mt-1.5 ml-1 rounded-lg border border-border/60 bg-pre-bg/60 p-2.5">
-						<div className="mb-1 flex items-center justify-between text-[11px] text-faint">
-							<span>输出详情：</span>
-							{output && <CopyButton text={output} title="复制输出" />}
-						</div>
-						{images.length > 0 && (
-							<div className="mb-2 flex flex-wrap gap-2">
-								{images.map((image: ImageAttachment, i: number) => (
-									// biome-ignore lint/suspicious/noArrayIndexKey: 消息图片按位置稳定
-									<ImageThumb key={i} image={image} alt={`输出图片 ${i + 1}`} />
-								))}
-							</div>
-						)}
-						{diff && <DiffView diff={diff} />}
-						{!diff && output && (
-							<pre
-								className={`max-h-80 overflow-auto font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-all ${
-									status === "error" ? "text-err" : "text-fg/80"
-								}`}
-							>
-								{lines.length > 80 ? `${lines.slice(0, 80).join("\n")}\n… (已截断显示剩余 ${lines.length - 80} 行)` : output}
-							</pre>
+						{subagentDetails ? (
+							<SubagentNestedTree details={subagentDetails} />
+						) : (
+							<>
+								<div className="mb-1 flex items-center justify-between text-[11px] text-faint">
+									<span>输出详情：</span>
+									{output && <CopyButton text={output} title="复制输出" />}
+								</div>
+								{images.length > 0 && (
+									<div className="mb-2 flex flex-wrap gap-2">
+										{images.map((image: ImageAttachment, i: number) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: 消息图片按位置稳定
+											<ImageThumb key={i} image={image} alt={`输出图片 ${i + 1}`} />
+										))}
+									</div>
+								)}
+								{diff && <DiffView diff={diff} />}
+								{!diff && output && (
+									<pre
+										className={`max-h-80 overflow-auto font-mono text-[12px] leading-relaxed whitespace-pre-wrap break-all ${
+											status === "error" ? "text-err" : "text-fg/80"
+										}`}
+									>
+										{lines.length > 80 ? `${lines.slice(0, 80).join("\n")}\n… (已截断显示剩余 ${lines.length - 80} 行)` : output}
+									</pre>
+								)}
+							</>
 						)}
 					</div>
 				)}

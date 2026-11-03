@@ -7,7 +7,15 @@ import type {
 
 export type AgentSource = "user" | "project";
 export type AgentScope = "user" | "project" | "both";
-export type SubagentMode = "single" | "parallel" | "chain";
+import type {
+	SubagentMode,
+	SubagentToolCall,
+	SubagentUsage,
+	SubagentResult,
+	SubagentDetails,
+} from "@shared/protocol";
+
+export type { SubagentMode, SubagentToolCall, SubagentUsage, SubagentResult, SubagentDetails };
 export type ThinkingLevel = AgentSession["thinkingLevel"];
 export type ParentModel = NonNullable<ExtensionToolContext["model"]>;
 
@@ -24,35 +32,6 @@ export interface AgentConfig {
 export interface AgentDiscovery {
 	agents: AgentConfig[];
 	projectAgentsDir: string | null;
-}
-
-export interface SubagentUsage {
-	input: number;
-	output: number;
-	cacheRead: number;
-	cacheWrite: number;
-	cost: number;
-	contextTokens: number;
-	turns: number;
-}
-
-export interface SubagentResult {
-	agent: string;
-	agentSource: AgentSource | "unknown";
-	task: string;
-	output: string;
-	error?: string;
-	aborted?: boolean;
-	usage: SubagentUsage;
-	model?: string;
-	step?: number;
-}
-
-export interface SubagentDetails {
-	mode: SubagentMode;
-	agentScope: AgentScope;
-	projectAgentsDir: string | null;
-	results: SubagentResult[];
 }
 
 export interface SubagentHost {

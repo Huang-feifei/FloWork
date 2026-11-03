@@ -17,6 +17,8 @@ import { Spinner } from "../terminal/Spinner";
 import { ImageThumb } from "../terminal/ImageThumb";
 import { DiffView } from "../terminal/ToolBlock";
 import { formatMs } from "../terminal/ExecutionTree";
+import { SubagentNestedTree } from "../terminal/SubagentNestedTree";
+import type { SubagentDetails } from "@shared/protocol";
 
 function toolIcon(toolName: string): IconName {
 	switch (toolName) {
@@ -120,6 +122,14 @@ const DetailStepRow = memo(function DetailStepRow({
 
 	const filePath = typeof call.arguments.path === "string" ? call.arguments.path : typeof call.arguments.file_path === "string" ? call.arguments.file_path : undefined;
 
+	const subagentDetails =
+		call.name === "subagent" &&
+		final?.details &&
+		typeof final.details === "object" &&
+		"results" in final.details
+			? (final.details as SubagentDetails)
+			: undefined;
+
 	return (
 		<div className="relative pl-6 pb-4">
 			{index < total - 1 && <div className="absolute top-4 bottom-0 left-2.5 w-[2px] bg-border/60" />}
@@ -163,34 +173,40 @@ const DetailStepRow = memo(function DetailStepRow({
 
 				{expanded && (
 					<div className="mt-2 space-y-2 pt-2 border-t border-border/50">
-						<div>
-							<div className="flex items-center justify-between text-[11px] font-medium text-muted">
-								<span>调用参数：</span>
-								<CopyButton text={JSON.stringify(call.arguments, null, 2)} title="复制参数" />
-							</div>
-							<pre className="mt-1 max-h-36 overflow-auto rounded bg-pre-bg/70 p-2 font-mono text-[11px] text-fg/80">
-								{JSON.stringify(call.arguments, null, 2)}
-							</pre>
-						</div>
-						{images.length > 0 && (
-							<div className="flex flex-wrap gap-2">
-								{images.map((img: ImageAttachment, i: number) => (
-									// biome-ignore lint/suspicious/noArrayIndexKey: 图片稳定
-									<ImageThumb key={i} image={img} alt="输出图片" />
-								))}
-							</div>
-						)}
-						{diff && <DiffView diff={diff} />}
-						{!diff && output && (
-							<div>
-								<div className="flex items-center justify-between text-[11px] font-medium text-muted">
-									<span>执行输出：</span>
-									<CopyButton text={output} title="复制输出" />
+						{subagentDetails ? (
+							<SubagentNestedTree details={subagentDetails} />
+						) : (
+							<>
+								<div>
+									<div className="flex items-center justify-between text-[11px] font-medium text-muted">
+										<span>调用参数：</span>
+										<CopyButton text={JSON.stringify(call.arguments, null, 2)} title="复制参数" />
+									</div>
+									<pre className="mt-1 max-h-36 overflow-auto rounded bg-pre-bg/70 p-2 font-mono text-[11px] text-fg/80">
+										{JSON.stringify(call.arguments, null, 2)}
+									</pre>
 								</div>
-								<pre className="mt-1 max-h-48 overflow-auto rounded bg-pre-bg/70 p-2 font-mono text-[11px] text-fg/80 whitespace-pre-wrap break-all">
-									{output}
-								</pre>
-							</div>
+								{images.length > 0 && (
+									<div className="flex flex-wrap gap-2">
+										{images.map((img: ImageAttachment, i: number) => (
+											// biome-ignore lint/suspicious/noArrayIndexKey: 图片稳定
+											<ImageThumb key={i} image={img} alt="输出图片" />
+										))}
+									</div>
+								)}
+								{diff && <DiffView diff={diff} />}
+								{!diff && output && (
+									<div>
+										<div className="flex items-center justify-between text-[11px] font-medium text-muted">
+											<span>执行输出：</span>
+											<CopyButton text={output} title="复制输出" />
+										</div>
+										<pre className="mt-1 max-h-48 overflow-auto rounded bg-pre-bg/70 p-2 font-mono text-[11px] text-fg/80 whitespace-pre-wrap break-all">
+											{output}
+										</pre>
+									</div>
+								)}
+							</>
 						)}
 					</div>
 				)}

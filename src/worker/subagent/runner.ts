@@ -24,6 +24,7 @@ import type {
 	ParentModel,
 	RunAgentOptions,
 	SubagentResult,
+	SubagentToolCall,
 	ThinkingLevel,
 } from "./types";
 
@@ -164,6 +165,8 @@ export async function runAgent(options: RunAgentOptions): Promise<SubagentResult
 	let aborted = false;
 	let lastUpdate = 0;
 	const displayLog: string[] = [];
+	const childToolCalls: SubagentToolCall[] = [];
+	const runningTools = new Map<string, { item: SubagentToolCall; start: number }>();
 
 	const emitUpdate = (force: boolean) => {
 		if (!onUpdate) return;
@@ -181,6 +184,7 @@ export async function runAgent(options: RunAgentOptions): Promise<SubagentResult
 				usage: { ...usage },
 				model: modelName,
 				step,
+				toolCalls: [...childToolCalls],
 			}]),
 		});
 	};
@@ -215,13 +219,30 @@ export async function runAgent(options: RunAgentOptions): Promise<SubagentResult
 				break;
 			}
 			case "tool_execution_start": {
-				displayLog.push(formatToolCall(str(event.toolName), asRecord(event.args)));
+				const toolCallId = str(event.toolCallId) || `tool-${childToolCalls.length}`;
+				const toolItem: SubagentToolCall = {
+					name: str(event.toolName),
+					argsSummary: formatToolCall(str(event.toolName), asRecord(event.args)),
+					status: "running",
+				};
+				childToolCalls.push(toolItem);
+				runningTools.set(toolCallId, { item: toolItem, start: Date.now() });
+				displayLog.push(toolItem.argsSummary);
 				if (displayLog.length > 50) displayLog.shift();
 				emitUpdate(true);
 				break;
 			}
-			default:
+			case "tool_execution_end": {
+				const toolCallId = str(event.toolCallId);
+				const found = runningTools.get(toolCallId);
+				if (found) {
+					found.item.status = event.isError ? "error" : "done";
+					found.item.durationMs = Math.round(Date.now() - found.start);
+					runningTools.delete(toolCallId);
+					emitUpdate(true);
+				}
 				break;
+			}
 		}
 	});
 
@@ -259,5 +280,6 @@ export async function runAgent(options: RunAgentOptions): Promise<SubagentResult
 		usage,
 		model: modelName,
 		step,
+		toolCalls: childToolCalls,
 	};
 }
