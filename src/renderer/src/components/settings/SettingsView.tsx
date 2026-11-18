@@ -1,6 +1,6 @@
 /**
  * 设置页：左侧分组导航 + 右侧内容。顶部一行显示配置目录与「打开配置文件」。
- * Apple 体系：页面标题 22px、白卡片内容区、左侧导航是内缩圆角行，选中态用蓝色软底。
+ * 分组导航使用中性色选中态，内容区与工具栏分开。
  *
  * 导航按「模型接入 / 能力 / 本机与系统」分三组：自定义端点是模型接入的主入口，
  * pi 内置供应商折叠在自定义端点页里（多数用户只接自己的中转，不需要那 17 个内置项）。
@@ -60,16 +60,15 @@ export function SettingsView() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-chrome px-6">
-				<span className="text-[13px] text-muted">设置</span>
-				<span className="text-faint">/</span>
-				<span className="text-[13px] font-medium text-fg">{current?.label}</span>
-				<div className="flex-1" />
-				<span className="truncate font-mono text-[11.5px] text-faint">{info?.agentDir}</span>
+			<div className="fw-page-heading">
+				<div className="min-w-0 flex-1">
+					<h1 className="fw-page-title">设置</h1>
+					{info?.agentDir && <p className="mt-1 truncate text-[12px] text-muted" title={info.agentDir}>{info.agentDir}</p>}
+				</div>
 				<button
 					type="button"
 					onClick={() => setView("settings", "raw")}
-					className="flex h-8 shrink-0 items-center gap-1.5 rounded-full bg-panel-2 px-3.5 text-[12.5px] text-muted hover:text-fg"
+					className="fw-workbench-button"
 				>
 					<Icon name="file-json" className="size-3.5" />
 					打开配置文件
@@ -77,18 +76,19 @@ export function SettingsView() {
 			</div>
 
 			<div className="flex min-h-0 flex-1">
-				<nav className="w-[208px] shrink-0 space-y-4 overflow-y-auto border-r border-border bg-sidebar px-2.5 py-3">
+				<nav aria-label="设置分类" className="w-[clamp(180px,17vw,230px)] shrink-0 space-y-6 overflow-y-auto border-r border-border bg-sidebar px-3 py-6 sm:px-4">
 					{GROUPS.map((group) => (
 						<div key={group.title}>
-							<div className="mb-1 px-2.5 text-[11px] font-semibold tracking-wide text-faint">{group.title}</div>
+							<div className="mb-2 px-3 text-[12px] text-muted">{group.title}</div>
 							<div className="space-y-0.5">
 								{group.tabs.map((t) => (
 									<button
 										type="button"
 										key={t.id}
 										onClick={() => setView("settings", t.id)}
-										className={`flex h-8 w-full items-center gap-2.5 rounded-[10px] px-2.5 text-left text-[13px] ${
-											t.id === tab ? "bg-primary-soft font-medium text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"
+										aria-current={t.id === tab ? "page" : undefined}
+										className={`flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-left text-[13px] ${
+											t.id === tab ? "bg-panel-2 font-semibold text-fg" : "text-muted hover:bg-panel-2 hover:text-fg"
 										}`}
 									>
 										<Icon name={t.icon} className="size-4 shrink-0" />
@@ -110,10 +110,10 @@ export function SettingsView() {
 					</div>
 				</nav>
 
-				<div className="min-w-0 flex-1 overflow-y-auto bg-bg px-8 py-6">
-					<div className="max-w-[1040px]">
-						<h1 className="text-[22px] font-semibold tracking-tight">{current?.label}</h1>
-						<p className="mt-1.5 mb-5 text-[13.5px] leading-relaxed text-muted">{current?.desc}</p>
+				<div className="min-w-0 flex-1 overflow-y-auto bg-bg px-5 py-7 sm:px-9">
+					<div className="mx-auto max-w-[820px]">
+						<h2 className="text-[22px] font-semibold tracking-tight">{current?.label}</h2>
+						<p className="mt-2 mb-6 text-[13.5px] leading-relaxed text-muted">{current?.desc}</p>
 						{tab === "custom" && <CustomProvidersTab />}
 						{tab === "resources" && <ResourcesTab />}
 						{tab === "mcp" && <McpTab />}

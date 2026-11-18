@@ -1,8 +1,6 @@
 /**
  * 终端风格的会话记录：
- *   ❯ 用户输入
- *   ● 回复文本（Markdown）
- *   🌲 任务执行进度树（聚合思考与工具调用）
+ * 区分用户输入、助手回复与任务执行进度树（聚合思考与工具调用）。
  *
  * 彻底重构了历史轮次与运行中过程的展示：
  * - 连续的思考与工具调用聚合为单个结构化的「任务执行进度树」，去除了零碎割裂的黑胶囊与悬空圆点；
@@ -40,9 +38,10 @@ function UserLine({ message }: { message: Extract<ChatMessage, { role: "user" }>
 	const images = imagesOf(message.content);
 	const skill = parseSkillInvocation(text);
 	return (
-		<div className="-mx-2 rounded-2xl bg-panel-2 px-4 py-3">
-			<Gutter mark="❯" className="font-semibold text-primary">
-				{skill ? <SkillInvocation skill={skill} /> : <div className="text-[14.5px] leading-relaxed whitespace-pre-wrap">{text}</div>}
+		<div>
+			<p className="mb-2 text-[13px] font-semibold">你</p>
+			<div className="fw-chat-request rounded-lg px-4 py-3">
+				{skill ? <SkillInvocation skill={skill} /> : <div className="text-[14.5px] leading-relaxed break-words whitespace-pre-wrap">{text}</div>}
 				{images.length > 0 && (
 					<div className="mt-1 flex flex-wrap gap-2">
 						{images.map((image, i) => (
@@ -51,7 +50,7 @@ function UserLine({ message }: { message: Extract<ChatMessage, { role: "user" }>
 						))}
 					</div>
 				)}
-			</Gutter>
+			</div>
 		</div>
 	);
 }
@@ -100,6 +99,11 @@ const TurnBlocksView = memo(function TurnBlocksView({
 }) {
 	return (
 		<div className="space-y-3">
+			{blocks.length > 0 && (
+				<p className="flex items-center gap-2 text-[13px] font-semibold">
+					<span className="text-primary" aria-hidden="true">✻</span> FloWork
+				</p>
+			)}
 			{blocks.map((block) => {
 				if (block.type === "execution") {
 					return (
@@ -114,12 +118,12 @@ const TurnBlocksView = memo(function TurnBlocksView({
 
 				if (block.type === "text") {
 					return (
-						<div key={block.id} className="text-[14.5px] leading-relaxed">
+						<div key={block.id} className="text-[14.5px] leading-[1.85] break-words">
 							{block.text && (
-								<Gutter mark="●">
+								<div>
 									<Markdown text={block.text} />
 									{block.live && <span className="term-cursor" />}
-								</Gutter>
+								</div>
 							)}
 							{block.stopReason === "error" && (
 								<Gutter mark="✗" className="text-err">

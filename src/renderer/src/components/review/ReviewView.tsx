@@ -36,11 +36,11 @@ export function ReviewView() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 text-[13px]">
+			<div className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-term px-4 sm:px-7">
 				<button
 					type="button"
 					onClick={() => setView("chat")}
-					className="flex h-8 items-center gap-1.5 rounded-full px-3 text-muted hover:bg-panel-2 hover:text-fg"
+					className="flex h-8 items-center gap-2 rounded-md px-2 text-[13px] text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					<Icon
 						name="arrow-left"
@@ -48,18 +48,13 @@ export function ReviewView() {
 					/>
 					返回会话
 				</button>
-				<span className="text-[15px] font-semibold tracking-tight">本次会话的修改</span>
-				<span className="max-w-[320px] truncate text-muted">{sessionTitle || firstPrompt}</span>
-				<span className="rounded-full bg-panel-2 px-2.5 py-0.5 text-[11.5px] text-muted">{files.length} files</span>
-				<span className="rounded-full bg-ok-soft px-2.5 py-0.5 text-[11.5px] font-medium text-accent-strong">+{add}</span>
-				<span className="rounded-full bg-err-soft px-2.5 py-0.5 text-[11.5px] font-medium text-err">−{del}</span>
 				<div className="flex-1" />
 				{active && (
 					<>
 						<button
 							type="button"
 							onClick={() => insertIntoPrompt(active.path)}
-							className="flex h-8 items-center gap-1.5 rounded-full bg-panel-2 px-3 text-fg hover:bg-highlight"
+							className="fw-workbench-button"
 						>
 							<Icon
 								name="at-sign"
@@ -73,7 +68,7 @@ export function ReviewView() {
 								setView("chat");
 								openPreview(active.path);
 							}}
-							className="flex h-8 items-center gap-1.5 rounded-full bg-primary px-3.5 font-medium text-primary-foreground hover:bg-primary-strong"
+							className="fw-workbench-button fw-workbench-primary"
 						>
 							<Icon
 								name="pencil"
@@ -84,10 +79,20 @@ export function ReviewView() {
 					</>
 				)}
 			</div>
+			<header className="fw-page-heading"><div className="min-w-0">
+				<h1 className="fw-page-title">本次会话的修改</h1>
+				<div className="mt-2 flex items-center gap-4 text-[13px] text-muted">
+					{(sessionTitle || firstPrompt) && <span className="max-w-[320px] truncate">{sessionTitle || firstPrompt}</span>}
+					<span className="shrink-0">{files.length} 个文件</span>
+					<span className="shrink-0 tabular-nums text-diff-add-fg">+{add}</span>
+					<span className={`shrink-0 tabular-nums ${del ? "text-diff-del-fg" : "text-muted"}`}>−{del}</span>
+				</div>
+				</div>
+			</header>
 
 			<div className="flex min-h-0 flex-1">
-				<nav className="w-[280px] shrink-0 space-y-0.5 overflow-y-auto border-r border-border bg-sidebar px-2 py-2">
-					<div className="flex h-8 items-center px-2 text-[11.5px] font-semibold text-faint">已修改</div>
+				<nav aria-label="已修改文件" className="w-[clamp(163px,17vw,225px)] shrink-0 space-y-1 overflow-y-auto border-r border-border bg-term-bar px-3 py-5 sm:px-4">
+					<p className="mb-3 px-2 text-[12px] font-medium text-muted">已修改</p>
 					{files.length === 0 && (
 						<div className="px-3 py-2 text-[12px] leading-5 text-muted">
 							本次会话还没有修改过文件。pi 通过 write / edit 工具改动的文件会出现在这里。
@@ -101,43 +106,45 @@ export function ReviewView() {
 								type="button"
 								key={f.path}
 								onClick={() => setSelected(f.path)}
-								className={`flex h-10 w-full items-center gap-2 rounded-[10px] px-2.5 text-left ${on ? "bg-primary-soft" : "hover:bg-panel-2"}`}
+								aria-pressed={on}
+								className={`flex min-h-12 w-full items-center gap-2 rounded-md px-2.5 py-2 text-left ${on ? "bg-panel-2" : "hover:bg-highlight"}`}
 							>
-								<span className={`w-2.5 font-mono text-[11px] font-medium ${f.created ? "text-accent-strong" : "text-warn"}`}>{f.created ? "A" : "M"}</span>
+								<Icon name="file-code" className="size-3.5 shrink-0 text-muted" />
 								<span className="min-w-0 flex-1">
-									<span className={`block truncate text-[13px] ${on ? "font-medium text-primary" : ""}`}>{name}</span>
-									<span className="block truncate font-mono text-[10.5px] text-faint">{dir}</span>
+									<span className={`block truncate text-[13px] ${on ? "font-semibold" : ""}`} title={f.path}>{name}</span>
+									<span className="block truncate text-[11px] text-muted">{dir}</span>
 								</span>
-								<span className="font-mono text-[11px] tabular-nums text-accent-strong">+{f.added}</span>
-								<span className="w-6 text-right font-mono text-[11px] tabular-nums text-err">−{f.removed}</span>
+								<span className="shrink-0 text-[11px] tabular-nums">
+									<span className="text-diff-add-fg">+{f.added}</span>{f.removed > 0 && <span className="ml-1 text-diff-del-fg">−{f.removed}</span>}
+								</span>
 							</button>
 						);
 					})}
-					<div className="mt-3 border-t border-border px-2 pt-3 text-[11.5px] leading-relaxed text-faint">
+					<div className="mt-5 px-2 text-[12px] leading-6 text-muted">
 						diff 来自 edit 工具与写入前快照。之后被外部改动的部分不在这里显示。
 					</div>
 				</nav>
 
-				<div className="min-w-0 flex-1 overflow-y-auto bg-bg">
+				<div className="min-w-0 flex-1 overflow-y-auto bg-bg px-5 py-6 sm:px-8">
 					{active ? (
 						<>
-							<div className="sticky top-0 flex h-10 items-center gap-2 border-b border-border bg-glass px-5 font-mono text-[12px] backdrop-blur-xl">
+							<div className="mb-5 flex items-center gap-2 text-[12px]">
 								<span className={active.created ? "text-ok" : "text-warn"}>{active.created ? "A" : "M"}</span>
-								<span className="truncate text-fg">{active.path}</span>
-								<span className="text-faint">· {changes.length} 次修改</span>
+								<span className="min-w-0 truncate font-mono text-fg" title={active.path}>{active.path}</span>
+								<span className="shrink-0 text-muted">· {changes.length} 次修改</span>
 								<div className="flex-1" />
-								<span className="text-faint">
+								<span className="shrink-0 text-muted">
 									读取 {active.reads} 次
 								</span>
 							</div>
-							<div className="pb-8 font-mono text-[12.5px] leading-[1.75]">
+							<div className="space-y-4 pb-6 font-mono text-[12.5px] leading-[1.75]">
 								{changes.map((c, i) => (
-									<div key={`${c.tool}-${c.diff?.length ?? 0}-${i}`}>
-										<div className="flex items-center gap-2 bg-panel-2 px-4 py-0.5 font-mono text-[11px] text-faint">
+									<div key={`${c.tool}-${c.diff?.length ?? 0}-${i}`} className="overflow-hidden rounded-lg border border-border bg-term">
+										<div className="border-b border-border bg-term-bar px-4 py-2 font-sans text-[12px] text-muted">
 											第 {i + 1} 次 · {c.tool}
 											{c.created ? "（新建）" : ""}
 										</div>
-										{c.diff ? <DiffRows diff={c.diff} twoColumns /> : <div className="px-4 py-2 text-muted">这次修改没有 diff 记录</div>}
+										{c.diff ? <div className="overflow-x-auto py-1.5"><div className="min-w-full w-max"><DiffRows diff={c.diff} twoColumns /></div></div> : <div className="px-4 py-2 text-muted">这次修改没有 diff 记录</div>}
 									</div>
 								))}
 							</div>

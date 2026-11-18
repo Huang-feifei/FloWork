@@ -1,5 +1,4 @@
-/** 窗口底部状态栏：连接状态、当前目录、分支、后台任务与 token 用量。
- *  Apple 体系：安静的一行小字，版本是灰色胶囊、健康点用绿、待确认用琥珀。 */
+/** 底部状态行：项目、会话数、待确认项与用量。 */
 import { useMemo } from "react";
 import { formatTokens } from "../lib/format";
 import { summarizeUsage } from "../lib/usage";
@@ -62,9 +61,8 @@ export function StatusBar() {
 	const waiting = pending + backgroundWaiting;
 
 	return (
-		<footer className="flex h-7 shrink-0 items-center gap-0.5 border-t border-border bg-chrome px-3 text-[11.5px] text-muted select-none">
-			<span className="flex items-center gap-1.5 rounded-full bg-panel-2 px-2.5 py-0.5 font-medium text-fg">
-				<span className="text-primary">✻</span>
+		<footer className="fw-statusbar flex h-7 shrink-0 items-center gap-0.5 px-3 text-[11.5px] text-muted select-none">
+			<span className="flex items-center gap-1.5 px-2.5 font-medium text-fg">
 				<span className="tabular-nums">{connection === "open" ? `v${info?.version ?? "…"}` : connection === "error" ? "初始化失败" : "启动中"}</span>
 			</span>
 			{project && (
@@ -84,7 +82,7 @@ export function StatusBar() {
 				title="已打开会话的项目数"
 			>
 				<span className={`size-1.5 rounded-full ${connection === "open" ? "bg-ok" : "bg-warn"}`} />
-				{workers} workers
+				{workers} 个运行实例
 			</span>
 			{waiting > 0 && (
 				<span className="flex items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-0.5 font-medium text-warn">

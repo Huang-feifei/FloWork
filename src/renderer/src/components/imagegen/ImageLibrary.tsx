@@ -7,6 +7,7 @@ import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Icon } from "../Icon";
 import { Badge, Button } from "../ui";
+import { PageHeading, WorkbenchEmpty } from "../PageHeading";
 import { GeneratedTile, useImageUrl } from "./ImageStudio";
 
 function formatBytes(bytes: number): string {
@@ -69,15 +70,7 @@ export function ImageLibrary() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			<div className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-6">
-				<span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-primary-soft text-primary">
-					<Icon name="image" className="size-4" />
-				</span>
-				<span className="shrink-0 text-[15px] font-semibold tracking-tight">图片库</span>
-				<Badge tone="muted">
-					{images.length} 张 · {formatBytes(bytes)}
-				</Badge>
-				<div className="flex-1" />
+			<PageHeading title="图片库" detail={images.length ? `${images.length} 张 · ${formatBytes(bytes)}` : "管理生成历史与收藏。"} actions={<>
 				<Button size="sm" variant="ghost" onClick={() => void loadImages().catch(() => undefined)}>
 					<Icon name="refresh" className="size-4" />
 					刷新
@@ -96,22 +89,14 @@ export function ImageLibrary() {
 					<Icon name="trash-2" className="size-4" />
 					清空缓存
 				</Button>
-			</div>
+			</>} />
 
 			{images.length === 0 ? (
-				<div className="flex min-h-0 flex-1 items-center justify-center">
-					<div className="text-center">
-						<div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-panel-2 text-faint">
-							<Icon name="image" className="size-5" />
-						</div>
-						<div className="mt-3 text-[14px] text-fg">图片库还是空的</div>
-						<div className="mt-1 text-[12.5px] text-muted">到「图片生成」里生成第一张，结果会自动收进这里。</div>
-					</div>
-				</div>
+				<WorkbenchEmpty icon="image" title="图片库还是空的" detail="生成的图片会自动保存到这里，可下载、收藏或插入会话。" actions={<Button variant="primary" onClick={() => useApp.getState().setView("imagegen")}>去生成图片</Button>} />
 			) : (
-				<div className="flex min-h-0 flex-1 gap-6 overflow-y-auto px-6 py-5">
+				<div className="fw-media-layout fw-gallery-layout min-h-0 flex-1 overflow-y-auto bg-bg">
 					<div className="min-w-0 flex-1">
-						<div className="grid grid-cols-4 gap-4">
+						<div className="fw-image-grid">
 							{visible.map((image) => (
 								<button
 									type="button"
@@ -132,7 +117,7 @@ export function ImageLibrary() {
 									这个筛选下还没有图片。
 								</div>
 							)}
-					<div className="w-[320px] shrink-0">
+					<div className="min-w-0">
 						{selected && (
 							<div className="fw-card overflow-hidden">
 								<div className="aspect-square bg-panel-2">
@@ -168,7 +153,7 @@ export function ImageLibrary() {
 											<span>{new Date(selected.createdAt).toLocaleString()}</span>
 										</div>
 									</div>
-									<div className="mt-4 flex items-center gap-2">
+									<div className="mt-4 flex flex-wrap items-center gap-2">
 										<Button variant="primary" size="sm" onClick={() => void insert()}>
 											<Icon name="corner-down-left" className="size-4" />
 											插入会话

@@ -2,7 +2,7 @@
  * 底部面板：终端 / 输出 / pi 日志三个页签。
  *
  * 终端页签是真正的交互式 shell（见 TerminalPanel.tsx），另外两个页签只读会话状态。
- * 外观按 Apple 体系：页签改分段控件，头部更宽松，状态点用绿色（空闲）/ 蓝色（执行中）。
+ * 外观与上方工具面板共用分段控件和状态色。
  */
 import { useMemo, useRef } from "react";
 import { type BottomTab, useApp } from "../../store";
@@ -123,8 +123,8 @@ export function BottomPanel() {
 	const activeTab = tab;
 
 	return (
-		<section className="flex h-[280px] shrink-0 flex-col border-t border-border bg-bg">
-			<div className="flex h-10 shrink-0 items-center gap-3 border-b border-border bg-chrome px-3">
+		<section className="flex h-[min(280px,38vh)] shrink-0 flex-col overflow-hidden rounded-br-[10px] border-t border-border bg-term">
+			<div className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-term-bar px-4">
 				<Segmented items={tabs.map((t) => ({ id: t.id, label: t.label }))} active={activeTab} onChange={(id) => setPanelTab(id as BottomTab)} />
 				<div className="flex-1" />
 				<span className="flex items-center gap-2 px-1 text-[12.5px] text-muted">

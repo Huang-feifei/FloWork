@@ -25,7 +25,7 @@ export function TurnFooter({
 }) {
 	const preview = useApp((s) => s.preview);
 	const isRunning = useApp((s) => s.isRunning);
-	const { openPreview, navigateTo, forkFrom, pushNotice } = useApp.getState();
+	const { openPreview, navigateTo, forkFrom, pushNotice, setView } = useApp.getState();
 
 	const duration = formatDuration(turn.endTimestamp - turn.user.timestamp);
 	const entryId = turn.user.entryId;
@@ -50,9 +50,13 @@ export function TurnFooter({
 		"rounded-md p-1 text-muted hover:bg-panel-2 hover:text-fg disabled:cursor-default disabled:opacity-35 disabled:hover:bg-transparent disabled:hover:text-muted";
 
 	return (
-		<div className="mt-1.5 border-t border-dashed border-border pt-2">
+		<div className="mt-2">
 			{changed.length > 0 && (
-				<div className="mb-1.5 flex flex-wrap gap-1.5">
+				<div className="mb-2 overflow-hidden rounded-lg border border-border">
+					<div className="flex items-center justify-between gap-3 bg-term-bar px-3 py-2 text-[12px] text-muted">
+						<span>本轮修改 · {changed.length} 个文件</span>
+						<button type="button" onClick={() => setView("review")} className="shrink-0 text-fg hover:underline">审查会话修改</button>
+					</div>
 					{changed.map((f) => {
 						const inside = isInsideWorkspace(f.path);
 						const name = f.path.split("/").pop() ?? f.path;
@@ -63,14 +67,14 @@ export function TurnFooter({
 								disabled={!inside}
 								onClick={() => openPreview(f.path)}
 								title={`${f.path}　+${f.added} −${f.removed}${inside ? "" : "（工作区外，无法预览）"}`}
-								className={`inline-flex max-w-[260px] items-center gap-1.5 rounded-md px-2 py-0.5 font-mono text-[11.5px] transition-colors ${
-									preview === f.path ? "bg-primary-soft text-primary" : "bg-panel-2 text-accent-strong hover:text-fg"
+								className={`flex w-full items-center gap-2 border-t border-border px-3 py-2 text-left text-[13px] ${
+									preview === f.path ? "bg-primary-soft text-primary-strong" : "hover:bg-panel-2"
 								} disabled:cursor-default`}
 							>
-								<Icon name="file-code" className="size-3" />
-								<span className="truncate">{name}</span>
-								<span className="shrink-0 tabular-nums text-faint">
-									+{f.added} −{f.removed}
+								<Icon name="file-code" className="size-4 shrink-0 text-muted" />
+								<span className="min-w-0 flex-1 truncate">{name}</span>
+								<span className="shrink-0 text-[12px] tabular-nums">
+									<span className="text-diff-add-fg">+{f.added}</span> <span className="text-diff-del-fg">−{f.removed}</span>
 								</span>
 							</button>
 						);

@@ -196,7 +196,7 @@ export function FilePreview() {
 	const lineCount = file && !file.binary ? normalizeEol(file.text).split("\n").length : 0;
 
 	return (
-		<div className="absolute inset-x-0 top-11 bottom-0 z-20 flex flex-col bg-term">
+		<div className="absolute inset-0 z-50 flex flex-col bg-term">
 			<div className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-term-bar px-4 text-[12.5px] whitespace-nowrap [&>button]:shrink-0">
 				<span className="min-w-0 truncate font-mono font-medium" title={file?.absolutePath ?? path}>
 					{dirty && <span className="mr-1 text-primary">●</span>}

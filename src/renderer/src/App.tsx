@@ -17,6 +17,7 @@ import { TerminalView } from "./components/terminal/TerminalView";
 import { TitleBar } from "./components/TitleBar";
 import { WelcomeView } from "./components/welcome/WelcomeView";
 import { RightPanel } from "./components/panels/RightPanel";
+import { WorkbenchEmpty } from "./components/PageHeading";
 
 // 设置、数据库、图片和评审不是首屏必需内容，按需加载，避免把它们的依赖带进启动 chunk。
 const SettingsView = lazy(() => import("./components/settings/SettingsView").then((m) => ({ default: m.SettingsView })));
@@ -43,28 +44,17 @@ function EmptyState() {
 	const { importProjects, setView, setDiscoverOpen, setRemoteOpen } = useApp.getState();
 	const hasProjects = useApp((s) => s.projects.projects.length > 0);
 	return (
-		<div className="flex flex-1 items-center justify-center bg-bg p-8">
-			<div className="w-full max-w-[560px] text-center">
-				<div className="mx-auto mb-6 flex size-14 items-center justify-center rounded-[20px] bg-primary-soft text-[26px] leading-none text-primary">✻</div>
-				<h1 className="mb-3 text-[32px] font-semibold tracking-tight">{hasProjects ? "选择一个项目" : "导入你的第一个项目"}</h1>
-				<p className="mb-8 text-[17px] leading-relaxed text-muted">
-					{hasProjects
-						? "在左侧点击项目即可打开；多个项目可以同时运行任务。"
-						: "导入项目文件夹，FloWork 会在其中运行 pi，读写代码、执行命令。可以一次导入多个。"}
-				</p>
-				<div className="flex flex-wrap justify-center gap-3">
-					<Button
-						variant="primary"
-						onClick={() => void importProjects()}
-					>
-						导入文件夹
-					</Button>
-					<Button onClick={() => setRemoteOpen(true)}>添加远程项目</Button>
-					<Button onClick={() => setDiscoverOpen(true)}>从已有会话发现</Button>
-					<Button onClick={() => setView("settings", "custom")}>配置模型</Button>
-				</div>
-			</div>
-		</div>
+		<WorkbenchEmpty
+			icon="folder-open"
+			title={hasProjects ? "从一个项目开始" : "导入你的第一个项目"}
+			detail={hasProjects ? "从项目栏打开已有项目，或导入新的工作目录。" : "选择一个本地文件夹，把代码、会话和修改记录放进同一个工作台。"}
+			actions={<>
+				<Button variant="primary" onClick={() => void importProjects()}>导入文件夹</Button>
+				<Button onClick={() => setRemoteOpen(true)}>添加远程项目</Button>
+				<Button variant="ghost" onClick={() => setDiscoverOpen(true)}>发现已有项目</Button>
+				<Button variant="ghost" onClick={() => setView("settings", "custom")}>配置模型</Button>
+			</>}
+		/>
 	);
 }
 
@@ -75,6 +65,7 @@ export function App() {
 	const rightPanel = useApp((s) => s.rightPanel);
 	const terminalPanelOpen = useApp((s) => s.terminalPanel);
 	const [databaseOpened, setDatabaseOpened] = useState(view === "database");
+	const hasWorkspaceSidebar = view !== "settings" && view !== "database";
 	useEffect(() => { if (view === "database") setDatabaseOpened(true); }, [view]);
 
 	useEffect(() => {
@@ -86,22 +77,20 @@ export function App() {
 			{/* 窗口背景，与系统材质和截图保持一致 */}
 			<div className="fw-wallpaper absolute inset-0" />
 
-			{/* 整个窗口一层毛玻璃（见 .fw-shell）：各区域再用不同透明度叠出层次；图片模式下关掉，否则壁纸会被糊成色斑 */}
-			<div className="fw-shell relative flex h-full flex-col">
+			<div className="fw-shell fw-workbench relative flex h-full flex-col">
 				<TitleBar />
 
 				{view === "welcome" ? (
-					<div className="min-h-0 flex-1">
+					<div className="fw-welcome-frame min-h-0 flex-1">
 						<WelcomeView />
 					</div>
 				) : (
 					<>
-						<div className="flex min-h-0 flex-1">
+						<div className="fw-workspace-frame flex min-h-0 flex-1">
 							<ActivityBar />
-							{sidebarOpen && view !== "database" && <Sidebar />}
-							{/* 底部面板位于会话内容之下、状态栏之上，与设计稿的层次一致 */}
-							<div className="flex min-w-0 flex-1 flex-col">
-								<main className="relative flex min-h-0 flex-1 flex-col">
+							{sidebarOpen && hasWorkspaceSidebar && <Sidebar />}
+							<div className="fw-workspace-body flex min-w-0 flex-1 flex-col">
+								<main className="relative flex min-h-0 flex-1 flex-col" data-view={view}>
 									{(databaseOpened || view === "database") && (
 										<div className={view === "database" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
 											<Suspense fallback={<ViewFallback />}>

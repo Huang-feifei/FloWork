@@ -8,6 +8,7 @@ import { askText } from "../PromptDialog";
 import { Icon } from "../Icon";
 import { Badge, Button, Input, Segmented, Select } from "../ui";
 import { ConnectionDialog } from "./ConnectionDialog";
+import { PageHeading, WorkbenchEmpty } from "../PageHeading";
 
 const CodeEditor = lazy(() => import("../panels/CodeEditor"));
 const kinds = { sqlite: "SQLite", postgres: "PostgreSQL", mysql: "MySQL" };
@@ -17,7 +18,7 @@ const quote = (s: string, c: DatabaseConnection) => c.kind === "mysql" ? `\`${s.
 function ResultGrid({ result }: { result: DatabaseResult }) {
 	return <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border bg-surface-raised">
 		<table className="w-full border-collapse text-left font-mono text-[12px]">
-			<thead className="sticky top-0 z-10 bg-panel-2"><tr>{result.columns.map((c, i) => <th key={i} className="min-w-28 whitespace-nowrap border-b border-border px-4 py-2.5 font-normal text-faint">{c}</th>)}</tr></thead>
+			<thead className="sticky top-0 z-10 bg-term-bar"><tr>{result.columns.map((c, i) => <th key={i} className="min-w-28 whitespace-nowrap border-b border-border px-4 py-2.5 font-semibold text-muted">{c}</th>)}</tr></thead>
 			<tbody>{result.rows.map((r, i) => <tr key={i} className="border-b border-border last:border-0 hover:bg-panel-2">{r.map((cell, j) => <td key={j} className={`max-w-96 truncate px-4 py-2.5 ${cell === null ? "italic text-faint" : "text-fg/85"}`} title={cell === null ? "NULL" : String(cell)}>{cell === null ? "NULL" : typeof cell === "boolean" ? String(cell) : cell}</td>)}</tr>)}</tbody>
 		</table>
 		{!result.rows.length && <div className="p-8 text-center text-xs text-muted">{result.columns.length ? "没有匹配的数据" : `执行完成 · 影响 ${result.affectedRows} 行`}</div>}
@@ -46,15 +47,18 @@ export function DatabaseView() {
 		if (!await askConfirm({ title: "移除数据库连接", message: `仅删除「${selected.name}」的连接配置、查询历史和收藏，不会删除数据库或数据。`, danger: true })) return;
 		try { await api.database.remove(selected.id); localStorage.removeItem(`flowork.sql.${selected.id}`); await load(); } catch (e) { pushNotice("error", errorText(e)); }
 	};
-	return <div className="flex min-h-0 flex-1">
-		{sidebarOpen && <aside className="flex w-[260px] shrink-0 flex-col border-r border-border bg-sidebar">
-			<div className="flex h-12 items-center gap-2 px-4"><span className="flex-1 text-xs font-semibold text-muted">数据库连接</span><Button size="sm" variant="ghost" disabled={busy} title="新建数据库连接" onClick={() => setEditor({})}>＋</Button></div>
+	return <div className="flex min-h-0 flex-1 flex-col">
+		<PageHeading title="数据库" detail="浏览表数据、运行 SQL、收藏常用查询。" actions={<Button variant="primary" disabled={busy} onClick={() => setEditor({})}><Icon name="plus" className="size-4" />新建连接</Button>} />
+		<div className="flex min-h-0 flex-1 bg-bg">
+		{sidebarOpen && <aside className="flex w-[clamp(170px,17vw,230px)] shrink-0 flex-col border-r border-border bg-sidebar">
+			<h2 className="px-4 py-4 text-[13px] font-semibold">数据库连接</h2>
 			<div className="min-h-0 flex-1 space-y-1 overflow-y-auto px-2">{connections.map(c => <button key={c.id} type="button" disabled={busy} onClick={() => select(c.id)} className={`flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left ${c.id === selectedId ? "bg-primary-soft text-primary" : "text-muted hover:bg-panel-2"}`}><Icon name="database" className="size-4 shrink-0" /><span className="min-w-0 flex-1"><span className="block truncate text-[13px]">{c.name}</span><span className="block truncate text-[11px] opacity-70">{kinds[c.kind]}{c.sshHostId ? " · SSH" : ""}{c.readOnly ? " · 只读" : " · 可写"}</span></span></button>)}{!connections.length && <p className="px-3 py-4 text-xs leading-5 text-faint">添加 SQLite 文件，或连接 PostgreSQL / MySQL。</p>}</div>
 			<div className="flex gap-2 border-t border-border p-3"><Button size="sm" disabled={!selected || busy} onClick={() => setEditor({ connection: selected })}>编辑…</Button><Button size="sm" variant="ghost" disabled={!selected || busy} onClick={() => void remove()}>移除</Button></div>
 		</aside>}
 		<div className="flex min-w-0 flex-1 flex-col">
 			{error && <div role="alert" className="bg-err-soft p-3 text-xs text-err">{error}<Button size="sm" onClick={() => { setError(""); void load().catch(e => setError(errorText(e))); }}>重试</Button></div>}
-			{selected ? <Workspace key={`${selected.id}:${revision}`} connection={selected} onBusy={setBusy} onEdit={() => setEditor({ connection: selected })} /> : <div className="flex flex-1 flex-col items-center justify-center gap-4 text-muted"><Icon name="database" className="size-10 text-faint" /><span className="text-base font-semibold">数据库工作台</span><span className="text-xs">浏览表数据、运行 SQL、管理查询历史和收藏</span><Button variant="primary" onClick={() => setEditor({})}>新建数据库连接</Button></div>}
+			{selected ? <Workspace key={`${selected.id}:${revision}`} connection={selected} onBusy={setBusy} onEdit={() => setEditor({ connection: selected })} /> : <WorkbenchEmpty icon="database" title="还没有数据库连接" detail="添加 SQLite 文件，或连接 PostgreSQL / MySQL，即可在这里查看表与查询结果。" />}
+		</div>
 		</div>
 		{editor && <ConnectionDialog connection={editor.connection} onClose={() => setEditor(undefined)} onSaved={c => { setConnections(cs => [...cs.filter(v => v.id !== c.id), c]); select(c.id); setRevision(r => r + 1); setEditor(undefined); }} />}
 	</div>;
@@ -121,7 +125,16 @@ function Workspace({ connection: c, onBusy, onEdit }: { connection: DatabaseConn
 	};
 	const current = view === "data" ? page : result;
 	return <div className="flex min-h-0 flex-1 flex-col">
-		<header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-5"><span className="text-[15px] font-semibold">数据库</span><Badge>{kinds[c.kind]}</Badge><span className="min-w-0 flex-1 truncate text-xs text-muted" title={c.file || `${c.user}@${c.host}:${c.port}/${c.database}`}>{c.name}</span><Badge tone={c.readOnly ? "muted" : "warn"}>{c.readOnly ? "只读连接" : "写操作需确认"}</Badge><Segmented items={[{ id: "data", label: "数据" }, { id: "query", label: "查询" }]} active={view} onChange={setView} /><Button size="sm" variant="ghost" disabled={busy} onClick={() => void operation(loadTables)}>刷新</Button><Button size="sm" disabled={!current?.columns.length || busy} onClick={() => { if (current) exportCsv(current, `${c.name}-${view === "data" ? table?.name ?? "table" : "query"}`); }}>导出 CSV</Button><Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}>连接…</Button></header>
+		<header className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border bg-term-bar px-5 py-2">
+			<span className="max-w-[230px] truncate text-[14px] font-semibold" title={c.name}>{c.name}</span>
+			<Badge>{kinds[c.kind]}</Badge>
+			<Badge tone={c.readOnly ? "muted" : "warn"}>{c.readOnly ? "只读连接" : "写操作需确认"}</Badge>
+			<div className="flex-1" />
+			<Segmented items={[{ id: "data", label: "数据" }, { id: "query", label: "查询" }]} active={view} onChange={setView} />
+			<Button size="sm" variant="ghost" disabled={busy} onClick={() => void operation(loadTables)}>刷新</Button>
+			<Button size="sm" disabled={!current?.columns.length || busy} onClick={() => { if (current) exportCsv(current, `${c.name}-${view === "data" ? table?.name ?? "table" : "query"}`); }}>导出 CSV</Button>
+			<Button size="sm" variant="ghost" disabled={busy} onClick={onEdit}>连接…</Button>
+		</header>
 		{error && <div role="alert" className="mx-5 mt-3 whitespace-pre-wrap break-words rounded-xl bg-err-soft p-3 text-xs text-err">{error}</div>}
 		{busy && <div role="status" className="flex shrink-0 items-center gap-3 px-5 py-2 text-xs text-muted"><span className="animate-pulse">正在执行数据库操作…</span><Button size="sm" onClick={() => void api.database.cancel().catch(e => setError(errorText(e)))}>取消</Button></div>}
 		{view === "data" ? <>
@@ -145,7 +158,7 @@ function Workspace({ connection: c, onBusy, onEdit }: { connection: DatabaseConn
 				<div className="flex items-center gap-2"><span className="text-[13px] font-semibold">结果</span>{result && <><Badge tone="ok">{result.rows.length} 行</Badge><span className="text-xs text-faint">{result.durationMs} ms{!result.readOnly ? ` · 影响 ${result.affectedRows} 行` : ""}</span>{result.truncated && <Badge tone="warn">仅显示前 5,000 行</Badge>}</>}<div className="flex-1" /><Button size="sm" variant="ghost" disabled={!result?.columns.length} onClick={() => { if (result) void navigator.clipboard.writeText(databaseCsv(result.columns, result.rows)).then(() => pushNotice("info", "已复制 CSV")).catch(e => pushNotice("error", errorText(e))); }}>复制为 CSV</Button></div>
 				{result ? <ResultGrid result={result} /> : <div className="flex flex-1 items-center justify-center rounded-xl border border-border text-xs text-faint">运行 SQL 后在这里查看结果</div>}
 			</div>
-			<aside className="w-64 shrink-0 overflow-y-auto border-l border-border p-4">
+			<aside className="w-[clamp(160px,18vw,244px)] shrink-0 overflow-y-auto border-l border-border bg-term-bar p-4">
 				<div className="flex items-center gap-2"><span className="flex-1 text-[13px] font-semibold">历史记录</span><Badge>{history.length}</Badge><Button size="sm" variant="link" disabled={busy || !history.length} onClick={() => void (async () => { if (await askConfirm({ title: "清空查询历史", message: "仅清除当前连接的历史记录，不影响数据库。" })) { await api.database.clearHistory(c.id); await refreshHistory(); } })().catch(e => pushNotice("error", errorText(e)))}>清空</Button></div>
 				<div className="mt-2 max-h-72 divide-y divide-border overflow-y-auto">{history.map(h => <button key={h.id} type="button" disabled={busy} title={h.error || h.sql} className="block w-full py-3 text-left hover:bg-panel-2" onClick={() => setQuery(h.sql)}><span className={`mr-2 ${h.ok ? "text-accent-strong" : "text-err"}`}>{h.ok ? "✓" : "✕"}</span><span className="font-mono text-xs break-all text-muted">{h.sql.slice(0, 100)}</span><span className="mt-1 block text-[11px] text-faint">{new Date(h.createdAt).toLocaleString()} · {h.durationMs} ms</span></button>)}</div>
 				<div className="mt-4 border-t border-border pt-4"><div className="text-[13px] font-semibold">收藏的查询</div>{saved.map(q => <div key={q.id} className="flex items-center gap-2 border-b border-border py-3"><button type="button" disabled={busy} className="min-w-0 flex-1 truncate text-left text-xs text-muted hover:text-primary" title={q.sql} onClick={() => setQuery(q.sql)}>★ {q.name}</button><button type="button" disabled={busy} aria-label={`删除收藏 ${q.name}`} className="text-faint hover:text-err" onClick={() => void api.database.removeQuery(q.id).then(refreshHistory).catch(e => pushNotice("error", errorText(e)))}>×</button></div>)}</div>

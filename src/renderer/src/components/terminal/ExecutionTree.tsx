@@ -2,7 +2,7 @@
  * 任务执行进度树（Execution Tree）：
  * 将一组连续的「思考 + 工具调用」聚合为现代、结构化、高质感的执行树。
  *
- * - 折叠状态：紧凑的一体化进度胶囊/摘要卡片，去除了悬空突兀的圆点，显示步骤总数、工具链流向与耗时；
+ * - 折叠状态：一行摘要，显示步骤总数、工具链与状态；
  * - 展开状态：优美的垂直树形导轨线，每个步骤具备专属语义图标、状态徽标、耗时统计与可展开的输出结果；
  * - 快捷操作：支持一键复制命令/输出、文件即时预览、智能耗时格式化（ms/s）。
  */
@@ -367,8 +367,7 @@ export const ExecutionTree = memo(function ExecutionTree({
 	}
 
 	return (
-		<div className="my-2 overflow-hidden rounded-xl border border-border/70 bg-panel-1/50 transition-all hover:border-border">
-			{/* 头部摘要栏：去除了外挂圆点，精致的一体化胶囊卡片 */}
+		<div className={`overflow-hidden rounded-md border ${open ? "border-border" : "border-transparent"}`}>
 			<div
 				onClick={() => setOpen(!open)}
 				onKeyDown={(e) => {
@@ -378,16 +377,16 @@ export const ExecutionTree = memo(function ExecutionTree({
 					}
 				}}
 				tabIndex={0}
-				className="flex cursor-pointer items-center gap-2.5 px-3 py-2 select-none hover:bg-panel-2/60"
+				className="flex min-h-8 cursor-pointer items-center gap-2.5 px-2 py-1 select-none hover:bg-panel-2/60"
 			>
 				{/* 状态徽章 */}
-				<div className="flex items-center gap-1.5">
+				<div className="flex shrink-0 items-center gap-1.5">
 					{isLive ? (
 						<Spinner className="size-3.5 text-warn" />
 					) : (
-						<Icon name="list-tree" className="size-3.5 text-primary" />
+						<Icon name="list-tree" className="size-3.5 text-muted" />
 					)}
-					<span className="font-medium text-[12.5px] text-fg">
+					<span className="font-medium text-[12.5px] text-muted">
 						{isLive ? "正在执行任务…" : "任务执行进度树"}
 					</span>
 				</div>
@@ -396,7 +395,7 @@ export const ExecutionTree = memo(function ExecutionTree({
 					{summaryItems.join(" · ")}
 				</div>
 
-				<div className="ml-auto flex items-center gap-2 text-faint text-[12px]">
+				<div className="ml-auto flex shrink-0 items-center gap-2 text-[12px] whitespace-nowrap text-muted">
 					{open && (
 						<button
 							type="button"

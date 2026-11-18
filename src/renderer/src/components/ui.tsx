@@ -1,14 +1,13 @@
-/** 少量通用界面元素，保持各页面风格一致。
- *  外观按 Apple 体系（DESIGN.md）：按钮一律 pill，主操作用唯一的蓝，破坏性操作用红；
- *  输入框 10px 圆角 + 发丝边框 + 蓝色 focus ring；徽标是软色胶囊；分段控件优先于页签，开关优先于复选框。 */
-import type { ButtonHTMLAttributes, ComponentProps, ReactNode } from "react";
+/** 桌面各模块共用的按钮、表单、分段控件与对话框。 */
+import { useId, type ButtonHTMLAttributes, type ComponentProps, type ReactNode } from "react";
 import { useBrowserOcclusion } from "../lib/browser";
+import { Icon } from "./Icon";
 
 type Variant = "primary" | "default" | "danger" | "ghost" | "link";
 type Size = "sm" | "md" | "lg";
 
 const VARIANT: Record<Variant, string> = {
-	primary: "bg-primary font-medium text-primary-foreground hover:bg-primary-strong",
+	primary: "fw-page-action bg-primary font-semibold text-primary-foreground hover:bg-primary-strong",
 	default: "bg-panel-2 text-fg hover:bg-highlight",
 	danger: "bg-danger font-medium text-danger-foreground hover:bg-danger-strong",
 	ghost: "text-muted hover:bg-panel-2 hover:text-fg",
@@ -32,7 +31,7 @@ export function Button({
 		<button
 			type="button"
 			{...props}
-			className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full transition-colors ${
+			className={`inline-flex shrink-0 items-center justify-center gap-1.5 rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-primary ${
 				sizing
 			} ${VARIANT[variant]} disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
 		/>
@@ -40,7 +39,7 @@ export function Button({
 }
 
 const FIELD =
-	"w-full rounded-[10px] border border-border bg-surface-raised px-3 py-2 text-[13.5px] text-fg outline-none placeholder:text-muted/70 focus:border-primary/40 focus:ring-4 focus:ring-primary/10";
+	"w-full rounded-md border border-border-strong bg-surface-raised px-3 py-2 text-[13.5px] text-fg outline-none placeholder:text-muted focus:border-primary/60 focus:ring-2 focus:ring-primary/12";
 
 export function Input({ className = "", ...props }: ComponentProps<"input">) {
 	return <input {...props} className={`${FIELD} ${className}`} />;
@@ -80,7 +79,7 @@ export function Badge({
 		primary: "bg-primary-soft text-primary",
 	};
 	return (
-		<span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11.5px] font-medium whitespace-nowrap ${tones[tone]}`}>
+		<span className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[11.5px] font-medium whitespace-nowrap ${tones[tone]}`}>
 			{children}
 		</span>
 	);
@@ -150,20 +149,22 @@ export function Modal({
 	width?: string;
 }) {
 	useBrowserOcclusion();
+	const titleId = useId();
 	return (
-		<div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6 backdrop-blur-[2px]">
-			<div className={`fw-float flex max-h-full ${width} max-w-full flex-col overflow-hidden rounded-[20px]`}>
-				<div className="flex items-center gap-3 px-6 pt-5 pb-4">
-					<div className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-tight">{title}</div>
+		<div className="fw-modal-shade fixed inset-0 z-50 flex items-center justify-center bg-scrim p-6">
+			<div className={`fw-modal-frame fw-float flex max-h-full ${width} max-w-full flex-col overflow-hidden`} role="dialog" aria-labelledby={titleId}>
+				<div className="flex items-center gap-3 border-b border-border px-6 py-4">
+					<div id={titleId} className="min-w-0 flex-1 truncate text-[18px] font-semibold tracking-tight">{title}</div>
 					<button
 						type="button"
 						onClick={onClose}
-						className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
+						aria-label="关闭对话框"
+						className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel-2 hover:text-fg"
 					>
-						<span className="icon-[lucide--x] size-4" />
+						<Icon name="x" className="size-4" />
 					</button>
 				</div>
-				<div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5">{children}</div>
+				<div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
 				{footer && <div className="flex items-center justify-end gap-2 border-t border-border px-6 py-4">{footer}</div>}
 			</div>
 		</div>

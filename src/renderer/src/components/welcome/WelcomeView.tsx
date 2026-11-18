@@ -1,7 +1,7 @@
 /**
  * 首次启动 · 欢迎：左侧是环境自检与快捷键，右侧从已有的 pi 会话中发现项目。
  * 自检项都来自真实状态：Node 版本、Git Bash、已配置的模型、项目数量。
- * 外观按 Apple 体系：正文用系统字 + 大字号，自检收进白卡片，按钮是 pill。
+ * 保留真实环境与发现结果，导入工作从左侧开始。
  */
 import { useEffect, useMemo, useState } from "react";
 import type { DiscoveredProject, ModelEntry, ShellInfo } from "@shared/protocol";
@@ -98,22 +98,21 @@ export function WelcomeView() {
 	const pathName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 
 	return (
-		<div className="grid h-full grid-cols-[1fr_540px]">
-			<section className="flex min-h-0 flex-col justify-center overflow-y-auto bg-bg px-24 py-12">
-				<div className="flex items-baseline gap-4">
-					<span className="text-[52px] leading-none text-primary">✻</span>
-					<span className="text-[40px] font-semibold tracking-tight text-fg">flowork</span>
-					<span className="rounded-full bg-primary-soft px-3 py-1 text-[12.5px] font-medium text-primary">
-						v{info?.version ?? "…"} · 桌面版
+		<div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(330px,34%)]">
+			<section className="fw-welcome-lead flex min-h-0 flex-col overflow-y-auto px-[clamp(36px,7vw,108px)] py-12">
+				<div className="mb-5 flex items-center gap-3">
+					<span aria-hidden="true" className="fw-welcome-mark">✻</span>
+					<span className="text-muted">FloWork · v{info?.version ?? "…"}
 					</span>
 				</div>
+				<h1 className="fw-welcome-word text-balance">从项目开始</h1>
 				<p className="mt-4 max-w-[600px] text-[17px] leading-relaxed text-muted">
-					以 pi coding agent 为内核的开发者工作台。把任务交给 pi，在这里审批命令、审查改动；多个项目可以在后台并行跑。
+					导入工作目录，把任务交给 AI，再在同一个地方确认工具操作、审查文件修改。
 				</p>
 
-				<div className="fw-card mt-9 max-w-[600px] p-5">
+				<div className="fw-card mt-7 max-w-[600px] p-5">
 					<div className="term text-[12.5px] leading-[1.9]">
-						<CheckRow state="note">$ flowork doctor</CheckRow>
+						<div className="mb-2 font-sans text-[13px] font-semibold">运行环境</div>
 						<CheckRow state={nodeOk ? "ok" : "bad"}>
 							Node {node ?? "（未知）"}
 							{info?.shell === "electron" ? "（Electron 内置）" : ""}
@@ -171,8 +170,8 @@ export function WelcomeView() {
 				</div>
 			</section>
 
-			<aside className="flex min-h-0 flex-col overflow-y-auto border-l border-border bg-surface-raised px-8 py-12">
-				<div className="text-[21px] font-semibold tracking-tight">发现已有的项目</div>
+			<aside className="flex min-h-0 flex-col overflow-y-auto border-l border-border bg-term px-7 py-12">
+				<h2 className="fw-page-title">发现已有项目</h2>
 				<div className="mt-2 text-[13.5px] leading-relaxed text-muted">
 					来自 pi 的会话记录。勾选后导入为项目，会话历史原样保留，不会复制文件。
 				</div>
@@ -208,7 +207,7 @@ export function WelcomeView() {
 									<span className="block truncate font-mono text-[11px] text-faint">{p.path}</span>
 								</span>
 								<span className="shrink-0 text-[11.5px] tabular-nums text-muted">
-									{imported ? "已导入" : !p.exists ? "文件夹不存在" : `${p.sessionCount} sessions`}
+									{imported ? "已导入" : !p.exists ? "文件夹不存在" : `${p.sessionCount} 个会话`}
 								</span>
 							</button>
 						);

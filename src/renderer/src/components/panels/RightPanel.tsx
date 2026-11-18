@@ -3,7 +3,6 @@ import { collectSessionFiles } from "../../lib/session-files";
 import { type RightPanel as Panel, useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
 import { Icon } from "../Icon";
-import { Segmented } from "../ui";
 import { ExecutionTreePanel } from "./ExecutionTreePanel";
 import { ProjectFiles } from "./ProjectFiles";
 import { ServerFiles } from "./ServerFiles";
@@ -19,15 +18,6 @@ export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteO
 	{ id: "services", label: "服务状态", hint: "远端主机的负载、服务与端口（只读）", remoteOnly: true },
 ];
 
-/** 300px 宽的面板里放不下完整页签名，分段控件用短名，完整名字放 title */
-const SHORT: Record<string, string> = {
-	files: "项目",
-	execution: "执行树",
-	server: "目录",
-	services: "服务",
-	session: "会话",
-	browser: "内置浏览器",
-};
 
 export function useChangedCount(): number {
 	const messages = useApp((s) => s.messages);
@@ -55,7 +45,6 @@ export function RightPanel() {
 	const tabs = PANEL_TABS.filter((t) => !t.remoteOnly || isRemote);
 	// 本地项目里如果存着「服务器目录」，回退到项目文件
 	const active = (panel === "server" || panel === "services") && !isRemote ? "files" : panel;
-	const changedCount = useChangedCount();
 	const ref = useRef<HTMLElement>(null);
 	const [available, setAvailable] = useState(0);
 	const [ratio, setRatio] = useState(initialRatio);
@@ -76,8 +65,8 @@ export function RightPanel() {
 	const isBrowser = panel === "browser";
 
 	return (
-		<aside ref={ref} className="relative flex shrink-0 flex-col overflow-hidden border-l border-border bg-sidebar"
-			style={{ width: isBrowser ? (available ? width : "48%") : 300 }}>
+		<aside ref={ref} aria-label="右侧工具面板" className="fw-inspector relative flex shrink-0 flex-col overflow-hidden border-l border-border"
+			style={{ width: isBrowser ? (available ? width : "48%") : active === "session" ? 286 : 300 }}>
 			{isBrowser && <div role="separator" aria-label="调整浏览器宽度" aria-orientation="vertical" tabIndex={0}
 				aria-valuemin={Math.round(Math.min(360, available * 0.45))} aria-valuemax={Math.round(Math.max(0, available - 380))} aria-valuenow={width}
 				className="absolute inset-y-0 left-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-primary/40 focus:bg-primary/40 focus:outline-none"
@@ -104,23 +93,22 @@ export function RightPanel() {
 					setRatio(next);
 					localStorage.setItem(WIDTH_KEY, String(next));
 				}} />}
-			<div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-				<div className="fw-seg-scroll min-w-0 flex-1">
-					<Segmented
-						items={tabs.map((t) => ({
-							id: t.id,
-							label: t.id === "session" && changedCount > 0 ? `${SHORT[t.id] ?? t.label} ${changedCount}` : (SHORT[t.id] ?? t.label),
-							title: t.hint,
-						}))}
-						active={active ?? ""}
-						onChange={(id) => setRightPanel(id as Panel)}
-					/>
+			<div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
+				<div className="min-w-0 flex-1">
+					<select
+						aria-label="切换右侧面板"
+						value={active ?? ""}
+						onChange={(event) => setRightPanel(event.target.value as Panel)}
+						className="max-w-full rounded-md py-1 pr-1 text-[13px] font-semibold text-fg outline-offset-2 hover:bg-panel-2 focus-visible:outline-primary"
+					>
+						{tabs.map((tab) => <option key={tab.id} value={tab.id} title={tab.hint}>{tab.label}</option>)}
+					</select>
 				</div>
 				<button
 					type="button"
 					onClick={() => setRightPanel(null)}
-					title="收起"
-					className="flex size-7 shrink-0 items-center justify-center rounded-full text-muted hover:bg-panel-2 hover:text-fg"
+					title="收起右侧面板"
+					className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					<Icon name="x" className="size-3.5" />
 				</button>

@@ -8,7 +8,7 @@ import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { askConfirm } from "../ConfirmDialog";
 import { isMtimeConflict, parseObject, useConfigFile } from "./useConfigFile";
-import { Badge, Button } from "../ui";
+import { Button } from "../ui";
 import { Icon } from "../Icon";
 import { ProvidersTab } from "./ProvidersTab";
 import {
@@ -99,6 +99,7 @@ export function CustomProvidersTab() {
 		return <div className="rounded-xl bg-err-soft px-3.5 py-2.5 text-[13px] text-err">{error ?? `models.json 解析失败：${parseError}`}</div>;
 	}
 
+	if (!file) return <p role="status" className="py-4 text-muted">正在读取模型配置…</p>;
 	const entries = Object.entries(providers);
 
 	return (
@@ -112,104 +113,85 @@ export function CustomProvidersTab() {
 				</div>
 			)}
 
-			{entries.length === 0 ? (
-				<div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border-strong px-6 py-10">
-					<div className="text-[13.5px] text-fg">还没有自定义端点</div>
-					<div className="max-w-[540px] text-center text-[12.5px] leading-relaxed text-muted">
-						自定义端点用来接入任意 OpenAI / Anthropic 兼容接口 —— 中转服务、自建网关、本地模型都行。
-						填一个 Base URL 和 API Key，再从接口拉取模型清单就能用了。
-					</div>
-					<div className="mt-1 flex flex-wrap items-center justify-center gap-2">
-						{PRESETS.map((p) => (
-							<Button
-								key={p.key}
-								size="sm"
-								onClick={() => setDraft({ ...emptyEndpoint(), key: p.key, api: p.api, baseUrl: p.baseUrl })}
-							>
-								+ {p.label}
-							</Button>
-						))}
-						<Button size="sm" variant="primary" onClick={() => setDraft(emptyEndpoint())}>
-							+ 空白端点
-						</Button>
-					</div>
-					<div className="mt-1 font-mono text-[11.5px] text-faint">
-						{file && !file.exists ? "models.json 尚未创建，新建后会自动写入" : "例：https://api.relay.dev/v1"}
-					</div>
+			<section aria-labelledby="configured-endpoints" className="space-y-4">
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<h2 id="configured-endpoints" className="text-base font-semibold">已配置端点</h2>
+					<button type="button" className="fw-workbench-button fw-workbench-primary" onClick={() => setDraft(emptyEndpoint())}>
+						<span aria-hidden="true">＋</span> 新建端点
+					</button>
 				</div>
-			) : (
-				<div className="flex flex-wrap items-center gap-2">
-					<span className="text-[12.5px] text-muted">新建：</span>
-					{PRESETS.map((p) => (
-						<Button
-							key={p.key}
-							size="sm"
-							onClick={() => setDraft({ ...emptyEndpoint(), key: p.key, api: p.api, baseUrl: p.baseUrl })}
+				{entries.length === 0 ? (
+					<div className="border-y border-border py-5">
+						<p className="text-[14px] font-medium">还没有自定义端点</p>
+						<p className="mt-1.5 text-[13px] leading-relaxed text-muted">填写服务地址和 API Key，即可接入兼容接口、中转服务或本地模型。</p>
+					</div>
+				) : (
+					<div className="divide-y divide-border border-y border-border">
+						{entries.map(([key, config]) => {
+							const images = (config.imageModels ?? []).length;
+							return (
+								<article key={key} className="py-5">
+									<div className="flex items-center gap-2">
+										<Icon name="git-fork" className="size-4 shrink-0 text-muted" />
+										<h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={key}>{key}</h3>
+										{builtinIds.has(key) && <span className="shrink-0 text-[12px] text-warn">覆盖内置</span>}
+										<button type="button" className="fw-workbench-button" onClick={() => setDraft(toEndpointDraft(key, config))}>编辑…</button>
+										<button type="button" className="rounded-md px-2 py-1.5 text-[12px] whitespace-nowrap text-err hover:bg-err-soft" onClick={() => void remove(key)}>删除</button>
+									</div>
+									<dl className="mt-3 grid grid-cols-[88px_minmax(0,1fr)] gap-y-1.5 text-[12.5px]">
+										<dt className="text-muted">接口协议</dt><dd className="break-words">{String(config.api ?? "继承供应商")}</dd>
+										<dt className="text-muted">服务地址</dt><dd className="break-all">{String(config.baseUrl || "未填写")}</dd>
+										<dt className="text-muted">API Key</dt><dd>{config.apiKey ? "已填写" : "未填写"}</dd>
+										<dt className="text-muted">模型</dt><dd className="break-words">{modelIds(config).join("、") || "未配置"}{images > 0 && <span className="ml-2 text-muted">· {images} 个图片模型</span>}</dd>
+									</dl>
+								</article>
+							);
+						})}
+					</div>
+				)}
+				<div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
+					<span className="mr-1">从预设新建</span>
+					{PRESETS.map((preset) => (
+						<button
+							key={preset.key}
+							type="button"
+							className="fw-workbench-button"
+							onClick={() => setDraft({ ...emptyEndpoint(), key: preset.key, api: preset.api, baseUrl: preset.baseUrl })}
 						>
-							+ {p.label}
-						</Button>
+							{preset.label}
+						</button>
 					))}
-					<Button size="sm" variant="primary" onClick={() => setDraft(emptyEndpoint())}>
-						+ 空白端点
-					</Button>
 				</div>
-			)}
-
-			{entries.length > 0 && (
-			<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
-				{entries.map(([key, config]) => {
-					const images = (config.imageModels ?? []).length;
-					return (
-						<div key={key} className="flex items-center gap-3 border-b border-border px-5 py-3.5 last:border-b-0">
-							<div className="min-w-0 flex-1">
-								<div className="flex flex-wrap items-center gap-2">
-									<span className="text-[13.5px] font-medium text-fg">{key}</span>
-									{builtinIds.has(key) && <Badge tone="warn">覆盖内置</Badge>}
-									<Badge>{String(config.api ?? "（继承）")}</Badge>
-									{config.apiKey ? <Badge tone="ok">已填 Key</Badge> : <Badge>无 Key</Badge>}
-									{images > 0 && <Badge tone="primary">图片生成 {images}</Badge>}
-								</div>
-								<div className="mt-0.5 truncate font-mono text-[11.5px] text-muted">{String(config.baseUrl ?? "")}</div>
-								<div className="truncate text-[11.5px] text-muted">模型：{modelIds(config).join("、") || "（无）"}</div>
-							</div>
-							<Button size="sm" onClick={() => setDraft(toEndpointDraft(key, config))}>
-								编辑…
-							</Button>
-							<Button size="sm" variant="ghost" className="text-err hover:bg-err-soft" onClick={() => void remove(key)}>
-								<Icon name="trash-2" className="size-4" />
-								删除
-							</Button>
-						</div>
-					);
-				})}
-			</div>
-
-			)}
-			<div className="text-[12px] leading-5 text-faint">
-				更复杂的配置（headers、compat、modelOverrides、思考参数等）请在“配置文件”页直接编辑。
-			</div>
+				<p className="text-[12px] leading-5 text-muted">高级参数（如 headers、compat 和思考参数）可在「配置文件」中编辑。</p>
+			</section>
 
 			{/* pi 内置供应商：多数人只接自己的中转，所以默认收起，能力一点不丢 */}
-			<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
+			<div className="border-y border-border">
 				<button
 					type="button"
 					onClick={() => setShowBuiltin((v) => !v)}
-					className="flex w-full items-center gap-3 px-5 py-3.5 text-left hover:bg-panel-2"
+					aria-expanded={showBuiltin}
+					className="flex w-full items-center gap-3 rounded-md px-2 py-4 text-left hover:bg-panel-2"
 				>
 					<Icon name="chevron-right" className={`size-4 shrink-0 text-faint transition-transform ${showBuiltin ? "rotate-90" : ""}`} />
 					<div className="min-w-0 flex-1">
-						<div className="text-[13.5px] font-medium text-fg">使用 pi 内置供应商</div>
+						<div className="text-[15px] font-semibold">使用 pi 内置供应商</div>
 						<div className="mt-0.5 text-[12px] leading-relaxed text-muted">
-							OpenAI / Anthropic / Google 等 pi 自带的供应商，凭据存在 auth.json。多数情况下用上面的自定义端点就够了。
+							无需兼容中转时，可直接配置 pi 内置供应商的凭据。
 						</div>
 					</div>
 					<span className="shrink-0 text-[12px] text-faint">{showBuiltin ? "收起" : "展开"}</span>
 				</button>
 				{showBuiltin && (
-					<div className="border-t border-border px-5 py-5">
+					<div className="border-t border-border py-4">
 						<ProvidersTab />
 					</div>
 				)}
+			</div>
+
+			<div className="rounded-md bg-panel-2 px-4 py-3.5 text-[12px] text-muted">
+				<p className="mb-1 text-[13px] font-medium text-fg">配置保存在哪里？</p>
+				<p>自定义端点写入 models.json，内置供应商登录凭据保存在 auth.json。</p>
 			</div>
 
 			{draft && (

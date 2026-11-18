@@ -10,6 +10,7 @@ import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Icon } from "../Icon";
 import { Badge, Button, Select, TextArea } from "../ui";
+import { PageHeading, WorkbenchEmpty } from "../PageHeading";
 
 const COUNTS = [1, 2, 4];
 
@@ -17,6 +18,7 @@ const COUNTS = [1, 2, 4];
 export function useImageUrl(id: string): string | undefined {
 	const [url, setUrl] = useState<string>();
 	useEffect(() => {
+		if (!id) return;
 		let alive = true;
 		void api.images
 			.read(id)
@@ -161,25 +163,17 @@ export function ImageStudio() {
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
-			{/* 模块头：与代码会话区分开 */}
-			<div className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-6">
-				<span className="flex size-7 shrink-0 items-center justify-center rounded-[9px] bg-primary-soft text-primary">
-					<Icon name="image" className="size-4" />
-				</span>
-				<span className="shrink-0 text-[15px] font-semibold tracking-tight">图片生成</span>
-				{model ? <Badge tone="muted">{model.provider} · {model.id}</Badge> : <Badge tone="warn">还没有配置图片模型</Badge>}
-				<span className="min-w-0 truncate text-[12.5px] text-faint">独立工作台，不占用项目会话</span>
-				<div className="flex-1" />
-				<span className="shrink-0 text-[12px] text-faint">
-					{activeProjectId ? `插入到：${sessionName || "当前会话"}` : "还没有打开会话"}
-				</span>
-			</div>
+			<PageHeading
+				title="图片生成"
+				detail={activeProjectId ? `可插入：${sessionName || "当前会话"}` : "从提示词或本地参考图开始。"}
+				actions={<><Button variant="ghost" onClick={() => useApp.getState().setView("gallery")}>打开图片库</Button>{!model && <Button variant="primary" onClick={() => useApp.getState().setView("settings", "custom")}>配置图片模型</Button>}</>}
+			/>
 
-			<div className="flex min-h-0 flex-1 gap-6 overflow-y-auto px-6 py-5">
+			<div className="fw-media-layout min-h-0 flex-1 overflow-y-auto bg-bg">
 				{/* 左：参数 */}
-				<div className="w-[400px] shrink-0 space-y-4">
+				<div className="min-w-0 space-y-4">
 					<div className="fw-card p-5">
-						<div className="mb-2 text-[13.5px] font-medium text-fg">提示词</div>
+						<h2 className="mb-3 text-[16px] font-semibold">描述画面</h2>
 						<TextArea rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="描述你想生成的画面…" />
 
 						<div className="mt-3 flex items-center gap-2.5">
@@ -220,7 +214,7 @@ export function ImageStudio() {
 					</div>
 
 					<div className="fw-card p-5">
-						<div className="mb-3 text-[13.5px] font-medium text-fg">参数</div>
+						<h2 className="mb-3 text-[16px] font-semibold">生成设置</h2>
 						<div className="space-y-4">
 							<div>
 								<div className="mb-1.5 text-[12.5px] text-muted">模型</div>
@@ -234,7 +228,7 @@ export function ImageStudio() {
 									</Select>
 								) : (
 									<div className="rounded-[10px] bg-warn-soft px-3 py-2 text-[12.5px] leading-relaxed text-warn">
-										还没有图片模型。到「设置 › 自定义端点」里给某个供应商添加图片模型（写进 models.json 的 imageModels）。
+										请先在自定义端点中添加图片模型。
 									</div>
 								)}
 							</div>
@@ -299,7 +293,7 @@ export function ImageStudio() {
 				{/* 右：结果 */}
 				<div className="min-w-0 flex-1">
 					<div className="flex items-center gap-2">
-						<span className="text-[13.5px] font-semibold tracking-tight">本次生成</span>
+						<h2 className="text-[16px] font-semibold">本次生成</h2>
 						{created.length > 0 && <Badge tone="ok">{created.length} 张</Badge>}
 						<div className="flex-1" />
 					</div>
@@ -310,17 +304,17 @@ export function ImageStudio() {
 							))}
 						</div>
 					) : (
-						<div className="mt-3 flex h-32 items-center justify-center rounded-2xl border border-dashed border-border-strong text-[12.5px] text-faint">
-							生成结果会出现在这里
+						<div className="fw-preview-empty mt-3">
+							<WorkbenchEmpty icon="image" title="等待生成" detail="准备好提示词和模型后，生成的图片会显示在这里。" />
 						</div>
 					)}
 
 					<div className="mt-6 flex items-center gap-2">
-						<span className="text-[13.5px] font-semibold tracking-tight">最近生成</span>
+						<h2 className="text-[16px] font-semibold">最近生成</h2>
 						<Badge tone="muted">{images.length}</Badge>
 					</div>
 					{images.length > 0 ? (
-						<div className="mt-3 grid grid-cols-4 gap-3">
+						<div className="fw-image-grid mt-3">
 							{images.slice(0, 8).map((image) => (
 								<GeneratedTile key={image.id} image={image} />
 							))}
@@ -332,8 +326,7 @@ export function ImageStudio() {
 			</div>
 
 			<div className="shrink-0 border-t border-border px-6 py-3 text-[11.5px] leading-relaxed text-faint">
-				生成的图片先落到本机缓存；「插入会话」会作为附件进入输入框。模型与凭据复用「设置 › 自定义端点」里的 OpenAI 兼容端点（纯生成走
-				/images/generations，带参考图走 /images/edits）。
+				生成结果保存在本机。「插入会话」会将图片添加到当前输入框。
 			</div>
 		</div>
 	);

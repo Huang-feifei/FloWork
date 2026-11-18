@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import "./styles.css";
+import "./workbench.css";
 import { applyTheme, storedTheme, syncDesktopTheme } from "./theme";
 import { applyAppearance, storedAppearance } from "./appearance";
 

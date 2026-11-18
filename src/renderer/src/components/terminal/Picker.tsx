@@ -95,6 +95,8 @@ export function Picker({
 	const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
 		if (e.key === "Escape") {
 			e.preventDefault();
+			e.stopPropagation();
+			boxRef.current?.querySelector("button")?.focus();
 			setOpen(false);
 		} else if (e.key === "ArrowDown") {
 			e.preventDefault();
@@ -118,7 +120,7 @@ export function Picker({
 				disabled={disabled}
 				title={title}
 				onClick={() => setOpen((o) => !o)}
-				className={`flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 text-[12.5px] hover:bg-panel-2 hover:text-fg disabled:opacity-40 ${
+				className={`fw-picker-trigger flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 text-[12.5px] hover:bg-panel-2 hover:text-fg disabled:opacity-40 ${
 					open ? "bg-panel-2 text-fg" : toneCls
 				}`}
 			>
@@ -129,7 +131,7 @@ export function Picker({
 			{open && (
 				<div
 					onKeyDown={onKeyDown}
-					className={`fw-float absolute bottom-full z-40 mb-2 flex max-h-[420px] w-[440px] flex-col overflow-hidden rounded-[20px] ${
+					className={`fw-float fw-picker-panel absolute bottom-full z-40 mb-2 flex max-h-[420px] w-[440px] flex-col overflow-hidden rounded-[20px] ${
 						align === "end" ? "right-0" : "left-0"
 					}`}
 				>

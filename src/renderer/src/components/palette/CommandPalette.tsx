@@ -157,7 +157,7 @@ export function CommandPalette() {
 		>
 			{/* biome-ignore lint/a11y/noStaticElementInteractions: 阻止冒泡到遮罩 */}
 			<div
-				className="fw-float absolute top-2 left-1/2 w-[640px] max-w-[92vw] -translate-x-1/2 overflow-hidden rounded-[22px]"
+				className="fw-modal-frame fw-float absolute top-[8vh] left-1/2 w-[640px] max-w-[92vw] -translate-x-1/2 overflow-hidden"
 				onMouseDown={(e) => e.stopPropagation()}
 			>
 				<div className="flex h-12 items-center gap-2.5 border-b border-border px-4">

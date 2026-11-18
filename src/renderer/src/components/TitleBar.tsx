@@ -5,7 +5,6 @@
  * 右侧是布局开关与系统风格的窗口按钮（macOS 用系统自带红绿灯）。
  */
 import { useEffect, useState } from "react";
-import { displayUserText } from "@shared/skill-text";
 import { isMac } from "../lib/desktop";
 import { projectName, useApp } from "../store";
 import { Icon, type IconName } from "./Icon";
@@ -42,7 +41,7 @@ function LayoutToggle({ icon, label, on, onClick }: { icon: IconName; label: str
 			type="button"
 			title={label}
 			onClick={onClick}
-			className={`flex size-7 items-center justify-center rounded-full hover:bg-panel-2 ${
+			className={`flex size-8 items-center justify-center rounded-md hover:bg-panel-2 ${
 				on ? "text-fg" : "text-faint hover:text-fg"
 			}`}
 		>
@@ -51,27 +50,19 @@ function LayoutToggle({ icon, label, on, onClick }: { icon: IconName; label: str
 	);
 }
 
+const VIEW_NAME = { welcome: "开始使用", chat: "会话", review: "修改审查", settings: "设置", database: "数据库", imagegen: "图片生成", gallery: "图片库" } as const;
+
 function Location() {
 	const view = useApp((s) => s.view);
-	const projectTitle = useApp((s) => {
-		const p = s.projects.projects.find((x) => x.id === s.activeProjectId);
-		return p ? projectName(p) : null;
-	});
-	const sessionTitle = useApp((s) => {
-		if (s.state?.sessionName) return s.state.sessionName;
-		const first = s.messages.find((m) => m.role === "user");
-		return first?.role === "user" ? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 60) : "";
-	});
-
-	if (view === "settings") return <span className="truncate text-[13px] font-medium text-fg">设置</span>;
-	if (view === "review") return <span className="truncate text-[13px] font-medium text-fg">审查本会话的修改</span>;
-	if (!projectTitle) return <span className="truncate text-[13px] font-medium text-fg">FloWork</span>;
+	const project = useApp((s) => s.projects.projects.find((item) => item.id === s.activeProjectId));
 	return (
-		<span className="flex min-w-0 items-center gap-1.5">
-			<span className="shrink-0 text-[13px] font-medium text-fg">{projectTitle}</span>
-			<span className="text-faint">/</span>
-			<span className="truncate text-[13px] text-muted">{sessionTitle || "新会话"}</span>
-		</span>
+		<div className="flex min-w-0 items-center gap-2 text-[12px] text-muted">
+			{project && (view === "chat" || view === "review") && <>
+				<span className="max-w-[230px] truncate">{projectName(project)}</span>
+				<Icon name="chevron-right" className="size-3 shrink-0" />
+			</>}
+			<span className="shrink-0 font-medium text-fg">{VIEW_NAME[view]}</span>
+		</div>
 	);
 }
 
@@ -81,6 +72,7 @@ export function TitleBar() {
 	const railVisible = useApp((s) => s.railVisible);
 	const terminalPanel = useApp((s) => s.terminalPanel);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
+	const view = useApp((s) => s.view);
 	const [open, setOpen] = useState<{ name: MenuName | "root"; x: number; y: number } | null>(null);
 
 	const menuItems = (name: MenuName): MenuItem[] => {
@@ -200,7 +192,7 @@ export function TitleBar() {
 	}, []);
 
 	return (
-		<header className="relative flex h-11 shrink-0 items-center gap-3 border-b border-border bg-chrome px-4 select-none">
+		<header className={`fw-titlebar relative flex h-12 shrink-0 items-center gap-3 px-4 select-none ${isMac ? "pl-[78px]" : ""}`}>
 			<button
 				type="button"
 				title={`应用菜单：${MENUS.join(" / ")}`}
@@ -208,7 +200,7 @@ export function TitleBar() {
 					const rect = e.currentTarget.getBoundingClientRect();
 					setOpen(open?.name === "root" ? null : { name: "root", x: rect.left, y: rect.bottom });
 				}}
-				className={`flex size-7 shrink-0 items-center justify-center rounded-full hover:bg-panel-2 hover:text-fg ${
+				className={`flex size-7 shrink-0 items-center justify-center rounded-md hover:bg-panel-2 hover:text-fg ${
 					open?.name === "root" ? "bg-panel-2 text-fg" : "text-muted"
 				}`}
 			>
@@ -220,46 +212,22 @@ export function TitleBar() {
 			 * 靠左的按钮即使计算样式是 no-drag，真实鼠标点击仍会被拖拽区吃掉（不进渲染进程）。
 			 * 因此所有按钮一律不落在拖拽区里。
 			 */}
-			<div className="app-drag min-w-0 flex-1 self-stretch" />
-
-			{/* 窗口标题：靠左右两块等宽拖拽区夹在中间 */}
 			<button
 				type="button"
 				title="工作台"
 				onClick={() => useApp.getState().setView(useApp.getState().projects.projects.length === 0 ? "welcome" : "chat")}
-				className="flex max-w-[420px] min-w-0 shrink-0 items-center gap-1.5"
+				className="fw-brand flex shrink-0 items-center gap-2.5"
 			>
-				<span className="shrink-0 text-[13px] leading-none text-primary">✻</span>
-				<Location />
+				<span className="fw-brand-mark" aria-hidden="true">✻</span>
+				FloWork
 			</button>
-
+			<span className="fw-title-rule" aria-hidden="true" />
+			<Location />
 			<div className="app-drag min-w-0 flex-1 self-stretch" />
 
 			<div className="flex items-center gap-0.5">
-				<LayoutToggle
-					icon="panel-left"
-					label={`项目栏（${isMac ? "⌘B" : "Ctrl+B"}）`}
-					on={sidebarOpen}
-					onClick={() => useApp.getState().toggleSidebar()}
-				/>
-				<LayoutToggle
-					icon="panel-bottom"
-					label="终端 Ctrl+`"
-					on={terminalPanel}
-					onClick={() => useApp.getState().setTerminalPanel(!terminalPanel)}
-				/>
-				<LayoutToggle
-					icon="globe"
-					label="打开内置浏览器"
-					on={rightPanel === "browser"}
-					onClick={() => { useApp.getState().setView("chat"); useApp.getState().setRightPanel("browser"); }}
-				/>
-				<LayoutToggle
-					icon="panel-right"
-					label={`右侧面板（${isMac ? "⌘⌥B" : "Ctrl+Alt+B"}）`}
-					on={rightPanel !== null}
-					onClick={() => useApp.getState().setRightPanel(rightPanel ? null : "session")}
-				/>
+				{(!sidebarOpen || view === "settings" || view === "database" || view === "welcome") && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} on={false} onClick={() => useApp.getState().setPalette(true)} />}
+				{view !== "settings" && view !== "welcome" && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
 			</div>
 
 			{/* Windows / Linux：系统风格的窗口按钮，贴右上角；macOS 用系统自带的红绿灯 */}

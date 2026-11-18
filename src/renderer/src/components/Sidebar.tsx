@@ -1,4 +1,4 @@
-/** 侧栏：项目分组树（含会话），小标题 + 圆形动作按钮，行都是内缩圆角行 */
+/** 按当前模块显示项目会话或图片分类；全局入口由活动栏负责。 */
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { api, errorText } from "../api/client";
@@ -9,6 +9,7 @@ import { Menu } from "./sidebar/Menu";
 import { ProjectTree } from "./sidebar/ProjectTree";
 import { GalleryTree } from "./imagegen/GalleryTree";
 import { ResizeHandle, usePersistentWidth } from "./ResizeHandle";
+import { isMac } from "../lib/desktop";
 
 export function Sidebar() {
 	const view = useApp((s) => s.view);
@@ -19,7 +20,7 @@ export function Sidebar() {
 	const projectIds = useApp(useShallow((s) => s.projects.projects.map((p) => p.id)));
 	const expandedCount = useApp((s) => projectIds.filter((id) => s.expanded[id]).length);
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-	const width = usePersistentWidth("flowork.sidebarWidth", 260, 200, 520);
+	const width = usePersistentWidth("flowork.sidebarWidth", 248, 200, 520);
 
 	/** 一键折叠 / 展开所有项目的会话列表 */
 	const setAllExpanded = (open: boolean) => {
@@ -29,7 +30,7 @@ export function Sidebar() {
 
 	return (
 		<aside
-			className="relative flex shrink-0 flex-col border-r border-border bg-sidebar"
+			className="fw-context-sidebar relative flex shrink-0 flex-col"
 			style={{ width: width.width }}
 		>
 			<ResizeHandle
@@ -37,9 +38,16 @@ export function Sidebar() {
 				edge="right"
 				label="调整项目栏宽度"
 			/>
+			<div className="px-3 pt-4 pb-2">
+				<button type="button" onClick={() => useApp.getState().setPalette(true)} className="fw-sidebar-search">
+					<Icon name="search" className="size-4 shrink-0" />
+					<span className="min-w-0 flex-1 truncate">搜索工作区…</span>
+					<kbd className="fw-keycap">{isMac ? "⌘K" : "Ctrl+K"}</kbd>
+				</button>
+			</div>
 			<div className="flex h-11 shrink-0 items-center gap-0.5 pr-2.5 pl-4">
-				<span className="flex-1 text-[11.5px] font-semibold text-muted">{inImages ? "图片库" : "项目"}</span>
-				<button
+				<h2 className="flex-1 text-[13px] font-semibold">{inImages ? "图片分类" : "项目与会话"}</h2>
+				{!inImages && <button
 					type="button"
 					disabled={!canNewSession}
 					onClick={() => {
@@ -54,7 +62,8 @@ export function Sidebar() {
 						className="size-4"
 					/>
 				</button>
-				<button
+				}
+				{!inImages && <button
 					type="button"
 					onClick={() => void importProjects()}
 					title="导入文件夹（可多选）"
@@ -65,7 +74,8 @@ export function Sidebar() {
 						className="size-4"
 					/>
 				</button>
-				<button
+				}
+				{!inImages && <button
 					type="button"
 					onClick={(e) => {
 						const rect = e.currentTarget.getBoundingClientRect();
@@ -79,11 +89,14 @@ export function Sidebar() {
 						className="size-4"
 					/>
 				</button>
+				}
 			</div>
 
-			<nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-				{inImages ? <GalleryTree /> : <ProjectTree />}
-			</nav>
+			<div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+				<nav aria-label={inImages ? "图片库" : "项目与会话"}>
+					{inImages ? <GalleryTree /> : <ProjectTree />}
+				</nav>
+			</div>
 
 			{menu && (
 				<Menu

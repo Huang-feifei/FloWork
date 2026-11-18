@@ -3,14 +3,15 @@
  * 窗口级的标题栏与状态栏在 App 中。
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { ApprovalMode, ImageAttachment, ThinkingLevel, WorkMode } from "@shared/protocol";
-import { useApp, waitingCount } from "../../store";
+import type { ApprovalMode, ImageAttachment, WorkMode } from "@shared/protocol";
+import { projectName, useApp, waitingCount } from "../../store";
 import { Icon } from "../Icon";
 import { ApprovalPanel } from "./ApprovalPanel";
 import { ExtDialogPanel, ExtWidgets } from "./ExtDialogPanel";
 import { ImageThumb } from "./ImageThumb";
 import { Spinner, useElapsed } from "./Spinner";
 import { Picker } from "./Picker";
+import { ModelThinkingPicker } from "./ThinkingPicker";
 import { SessionRail } from "./SessionRail";
 import { PlanBoard } from "./PlanBoard";
 import { SlashMenu, useSlashMenu } from "./SlashMenu";
@@ -19,68 +20,57 @@ import { Transcript } from "./Transcript";
 import { TrustBanner } from "./TrustBanner";
 import { FilePreview } from "../panels/FilePreview";
 import { QuickOpen } from "../panels/QuickOpen";
-import { PANEL_TABS, RightPanel, useChangedCount } from "../panels/RightPanel";
-import { thinkingLabel } from "../../lib/format";
+import { RightPanel, useChangedCount } from "../panels/RightPanel";
 import { displayUserText } from "@shared/skill-text";
 
 function SessionHeader() {
-	const state = useApp((s) => s.state);
-	const isRunning = useApp((s) => s.isRunning);
-	const waiting = useApp((s) => waitingCount(s));
 	const rightPanel = useApp((s) => s.rightPanel);
-	const setRightPanel = useApp((s) => s.setRightPanel);
-	const isRemote = useApp((s) => !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
-	const panelTabs = PANEL_TABS.filter((t) => !t.remoteOnly || isRemote);
+	const terminalPanel = useApp((s) => s.terminalPanel);
 	const foldProcess = useApp((s) => s.foldProcess);
-	const toggleFoldProcess = useApp((s) => s.toggleFoldProcess);
 	const changedCount = useChangedCount();
+	const { setView, toggleFoldProcess, setRightPanel, setTerminalPanel } = useApp.getState();
+	return (
+		<header className="fw-page-heading fw-session-toolbar">
+			<div className="min-w-0 flex-1">
+				<SessionHeading />
+			</div>
+			<div className="flex shrink-0 items-center gap-2">
+				<button type="button" title="审查会话中的修改" onClick={() => setView("review")} className="fw-workbench-button fw-review-link">
+					<Icon name="git-compare" className="size-4" />
+					<span className="fw-review-word">审查</span>{changedCount > 0 && <span className="text-[11px] tabular-nums text-muted">{changedCount}</span>}
+				</button>
+				<button type="button" aria-pressed={foldProcess} onClick={toggleFoldProcess} className="fw-workbench-button fw-fold-button">
+					{foldProcess ? "展开过程" : "折叠过程"}
+				</button>
+				<button type="button" title="终端" aria-pressed={terminalPanel} onClick={() => setTerminalPanel(!terminalPanel)} className="grid size-8 place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-fg">
+					<Icon name="square-terminal" className="size-4" />
+				</button>
+				<button type="button" aria-expanded={!!rightPanel} onClick={() => setRightPanel(rightPanel ? null : "session")} className="fw-workbench-button">
+					<Icon name="panel-right" className="size-4" />
+					{rightPanel ? "收起面板" : "会话文件"}
+				</button>
+			</div>
+		</header>
+	);
+}
+
+function SessionHeading() {
+	const name = useApp((s) => s.state?.sessionName);
 	const firstPrompt = useApp((s) => {
 		const first = s.messages.find((m) => m.role === "user");
 		return first?.role === "user" ? displayUserText(first.content.map((b) => (b.type === "text" ? b.text : "")).join("")).slice(0, 80) : "";
 	});
+	const project = useApp((s) => s.projects.projects.find((item) => item.id === s.activeProjectId));
+	const waiting = useApp((s) => waitingCount(s));
+	const running = useApp((s) => s.isRunning);
 	return (
-		<div className="flex h-12 shrink-0 flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-border px-6 py-1">
-			<h1 className="min-w-0 truncate text-[15px] font-semibold tracking-tight">{state?.sessionName || firstPrompt || "新会话"}</h1>
-			{state?.ops && <OpsBadge />}
-			{waiting > 0 ? (
-				<span className="flex shrink-0 items-center gap-1.5 rounded-full bg-warn-soft px-2.5 py-1 text-[11.5px] font-medium text-warn">
-					<span className="size-1.5 rounded-full bg-warn" />
-					等待确认
-				</span>
-			) : (
-				isRunning && (
-					<span className="flex shrink-0 items-center gap-1.5 rounded-full bg-primary-soft px-2.5 py-1 text-[11.5px] font-medium text-primary">
-						<span className="size-1.5 rounded-full bg-primary" />
-					运行中
-					</span>
-				)
-			)}
-			<div className="flex-1" />
-			<button
-				type="button"
-				onClick={toggleFoldProcess}
-				aria-pressed={foldProcess}
-				title={foldProcess ? "已折叠：历史轮次的思考与工具调用收成一行（点击全部展开）" : "未折叠：点击把历史轮次的思考与工具调用折叠成一行"}
-				className={`flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12.5px] ${foldProcess ? "bg-primary-soft text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
-			>
-				<span className={`size-1.5 rounded-full ${foldProcess ? "bg-primary" : "border border-current"}`} />
-				折叠过程
-			</button>
-			{/* 右侧面板打开时它自己有标签栏，这里不再重复显示 */}
-			{!rightPanel && <div className="flex shrink-0 gap-0.5">
-				{panelTabs.map((tab) => (
-					<button
-						type="button"
-						key={tab.id}
-						onClick={() => setRightPanel(rightPanel === tab.id ? null : tab.id)}
-						title={tab.hint}
-						className={`rounded-full px-2.5 py-1 text-[12.5px] ${rightPanel === tab.id ? "bg-primary-soft text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"}`}
-					>
-						{tab.label}
-						{tab.id === "session" && changedCount > 0 && <span className="ml-1 text-warn">{changedCount}</span>}
-					</button>
-				))}
-			</div>}
+		<div className="min-w-0 space-y-1">
+			<h1 className="fw-page-title truncate" title={name || firstPrompt || "新会话"}>{name || firstPrompt || "新会话"}</h1>
+			<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-muted">
+				{project && <span>{projectName(project)} · 项目会话</span>}
+				<OpsBadge />
+				{waiting > 0 ? <span className="text-warn">等待确认</span> : running && <span className="text-primary-strong">运行中</span>}
+			</div>
 		</div>
 	);
 }
@@ -448,7 +438,7 @@ function PromptInput() {
 	};
 
 	return (
-		<div className="fw-float relative rounded-[22px] focus-within:ring-2 focus-within:ring-primary/20">
+		<div className="fw-composer relative">
 			<SlashMenu menu={menu} onPick={(c) => pickCommand(c.name)} />
 			<MentionMenu menu={mentionMenu} onPick={pickMention} />
 			{images.length > 0 && (
@@ -468,9 +458,9 @@ function PromptInput() {
 					))}
 				</div>
 			)}
-			<div className={`grid grid-cols-[2ch_1fr] gap-x-2 px-5 pb-1 ${images.length > 0 ? "pt-2" : "pt-4"}`}>
-				<span className="text-[14px] leading-[1.6] font-semibold text-primary">❯</span>
+			<div className={`px-4 pb-1 ${images.length > 0 ? "pt-2" : "pt-4"}`}>
 				<textarea
+					aria-label="输入任务"
 					ref={ref}
 					value={text}
 					rows={1}
@@ -534,10 +524,22 @@ function PromptInput() {
 						}
 					}}
 					placeholder={ready ? (isRunning ? "运行中：Enter 排队，Ctrl+Enter 插话" : planning ? "描述需求，先讨论计划，确认后再执行" : "输入任务，Enter 发送，Shift+Enter 换行") : "正在启动 pi…"}
-					className="min-h-[1.6em] w-full resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-muted/70"
+					className="block min-h-14 w-full resize-none bg-transparent text-[14.5px] leading-relaxed outline-none placeholder:text-muted"
 				/>
 			</div>
 			<ComposerToolbar
+				canMention={ready}
+				onMention={() => {
+					const field = ref.current;
+					if (!field) return;
+					const start = field.selectionStart;
+					const before = text.slice(0, start);
+					const mention = before && !/\s$/.test(before) ? " @" : "@";
+					const next = start + mention.length;
+					setText(`${before}${mention}${text.slice(field.selectionEnd)}`);
+					setCursor(next);
+					requestAnimationFrame(() => { field.focus(); field.setSelectionRange(next, next); });
+				}}
 				canSend={ready && (text.trim().length > 0 || images.length > 0)}
 				onSend={submit}
 			/>
@@ -546,7 +548,7 @@ function PromptInput() {
 }
 
 /** 输入框底部：审批模式、思考等级、模型，以及发送 / 中断按钮 */
-function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => void }) {
+function ComposerToolbar({ canSend, onSend, canMention, onMention }: { canSend: boolean; onSend: () => void; canMention: boolean; onMention: () => void }) {
 	const state = useApp((s) => s.state);
 	const models = useApp((s) => s.models);
 	const isRunning = useApp((s) => s.isRunning);
@@ -554,8 +556,7 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 	const isOps = useApp((s) => !!s.state?.ops);
 	const waiting = useApp((s) => waitingCount(s));
 	const workMode = state?.workMode ?? "execute";
-	const { setModel, setThinkingLevel, setApprovalMode, setWorkMode, abort } = useApp.getState();
-	const currentKey = state?.model ? `${state.model.provider}/${state.model.id}` : "";
+	const { setModel, setThinkingLevel, loadModels, setApprovalMode, setWorkMode, abort } = useApp.getState();
 	/** 审批选项：ops 会话用运维语汇，普通会话用工具语汇（文案与原 select 一致） */
 	const approvalItems: { value: ApprovalMode; title: string }[] = isOps
 		? [
@@ -569,16 +570,12 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 				{ value: "auto", title: "审批：关闭（连接仍确认）" },
 			];
 	const approvalLabel = approvalItems.find((o) => o.value === approvalMode)?.title ?? "审批";
-	/** 模型按 provider 分组：分组标题给出 provider，行里只留模型 ID，长 ID 才读得清 */
-	const modelItems = models.map((m) => ({
-		value: `${m.provider}/${m.id}`,
-		group: m.provider,
-		title: m.id,
-		badge: m.reasoning ? "可思考" : undefined,
-	}));
 
 	return (
-		<div className="flex min-w-0 items-center gap-1 px-3.5 pt-1 pb-3 whitespace-nowrap">
+		<div className="fw-composer-tools flex min-w-0 flex-wrap items-center gap-x-1 gap-y-2 px-3 pt-1 pb-2.5 whitespace-nowrap">
+			<button type="button" title="引用项目文件或技能" disabled={!canMention} onClick={onMention} className="grid size-8 shrink-0 place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40">
+				<Icon name="at-sign" className="size-4" />
+			</button>
 			<Picker
 				label={workMode === "plan" ? "计划模式 · 只读" : "执行模式"}
 				title={isRunning || waiting > 0 ? "请先结束或中断当前运行，再切换模式" : "计划模式先讨论并确认方案，执行模式允许实施"}
@@ -600,70 +597,35 @@ function ComposerToolbar({ canSend, onSend }: { canSend: boolean; onSend: () => 
 				disabled={workMode === "plan"}
 				onSelect={(next) => void setApprovalMode(next as ApprovalMode)}
 			/>
-			{state &&
-				(state.availableThinkingLevels.length > 1 ? (
-					<Picker
-						label={`思考 ${thinkingLabel(state.thinkingLevel)}`}
-						title="思考强度"
-						items={state.availableThinkingLevels.map((level) => ({ value: level, title: `思考 ${thinkingLabel(level)}` }))}
-						value={state.thinkingLevel}
-						onSelect={(next) => void setThinkingLevel(next as ThinkingLevel)}
+			<div className="ml-auto flex min-w-0 max-w-full items-center gap-1">
+				{state ? (
+					<ModelThinkingPicker
+						key={state.sessionId}
+						state={state}
+						models={models}
+						onModel={setModel}
+						onThinking={setThinkingLevel}
+						onRefresh={loadModels}
 					/>
+				) : null}
+				{isRunning && !canSend ? (
+					<button type="button" onClick={() => void abort()} title="中断当前任务" className="fw-workbench-button ml-1">
+						<Icon name="stop" className="size-3.5" />
+						中断
+						<kbd className="font-mono text-[11px] text-faint">Esc</kbd>
+					</button>
 				) : (
-					<Picker
-						label="思考 关闭（模型不支持）"
-						title="该模型没有声明支持思考，所以只有「关闭」。在 设置 → 自定义端点 里为该模型打开「思考」后即可选择强度"
-						items={[{ value: "off", title: "思考 关闭（模型不支持）" }]}
-						value="off"
-						tone="faint"
-						disabled
-						onSelect={() => undefined}
-					/>
-				))}
-			<div className="flex-1" />
-			{models.length > 0 && (
-				<Picker
-					align="end"
-					searchable
-					mono
-					shrink
-					title="切换模型"
-					searchPlaceholder="搜索模型…"
-					emptyText="没有匹配的模型"
-					label={state?.model?.id ?? "选择模型"}
-					value={currentKey}
-					items={modelItems}
-					onSelect={(next) => {
-						const model = models.find((m) => `${m.provider}/${m.id}` === next);
-						if (model) void setModel(model);
-					}}
-				/>
-			)}
-			{isRunning && !canSend ? (
-				<button
-					type="button"
-					onClick={() => void abort()}
-					title="中断当前任务"
-					className="ml-1 flex h-9 shrink-0 items-center gap-2 rounded-full bg-panel-2 px-4 text-[13px] font-medium text-fg hover:bg-highlight"
-				>
-					<Icon
-						name="stop"
-						className="size-3.5"
-					/>
-					中断
-					<kbd className="font-mono text-[11px] text-faint">Esc</kbd>
-				</button>
-			) : (
-				<button
-					type="button"
-					disabled={!canSend}
-					onClick={onSend}
-					title={isRunning ? "加入队列（Enter）· Ctrl+Enter 插话" : "发送（Enter）"}
-					className="ml-1 flex size-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground hover:bg-primary-strong disabled:bg-panel-2 disabled:text-faint"
-				>
-					<Icon name="arrow-up" />
-				</button>
-			)}
+					<button
+						type="button"
+						disabled={!canSend}
+						onClick={onSend}
+						title={isRunning ? "加入队列（Enter）· Ctrl+Enter 插话" : "发送（Enter）"}
+						className="fw-workbench-button fw-workbench-primary ml-1 w-9 !px-0"
+					>
+						<Icon name="arrow-up" />
+					</button>
+				)}
+			</div>
 		</div>
 	);
 }
@@ -767,60 +729,48 @@ export function TerminalView() {
 	}, [isRunning, abort]);
 
 	return (
-		<div className="flex min-h-0 flex-1">
-			<div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-term">
-				<SessionHeader />
-				<FilePreview />
-				<div className="relative min-h-0 flex-1">
-					<div
-						ref={scrollRef}
-						onScroll={onScroll}
-						className="h-full overflow-y-auto px-6 py-5 text-[14px]"
-					>
-						<div
-							ref={contentRef}
-							className="mx-auto flex max-w-4xl flex-col gap-5"
-						>
-							<Welcome />
-							<TrustBanner />
-							<PlanBoard />
-							{connecting ? (
-								<div className="text-muted">
-									<Spinner /> 正在启动 pi…
-								</div>
-							) : (
-								<Transcript />
-							)}
-							<RunningLine />
+		<div className="flex min-h-0 flex-1 flex-col">
+			<SessionHeader />
+			<div className="flex min-h-0 flex-1">
+				<div className="fw-conversation relative flex min-h-0 min-w-0 flex-1 flex-col">
+					<FilePreview />
+					<div className="relative min-h-0 flex-1">
+						<div ref={scrollRef} onScroll={onScroll} className="h-full overflow-y-auto px-4 pt-3 pb-5 text-[14px] sm:px-8">
+							<div ref={contentRef} className="mx-auto flex max-w-[760px] flex-col gap-6">
+								{messages.length === 0 && !streaming && <Welcome />}
+								<TrustBanner />
+								<PlanBoard />
+								{connecting ? (
+									<div className="text-muted"><Spinner /> 正在启动 pi…</div>
+								) : <Transcript />}
+								<RunningLine />
+							</div>
+						</div>
+						{!atBottom && (
+							<button
+								type="button"
+								onClick={scrollToBottom}
+								title="回到最新输出"
+								className="fw-workbench-button absolute bottom-4 left-1/2 z-20 -translate-x-1/2 bg-surface-solid text-muted shadow-sm hover:text-fg"
+							>
+								<Icon name="arrow-down" className="size-3.5" />
+								回到最新
+							</button>
+						)}
+					</div>
+					<div className="fw-composer-dock shrink-0 px-4 pt-3 pb-4 sm:px-8">
+						<div className="mx-auto min-w-0 max-w-[760px]">
+							<ExtWidgets placement="aboveEditor" />
+							<DecisionDock />
+							<QueueList />
+							<PromptInput />
+							<ExtWidgets placement="belowEditor" />
 						</div>
 					</div>
-					{!atBottom && (
-						<button
-							type="button"
-							onClick={scrollToBottom}
-							title="回到最新输出"
-							className="fw-float absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-4 py-2 text-[12.5px] text-muted hover:text-fg"
-						>
-							<Icon
-								name="arrow-down"
-								className="size-3.5"
-							/>
-							回到最新
-						</button>
-					)}
 				</div>
-				<div className="shrink-0 px-6 pt-1 pb-4">
-					<div className="mx-auto max-w-4xl">
-						<ExtWidgets placement="aboveEditor" />
-						<DecisionDock />
-						<QueueList />
-						<PromptInput />
-						<ExtWidgets placement="belowEditor" />
-					</div>
-				</div>
+				<SessionRail scrollRef={scrollRef} />
+				<RightPanel />
 			</div>
-			<SessionRail scrollRef={scrollRef} />
-			<RightPanel />
 			<QuickOpen />
 		</div>
 	);
