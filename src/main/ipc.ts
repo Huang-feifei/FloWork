@@ -1,4 +1,6 @@
-import { type BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeTheme } from "electron";
+import { app, type BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeTheme, net, shell } from "electron";
+import { APP_UPDATE_CHANNELS } from "@shared/app-update";
+import { appReleasePage, createAppUpdateChecker } from "./app-update";
 import { BROWSER_CHANNELS } from "@shared/browser";
 import { type BackendMethod, ELECTRON_CHANNELS } from "@shared/protocol";
 // 窗口背景色只在页面渲染前可见，必须与 styles.css 的 --color-window 一致；三处取值统一从这里来。
@@ -29,6 +31,17 @@ export function registerIpc(
 		}
 		return win;
 	};
+
+	const checkAppUpdate = createAppUpdateChecker(app.getVersion(), net.fetch);
+	ipcMain.handle(APP_UPDATE_CHANNELS.check, (event, manual: unknown) => {
+		requireAppFrame(event);
+		if (!app.isPackaged || process.platform !== "win32" || process.arch !== "x64" || process.argv.includes("--smoke")) return { status: "unsupported" };
+		return checkAppUpdate(manual === true);
+	});
+	ipcMain.handle(APP_UPDATE_CHANNELS.open, (event, version: unknown) => {
+		requireAppFrame(event);
+		return shell.openExternal(appReleasePage(version));
+	});
 
 	// 请求与推送都先序列化成字符串再跨进程：contextBridge 只允许 1000 层嵌套，
 	// 而会话树这种「每多一条记录就深一层」的数据很容易越界（实测 330 层左右就报错）。

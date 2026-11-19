@@ -34,11 +34,38 @@ const PRESETS: Preset[] = [
 	{ label: "Anthropic 兼容中转", key: "relay-anthropic", api: "anthropic-messages", baseUrl: "" },
 ];
 
+function ModelGroup({ kind, ids, disabled, onManage }: { kind: "chat" | "image"; ids: string[]; disabled?: boolean; onManage: () => void }) {
+	const image = kind === "image";
+	const label = image ? "图片模型" : "聊天模型";
+	return (
+		<section aria-label={label} className="min-w-0 rounded-lg bg-bg p-3.5">
+			<div className="flex flex-wrap items-center gap-2">
+				<Icon name={image ? "image" : "messages"} className="size-4 shrink-0 text-muted" />
+				<h4 className="font-semibold">{label}</h4>
+				<span className="rounded-sm bg-panel-2 px-1.5 text-[11px] tabular-nums text-muted">{ids.length} 个</span>
+			</div>
+			<p className="mt-1 text-[12px] text-muted">{image ? "在「图片生成」中使用" : "在会话输入框中选择"}</p>
+			{disabled && <p className="mt-2 text-[12px] text-warn">图片生成已停用</p>}
+			{ids.length > 0 ? (
+				<ul className="mt-2.5 max-h-32 space-y-1 overflow-y-auto text-[12px]">
+					{ids.map((id, index) => <li key={`${id}:${index}`} className="break-all" title={id}>{id}</li>)}
+				</ul>
+			) : <p className="mt-2.5 text-[12px] text-muted">未添加{label}</p>}
+			<button type="button" onClick={onManage} className="mt-3 inline-flex items-center gap-1.5 rounded-md px-1 py-1 text-[12px] font-medium text-primary-strong hover:bg-panel-2">
+				{ids.length ? "管理" : "添加"}{label}
+				<Icon name="chevron-right" className="size-3.5" />
+			</button>
+		</section>
+	);
+}
+
 export function CustomProvidersTab() {
 	const { file, error, conflict, reload, save } = useConfigFile("models");
 	const pushNotice = useApp((s) => s.pushNotice);
 	const configVersion = useApp((s) => s.configVersion);
-	const [draft, setDraft] = useState<EndpointDraft | null>(null);
+	const [editor, setEditor] = useState<{ draft: EndpointDraft; section: "models" | "images" } | null>(null);
+	const draft = editor?.draft;
+	const openEditor = (draft: EndpointDraft, section: "models" | "images" = "models") => setEditor({ draft, section });
 	const [builtinIds, setBuiltinIds] = useState<Set<string>>(new Set());
 	const [showBuiltin, setShowBuiltin] = useState(false);
 
@@ -73,7 +100,7 @@ export function CustomProvidersTab() {
 		nextProviders[d.key] = toEndpointConfig(d);
 		next.providers = nextProviders;
 		await persist(next, d.originalKey ? `已保存端点 ${d.key}` : `已添加端点 ${d.key}`, force);
-		setDraft(null);
+		setEditor(null);
 	};
 
 	const remove = async (key: string) => {
@@ -116,7 +143,7 @@ export function CustomProvidersTab() {
 			<section aria-labelledby="configured-endpoints" className="space-y-4">
 				<div className="flex flex-wrap items-center justify-between gap-3">
 					<h2 id="configured-endpoints" className="text-base font-semibold">已配置端点</h2>
-					<button type="button" className="fw-workbench-button fw-workbench-primary" onClick={() => setDraft(emptyEndpoint())}>
+					<button type="button" className="fw-workbench-button fw-workbench-primary" onClick={() => openEditor(emptyEndpoint())}>
 						<span aria-hidden="true">＋</span> 新建端点
 					</button>
 				</div>
@@ -126,24 +153,28 @@ export function CustomProvidersTab() {
 						<p className="mt-1.5 text-[13px] leading-relaxed text-muted">填写服务地址和 API Key，即可接入兼容接口、中转服务或本地模型。</p>
 					</div>
 				) : (
-					<div className="divide-y divide-border border-y border-border">
+					<div className="space-y-3">
 						{entries.map(([key, config]) => {
-							const images = (config.imageModels ?? []).length;
+							const chatModels = modelIds(config);
+							const images = (config.imageModels ?? []).map((model) => String(model.id ?? "")).filter(Boolean);
 							return (
-								<article key={key} className="py-5">
+								<article key={key} className="rounded-lg border border-border bg-term p-4 sm:p-5">
 									<div className="flex items-center gap-2">
 										<Icon name="git-fork" className="size-4 shrink-0 text-muted" />
 										<h3 className="min-w-0 flex-1 truncate text-[14px] font-semibold" title={key}>{key}</h3>
 										{builtinIds.has(key) && <span className="shrink-0 text-[12px] text-warn">覆盖内置</span>}
-										<button type="button" className="fw-workbench-button" onClick={() => setDraft(toEndpointDraft(key, config))}>编辑…</button>
+										<button type="button" className="fw-workbench-button" onClick={() => openEditor(toEndpointDraft(key, config))}>编辑端点</button>
 										<button type="button" className="rounded-md px-2 py-1.5 text-[12px] whitespace-nowrap text-err hover:bg-err-soft" onClick={() => void remove(key)}>删除</button>
 									</div>
-									<dl className="mt-3 grid grid-cols-[88px_minmax(0,1fr)] gap-y-1.5 text-[12.5px]">
+									<dl className="mt-3 grid grid-cols-[76px_minmax(0,1fr)] gap-y-1 text-[12px]">
 										<dt className="text-muted">接口协议</dt><dd className="break-words">{String(config.api ?? "继承供应商")}</dd>
 										<dt className="text-muted">服务地址</dt><dd className="break-all">{String(config.baseUrl || "未填写")}</dd>
 										<dt className="text-muted">API Key</dt><dd>{config.apiKey ? "已填写" : "未填写"}</dd>
-										<dt className="text-muted">模型</dt><dd className="break-words">{modelIds(config).join("、") || "未配置"}{images > 0 && <span className="ml-2 text-muted">· {images} 个图片模型</span>}</dd>
 									</dl>
+									<div className="mt-4 grid gap-3 min-[850px]:grid-cols-2">
+										<ModelGroup kind="chat" ids={chatModels} onManage={() => openEditor(toEndpointDraft(key, config), "models")} />
+										<ModelGroup kind="image" ids={images} disabled={config.imageEnabled === false} onManage={() => openEditor(toEndpointDraft(key, config), "images")} />
+									</div>
 								</article>
 							);
 						})}
@@ -156,7 +187,7 @@ export function CustomProvidersTab() {
 							key={preset.key}
 							type="button"
 							className="fw-workbench-button"
-							onClick={() => setDraft({ ...emptyEndpoint(), key: preset.key, api: preset.api, baseUrl: preset.baseUrl })}
+							onClick={() => openEditor({ ...emptyEndpoint(), key: preset.key, api: preset.api, baseUrl: preset.baseUrl })}
 						>
 							{preset.label}
 						</button>
@@ -198,9 +229,10 @@ export function CustomProvidersTab() {
 				<EndpointDialog
 					key={draft.originalKey ?? draft.key}
 					draft={draft}
+					initialSection={editor?.section}
 					builtinIds={builtinIds}
 					conflict={conflict}
-					onCancel={() => setDraft(null)}
+					onCancel={() => setEditor(null)}
 					onSave={(d) => saveEndpoint(d, false)}
 					onForceSave={(d) => saveEndpoint(d, true)}
 					onReload={reload}

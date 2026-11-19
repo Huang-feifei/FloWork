@@ -69,7 +69,7 @@ export function CommandPalette() {
 		const commands: Item[] = (
 			[
 				{ icon: "square-pen", label: "新建会话", key: "Ctrl+N", when: s.activeProjectId !== null, run: () => void s.newSession() },
-				{ icon: "git-compare", label: "审查本会话的修改", key: "Ctrl+Shift+D", when: s.activeProjectId !== null, run: () => s.setView("review") },
+				{ icon: "git-compare", label: "查看本会话的文件改动", key: "Ctrl+Shift+D", when: s.activeProjectId !== null, run: () => s.setView("review") },
 				{ icon: "folder-plus", label: "导入项目文件夹…", key: "Ctrl+O", when: true, run: () => void s.importProjects() },
 				{ icon: "server", label: "添加远程项目（SSH）…", when: true, run: () => s.setRemoteOpen(true) },
 				{ icon: "search", label: "快速打开文件…", key: "Ctrl+P", when: s.activeProjectId !== null, run: () => s.setQuickOpen(true) },

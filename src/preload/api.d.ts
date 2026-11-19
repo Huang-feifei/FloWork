@@ -1,5 +1,6 @@
 import type { ElectronBridge } from "@shared/protocol";
 import type { BrowserBridge } from "@shared/browser";
+import type { AppUpdateBridge } from "@shared/app-update";
 
 declare global {
 	interface Window {
@@ -8,6 +9,7 @@ declare global {
 		/** Electron IPC，跨桥的载荷是 JSON 字符串 */
 		floworkTransport: ElectronBridge;
 		floworkBrowser: BrowserBridge;
+		floworkAppUpdate?: AppUpdateBridge;
 		/** 自绘标题栏的窗口按钮 */
 		floworkWindow: {
 			minimize: () => Promise<void>;

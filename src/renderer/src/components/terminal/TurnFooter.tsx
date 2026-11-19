@@ -55,7 +55,7 @@ export function TurnFooter({
 				<div className="mb-2 overflow-hidden rounded-lg border border-border">
 					<div className="flex items-center justify-between gap-3 bg-term-bar px-3 py-2 text-[12px] text-muted">
 						<span>本轮修改 · {changed.length} 个文件</span>
-						<button type="button" onClick={() => setView("review")} className="shrink-0 text-fg hover:underline">审查会话修改</button>
+						<button type="button" onClick={() => setView("review")} className="shrink-0 text-fg hover:underline">查看会话改动</button>
 					</div>
 					{changed.map((f) => {
 						const inside = isInsideWorkspace(f.path);

@@ -116,6 +116,7 @@ export function validateEndpoint(d: EndpointDraft): string | undefined {
 /** 端点编辑弹窗 */
 export function EndpointDialog({
 	draft,
+	initialSection = "models",
 	builtinIds,
 	conflict,
 	onCancel,
@@ -124,6 +125,7 @@ export function EndpointDialog({
 	onReload,
 }: {
 	draft: EndpointDraft;
+	initialSection?: "models" | "images";
 	builtinIds: Set<string>;
 	/** models.json 已被外部改动：这份 draft 基于旧内容，保存会被拒绝 */
 	conflict: boolean;
@@ -133,7 +135,7 @@ export function EndpointDialog({
 	onReload: () => Promise<void>;
 }) {
 	const [d, setD] = useState(draft);
-	const [section, setSection] = useState<"models" | "images">("models");
+	const [section, setSection] = useState<"models" | "images">(initialSection);
 	const [fetched, setFetched] = useState<ModelMetadataResult | null>(null);
 	const [syncMode, setSyncMode] = useState(false);
 	const [fetching, setFetching] = useState(false);
@@ -299,7 +301,7 @@ export function EndpointDialog({
 				<Segmented
 					items={[
 						{ id: "models", label: `聊天模型 ${d.models.length}` },
-						{ id: "images", label: `图片生成 ${d.imageModels.length}` },
+						{ id: "images", label: `图片模型 ${d.imageModels.length}` },
 					]}
 					active={section}
 					onChange={(id) => setSection(id as "models" | "images")}

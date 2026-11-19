@@ -41,7 +41,7 @@ try {
 		const readConfig = async () => JSON.parse(JSON.parse(await window.floworkTransport.request('service.send', { type: 'get_config_file', name: 'models' })).text);
 		const savedModel = async () => (await readConfig()).providers['offline-fixture'].models[0];
 		const openEditor = async () => {
-			(await until(() => button('编辑…', document), '未加载端点列表')).click();
+			(await until(() => button('管理聊天模型', document), '未加载聊天模型管理入口')).click();
 			await until(() => modal()?.textContent.includes('编辑端点'), '未打开端点编辑器');
 			button('编辑…').click();
 			await until(() => group('上下文窗口'), '未打开模型编辑器');

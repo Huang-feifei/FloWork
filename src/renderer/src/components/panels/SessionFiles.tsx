@@ -73,7 +73,7 @@ export function SessionFiles() {
 					</div>
 					{changedFiles.map(row)}
 					<button type="button" onClick={() => setView("review")} className="fw-workbench-button mt-3 mb-2 w-full">
-						审查本次修改
+						查看文件改动
 						<Icon name="arrow-right" className="size-3.5" />
 					</button>
 				</>

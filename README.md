@@ -165,6 +165,10 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 - `npm run pack:win` 出免安装目录 `release/win-unpacked/`，不需要 nsis 工具链，适合本地验证。
 - `npm run dist:win` 出 nsis 安装包（可选安装目录、创建桌面快捷方式、不要求管理员权限）。
 
+发布 Windows 桌面版时，请为对应源码创建 `vX.Y.Z` 标签，并在公开的 GitHub Release 上传 `FloWork-X.Y.Z-x64-setup.exe`；确认附件上传完成后再公开发布。客户端只检测有此附件的正式版，不把内核版本或预发布版算作应用更新。
+
+从 v1.1.6 起，已打包的 Windows x64 客户端会在启动后、窗口重新获得焦点时及运行期间定期检查新版（带本地缓存）。也可选择「帮助 → 检查应用更新」。提示只打开 GitHub 发布页，不自动下载或安装，也不发送项目配置或凭据。
+
 打包内容只有 `out/main`、`out/preload`、`out/renderer` 与 package.json 里的生产依赖；测试入口（`out/test-support`）、开发脚本与源码不进安装包。`node-pty` 与 `esbuild` 带原生模块 / 可执行文件，通过 `asarUnpack` 解包到 `app.asar.unpacked/`（asar 内的 `.node` 加载不到、`esbuild.exe` 也执行不了）。`npmRebuild` 关闭：node-pty 自带 N-API 预编译二进制，跨 Electron ABI 可用，不需要本地 C++ 工具链。
 
 应用图标在 `build/icon.ico`（electron-builder 的默认资源目录，打包时自动使用；`build/icon.png` 为界面用的大图）。

@@ -35,10 +35,13 @@ function SessionHeader() {
 				<SessionHeading />
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
-				<button type="button" title="审查会话中的修改" onClick={() => setView("review")} className="fw-workbench-button fw-review-link">
-					<Icon name="git-compare" className="size-4" />
-					<span className="fw-review-word">审查</span>{changedCount > 0 && <span className="text-[11px] tabular-nums text-muted">{changedCount}</span>}
-				</button>
+				{changedCount > 0 && (
+					<button type="button" title={`查看本会话的文件改动（${changedCount} 个文件）`} onClick={() => setView("review")} className="fw-workbench-button fw-review-link">
+						<Icon name="git-compare" className="size-4" />
+						<span className="fw-review-word">文件改动</span>
+						<span className="rounded-sm bg-panel-2 px-1 text-[11px] tabular-nums text-muted">{changedCount}</span>
+					</button>
+				)}
 				<button type="button" aria-pressed={foldProcess} onClick={toggleFoldProcess} className="fw-workbench-button fw-fold-button">
 					{foldProcess ? "展开过程" : "折叠过程"}
 				</button>

@@ -41,7 +41,7 @@ export function UpdateDialog() {
 				) : (
 					<div className="text-muted">这个版本的更新说明还没有写进 CHANGELOG.md。</div>
 				)}
-				<div className="mt-4 text-[12px] text-faint">之后可以在 ☰ 菜单的「帮助 → 查看更新内容」里再看。</div>
+				<div className="mt-4 text-[12px] text-faint">之后可以在 ☰ 菜单的「帮助 → 查看当前版本更新内容」里再看。</div>
 			</div>
 		</Modal>
 	);

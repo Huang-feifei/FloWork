@@ -135,8 +135,47 @@ const verifyWorkspace = `(async () => {
 	const dialog = await waitFor(() => document.querySelector('[role="dialog"]'), '数据库连接弹窗未打开');
 	dialog.querySelector('button[aria-label="关闭对话框"]').click();
 	await waitFor(() => !document.querySelector('[role="dialog"]'), '数据库连接弹窗未关闭');
-	open('本会话的修改'); await heading('本次会话的修改');
+	if (navigation.querySelector('button[title="本会话的修改"]')) throw new Error('已移除的全局改动入口仍然可见');
 	open('会话'); await heading('修复 relativeTime 的边界问题');
+	document.querySelector('.fw-review-link').click(); await heading('本会话的文件改动');
+	if (!document.querySelector('[aria-label="改动文件"] button[aria-pressed="true"]')) throw new Error('未选中改动文件');
+	[...document.querySelectorAll('main button')].find(button => button.textContent.includes('返回会话')).click();
+	await heading('修复 relativeTime 的边界问题');
+	const store = window.__floworkStore;
+	const messages = store.getState().messages;
+	store.setState({ messages: [] });
+	await waitFor(() => !document.querySelector('.fw-review-link'), '无改动的会话仍显示文件改动入口');
+	store.setState({ messages });
+})()`;
+
+const verifyImageOnlyEndpoint = `(async () => {
+	const waitFor = async (check, message) => {
+		for (let attempt = 0; attempt < 50; attempt++) {
+			const result = check();
+			if (result) return result;
+			await new Promise(resolve => setTimeout(resolve, 50));
+		}
+		throw new Error(message);
+	};
+	const card = await waitFor(() => [...document.querySelectorAll('main article')].find(node => node.textContent.includes('image-demo')), '未加载仅图片端点');
+	const chat = card.querySelector('[aria-label="聊天模型"]');
+	const images = card.querySelector('[aria-label="图片模型"]');
+	if (!chat?.textContent.includes('未添加聊天模型') || !images?.textContent.includes('image-example') || !images?.textContent.includes('1 个') || images.textContent.includes('图片生成已停用')) throw new Error('聊天和图片模型状态混淆');
+	const disabled = [...document.querySelectorAll('main article')].find(node => node.textContent.includes('paused-demo'));
+	if (!disabled?.querySelector('[aria-label="图片模型"]')?.textContent.includes('图片生成已停用')) throw new Error('未显示图片生成停用状态');
+	images.querySelector('button').click();
+	const dialog = await waitFor(() => document.querySelector('[role="dialog"]'), '未打开端点编辑弹窗');
+	if (!dialog.textContent.includes('提供这个端点的图片模型')) throw new Error('管理图片模型没有直达图片模型页');
+	dialog.querySelector('[aria-label="关闭对话框"]').click();
+	await waitFor(() => !document.querySelector('[role="dialog"]'), '关闭编辑弹窗失败');
+})()`;
+
+const waitForReview = `(async () => {
+	for (let attempt = 0; attempt < 60; attempt++) {
+		if (document.querySelector('main h1')?.textContent === '本会话的文件改动') return;
+		await new Promise(resolve => setTimeout(resolve, 50));
+	}
+	throw new Error('文件改动页面未加载');
 })()`;
 
 const scenes = {
@@ -146,7 +185,9 @@ const scenes = {
 	"chat-dark": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`, { js: chatTop, wait: 80 }],
 	thinking: [mock, showSessionFiles, modelExamples, { js: verifyThinking, wait: 100 }, { js: openThinking, wait: 100 }],
 	"thinking-dark": [mock, showSessionFiles, modelExamples, `document.documentElement.dataset.theme = "dark"`, { js: openThinking, wait: 100 }],
-	review: [mock, clickTitle("本会话的修改")],
+	review: [mock, `document.querySelector('.fw-review-link').click()`, { js: waitForReview, wait: 120 }],
+	"review-empty": [mock, `window.__floworkStore.setState({ view: 'review', messages: [] })`, { js: waitForReview, wait: 120 }],
+	"settings-image-only": [setView("settings"), { js: verifyImageOnlyEndpoint, wait: 120 }],
 	palette: [mock, `window.__floworkStore.getState().setPalette(true)`],
 	terminal: [mock, clickTitle("终端")],
 	settings: [setView("settings")],
@@ -164,6 +205,10 @@ for (const [name, steps] of selectedScenes) {
 	const temp = mkdtempSync(join(tmpdir(), "flowork-shot-"));
 	try {
 		for (const dir of ["home", "data", "agent"]) mkdirSync(join(temp, dir), { recursive: true });
+		if (name === "settings-image-only") {
+			const endpoint = { api: "openai-responses", baseUrl: "https://example.invalid/v1", apiKey: "example-only", models: [], imageModels: [{ id: "image-example", name: "图片生成示例" }] };
+			writeFileSync(join(temp, "agent", "models.json"), JSON.stringify({ providers: { "image-demo": endpoint, "paused-demo": { ...endpoint, imageEnabled: false } } }));
+		}
 		const stepsFile = join(temp, "steps.json");
 		writeFileSync(stepsFile, JSON.stringify(steps));
 		const out = join(outDir, `${prefix}-${name}.png`);

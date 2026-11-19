@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { isMac } from "../lib/desktop";
 import { projectName, useApp } from "../store";
+import { requestAppUpdateCheck } from "./AppUpdateNotice";
 import { Icon, type IconName } from "./Icon";
 import { Menu, type MenuItem } from "./sidebar/Menu";
 
@@ -50,7 +51,7 @@ function LayoutToggle({ icon, label, on, onClick }: { icon: IconName; label: str
 	);
 }
 
-const VIEW_NAME = { welcome: "开始使用", chat: "会话", review: "修改审查", settings: "设置", database: "数据库", imagegen: "图片生成", gallery: "图片库" } as const;
+const VIEW_NAME = { welcome: "开始使用", chat: "会话", review: "文件改动", settings: "设置", database: "数据库", imagegen: "图片生成", gallery: "图片库" } as const;
 
 function Location() {
 	const view = useApp((s) => s.view);
@@ -102,7 +103,7 @@ export function TitleBar() {
 				return [
 					{ label: "新建会话", hint: isMac ? "⌘N" : "Ctrl+N", disabled: !hasProject, onClick: () => void s.newSession() },
 					{ separator: true, label: "" },
-					{ label: "审查本会话的修改", disabled: !hasProject, onClick: () => s.setView("review") },
+					{ label: "查看本会话的文件改动", disabled: !hasProject, onClick: () => s.setView("review") },
 					{
 						label: s.foldProcess ? "展开思考与工具调用" : "折叠思考与工具调用",
 						disabled: !hasProject,
@@ -131,7 +132,8 @@ export function TitleBar() {
 			case "帮助":
 				return [
 					{ label: "命令与快捷键…", hint: isMac ? "⌘K" : "Ctrl+K", onClick: () => s.setPalette(true, "commands") },
-					{ label: "查看更新内容", onClick: () => s.setUpdatedTo(s.info?.version ?? null) },
+					{ label: "检查应用更新", onClick: requestAppUpdateCheck },
+					{ label: "查看当前版本更新内容", onClick: () => s.setUpdatedTo(s.info?.version ?? null) },
 					{ label: "环境自检与发现项目…", onClick: () => s.setView("welcome") },
 				];
 		}

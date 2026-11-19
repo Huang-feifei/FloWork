@@ -1,5 +1,5 @@
 import { Icon, type IconName } from "./Icon";
-import { useApp, waitingCount } from "../store";
+import { useApp } from "../store";
 
 type Section = "main" | "tools" | "settings";
 type Item = {
@@ -7,27 +7,21 @@ type Item = {
 	label: string;
 	active?: boolean;
 	short?: string;
-	badge?: number;
 	onClick: () => void;
 };
 
-function ActivityItem({ icon, label, short, active, badge, onClick }: Item) {
+function ActivityItem({ icon, label, short, active, onClick }: Item) {
 	return (
 		<button
 			type="button"
 			title={label}
-			aria-label={badge ? `${label}，${badge} 项待确认` : label}
+			aria-label={label}
 			aria-pressed={active}
 			onClick={onClick}
 			className="fw-rail-item"
 		>
 			<Icon name={icon} className="size-[var(--activity-icon)] shrink-0" />
 			<span>{short ?? label}</span>
-			{!!badge && (
-				<span className="fw-rail-badge">
-					{badge}
-				</span>
-			)}
 		</button>
 	);
 }
@@ -36,7 +30,6 @@ export function ActivityBar() {
 	const view = useApp((s) => s.view);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const terminalPanel = useApp((s) => s.terminalPanel);
-	const waiting = useApp((s) => waitingCount(s));
 	const rightPanel = useApp((s) => s.rightPanel);
 	const remoteOpen = useApp((s) => s.remoteOpen);
 	const { setView, setRightPanel, setTerminalPanel, setRemoteOpen } = useApp.getState();
@@ -44,7 +37,6 @@ export function ActivityBar() {
 	const items: Record<Section, Item[]> = {
 		main: [
 			{ icon: "messages", label: "会话", active: inChat, onClick: () => setView("chat") },
-			{ icon: "git-compare", label: "本会话的修改", short: "审查", active: view === "review", badge: waiting, onClick: () => setView("review") },
 		],
 		tools: [
 			{ icon: "sparkles", label: "图片生成", short: "生图", active: view === "imagegen", onClick: () => setView("imagegen") },

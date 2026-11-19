@@ -9,6 +9,7 @@ import { PromptDialog } from "./components/PromptDialog";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { Sidebar } from "./components/Sidebar";
 import { UpdateDialog } from "./components/UpdateDialog";
+import { AppUpdateNotice } from "./components/AppUpdateNotice";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
 import { RemoteProjectDialog } from "./components/sidebar/RemoteProjectDialog";
 import { HostKeyDialog } from "./components/sidebar/HostKeyDialog";
@@ -79,6 +80,7 @@ export function App() {
 
 			<div className="fw-shell fw-workbench relative flex h-full flex-col">
 				<TitleBar />
+				<AppUpdateNotice />
 
 				{view === "welcome" ? (
 					<div className="fw-welcome-frame min-h-0 flex-1">
@@ -125,7 +127,6 @@ export function App() {
 											{rightPanel === "browser" && <RightPanel />}
 										</div>
 									)}
-									<Notices />
 								</main>
 								<BottomPanelSlot open={terminalPanelOpen} />
 							</div>
@@ -134,6 +135,7 @@ export function App() {
 					</>
 				)}
 
+				<Notices />
 				<DiscoverDialog />
 				<RemoteProjectDialog />
 				<HostKeyDialog />

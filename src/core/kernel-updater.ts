@@ -1,6 +1,7 @@
 /** 从维护者 GitHub Releases 下载签名批准的完整 Pi 运行包。 */
 import { createHash, createPublicKey, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { join } from "node:path";
 import type { ArchiveKernelManifest, KernelManifest, KernelUpdateController, KernelUpdateStatus, KernelVersion, SignedKernelManifest } from "@shared/kernel";
 import {
@@ -13,6 +14,27 @@ interface ReleaseAsset { id?: number; name: string; browser_download_url: string
 interface Release { tag_name: string; draft: boolean; prerelease: boolean; body: string | null; assets: ReleaseAsset[] }
 interface Selection { active: string | null; previous: string | null; pending?: string | null }
 interface Candidate { manifest: ArchiveKernelManifest; envelope: SignedKernelManifest; notes: string; releaseUrl: string }
+
+/** Windows 上文件扫描可能短暂占用刚解压的目录；只在目标不存在时重试。 */
+async function moveKernelIntoPlace(source: string, destination: string): Promise<boolean> {
+	for (let attempt = 0; ; attempt++) {
+		try {
+			await rename(source, destination);
+			return true;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code !== "EEXIST" && code !== "ENOTEMPTY" && code !== "EPERM" && code !== "EBUSY") throw error;
+			try {
+				await lstat(destination);
+				return false;
+			} catch (statError) {
+				if ((statError as NodeJS.ErrnoException).code !== "ENOENT") throw statError;
+			}
+			if (attempt >= 4 || (code !== "EPERM" && code !== "EBUSY")) throw error;
+			await delay(50 * (attempt + 1));
+		}
+	}
+}
 
 export interface KernelUpdaterOptions extends Omit<KernelEnvironment, "adapterSha256"> {
 	/** 来自应用自身，不从网络下载或替换。 */
@@ -284,9 +306,7 @@ export class KernelUpdater implements KernelUpdateController {
 				await this.options.probe(join(unpacked, "pi-worker.js"));
 				await writeFile(join(unpacked, "installed.json"), JSON.stringify(envelope));
 				const destination = this.directory(manifest.version);
-				try { await rename(unpacked, destination); }
-				catch (error) {
-					if (!["EEXIST", "ENOTEMPTY", "EPERM"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+				if (!await moveKernelIntoPlace(unpacked, destination)) {
 					// 内核版本不可覆盖，尤其不能修改仍被本次运行使用的文件。
 					await this.installed(manifest.version);
 					const existing = JSON.parse(await readFile(join(destination, "installed.json"), "utf8")) as SignedKernelManifest;
