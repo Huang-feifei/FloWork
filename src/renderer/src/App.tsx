@@ -66,8 +66,12 @@ export function App() {
 	const rightPanel = useApp((s) => s.rightPanel);
 	const terminalPanelOpen = useApp((s) => s.terminalPanel);
 	const [databaseOpened, setDatabaseOpened] = useState(view === "database");
-	const hasWorkspaceSidebar = view !== "settings" && view !== "database";
-	useEffect(() => { if (view === "database") setDatabaseOpened(true); }, [view]);
+	const [studioOpened, setStudioOpened] = useState(view === "imagegen");
+	const hasWorkspaceSidebar = view !== "settings" && view !== "database" && view !== "imagegen";
+	useEffect(() => {
+		if (view === "database") setDatabaseOpened(true);
+		if (view === "imagegen") setStudioOpened(true);
+	}, [view]);
 
 	useEffect(() => {
 		void useApp.getState().init();
@@ -100,16 +104,19 @@ export function App() {
 											</Suspense>
 										</div>
 									)}
+									{(studioOpened || view === "imagegen") && (
+										<div className={view === "imagegen" ? "flex min-h-0 flex-1 flex-col" : "hidden"}>
+											<Suspense fallback={<ViewFallback />}>
+												<ImageStudio active={view === "imagegen"} />
+											</Suspense>
+										</div>
+									)}
 									{view === "settings" ? (
 										<Suspense fallback={<ViewFallback />}>
 											<SettingsView />
 										</Suspense>
-									) : view === "database" ? (
+									) : view === "database" || view === "imagegen" ? (
 										null
-									) : view === "imagegen" ? (
-										<Suspense fallback={<ViewFallback />}>
-											<ImageStudio />
-										</Suspense>
 									) : view === "gallery" ? (
 										<Suspense fallback={<ViewFallback />}>
 											<ImageLibrary />

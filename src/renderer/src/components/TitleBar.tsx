@@ -94,7 +94,7 @@ export function TitleBar() {
 				];
 			case "视图":
 				return [
-					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", onClick: () => s.toggleSidebar() },
+					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", disabled: view === "imagegen", onClick: () => s.toggleSidebar() },
 					{ label: rightPanel ? "收起右侧面板" : "显示右侧面板", hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", onClick: () => s.setRightPanel(rightPanel ? null : "session") },
 					{ label: "数据库工作台", onClick: () => s.setView("database") },
 					{ label: "打开内置浏览器", onClick: () => { s.setView("chat"); s.setRightPanel("browser"); } },
@@ -168,7 +168,7 @@ export function TitleBar() {
 			}
 			if (key === "b") {
 				e.preventDefault();
-				s.toggleSidebar();
+				if (s.view !== "imagegen") s.toggleSidebar();
 			} else if (key === "k") {
 				e.preventDefault();
 				s.setPalette(!s.palette.open);
@@ -228,8 +228,8 @@ export function TitleBar() {
 			<div className="app-drag min-w-0 flex-1 self-stretch" />
 
 			<div className="flex items-center gap-0.5">
-				{(!sidebarOpen || view === "settings" || view === "database" || view === "welcome") && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} on={false} onClick={() => useApp.getState().setPalette(true)} />}
-				{view !== "settings" && view !== "welcome" && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
+				{(!sidebarOpen || view === "settings" || view === "database" || view === "imagegen" || view === "welcome") && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} on={false} onClick={() => useApp.getState().setPalette(true)} />}
+				{view !== "settings" && view !== "welcome" && view !== "imagegen" && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
 			</div>
 
 			{/* Windows / Linux：系统风格的窗口按钮，贴右上角；macOS 用系统自带的红绿灯 */}

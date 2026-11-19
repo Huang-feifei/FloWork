@@ -1,36 +1,35 @@
-/**
- * 图片生成工作台（活动栏「图片生成」主视图）：
- * 左侧参数（提示词 / 参考图 / 模型 / 尺寸 / 数量 / 质量），右侧本次生成与最近生成。
- * 与代码会话刻意区分：没有消息流、没有输入框；生成结果通过「插入会话」放进当前会话的输入框。
- * 模型与凭据来自 models.json 里各供应商声明的 imageModels（设置 › 自定义端点）。
- */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GeneratedImage, ImageAttachment } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Icon } from "../Icon";
-import { Badge, Button, Select, TextArea } from "../ui";
-import { PageHeading, WorkbenchEmpty } from "../PageHeading";
+import { Button, Select } from "../ui";
+import { PageHeading } from "../PageHeading";
+import "./image-studio.css";
 
 const COUNTS = [1, 2, 4];
 
 /** 缓存里的图片按需读成 data URL（生成历史不大，单张读一次即可） */
-export function useImageUrl(id: string): string | undefined {
-	const [url, setUrl] = useState<string>();
+function useImagePreview(id: string) {
+	const [preview, setPreview] = useState<{ id: string; url?: string }>();
 	useEffect(() => {
 		if (!id) return;
 		let alive = true;
 		void api.images
 			.read(id)
 			.then((file) => {
-				if (alive) setUrl(`data:${file.mimeType};base64,${file.dataBase64}`);
+				if (alive) setPreview({ id, url: `data:${file.mimeType};base64,${file.dataBase64}` });
 			})
-			.catch(() => undefined);
+			.catch(() => { if (alive) setPreview({ id }); });
 		return () => {
 			alive = false;
 		};
 	}, [id]);
-	return url;
+	return preview?.id === id ? preview : undefined;
+}
+
+export function useImageUrl(id: string): string | undefined {
+	return useImagePreview(id)?.url;
 }
 
 /** 一张生成结果：预览 + 提示词 + 尺寸/耗时 + 操作 */
@@ -102,231 +101,229 @@ export function GeneratedTile({ image, tall = false }: { image: GeneratedImage; 
 	);
 }
 
-export function ImageStudio() {
+const REFERENCE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const MAX_REFERENCE_BYTES = 12 * 1024 * 1024;
+
+function sizeText(size: string) {
+	return size.replace(/(\d+)x(\d+)/i, "$1 × $2");
+}
+
+function ImageThumbnail({ image, selected, onSelect }: { image: GeneratedImage; selected: boolean; onSelect: () => void }) {
+	const url = useImageUrl(image.id);
+	return (
+		<button type="button" className="fw-studio-thumbnail" aria-pressed={selected} aria-label={`预览图片：${image.prompt}`} title={image.prompt} onClick={onSelect}>
+			{url ? <img src={url} alt="" /> : <Icon name="image" className="size-5 text-muted" />}
+		</button>
+	);
+}
+
+export function ImageStudio({ active }: { active: boolean }) {
 	const imageModels = useApp((s) => s.imageModels);
 	const images = useApp((s) => s.images);
 	const busy = useApp((s) => s.imageBusy);
-	const generateImages = useApp((s) => s.generateImages);
-	const loadImages = useApp((s) => s.loadImages);
-	const pushNotice = useApp((s) => s.pushNotice);
-	const activeProjectId = useApp((s) => s.activeProjectId);
-	const sessionName = useApp((s) => s.state?.sessionName ?? "");
-
+	const hasProject = useApp((s) => !!s.activeProjectId);
+	const { generateImages, loadImages, setView, pushNotice, removeImage, attachImage } = useApp.getState();
 	const [prompt, setPrompt] = useState("");
 	const [modelKey, setModelKey] = useState("");
-	const [size, setSize] = useState("");
-	const [count, setCount] = useState(2);
+	const [sizeSelections, setSizeSelections] = useState<Record<string, string>>({});
+	const [count, setCount] = useState(1);
 	const [quality, setQuality] = useState<"standard" | "hd">("standard");
-	const [reference, setReference] = useState<ImageAttachment>();
-	const [created, setCreated] = useState<GeneratedImage[]>([]);
+	const [reference, setReference] = useState<{ fileName: string; image: ImageAttachment }>();
+	const [referenceError, setReferenceError] = useState("");
+	const [reading, setReading] = useState(false);
+	const [loading, setLoading] = useState(true);
+	const [loadError, setLoadError] = useState("");
+	const [error, setError] = useState("");
+	const [createdIds, setCreatedIds] = useState<string[]>([]);
+	const [selectedId, setSelectedId] = useState<string>();
+	const [attaching, setAttaching] = useState(false);
 	const fileRef = useRef<HTMLInputElement>(null);
+	const promptRef = useRef<HTMLTextAreaElement>(null);
+	const running = useRef(false);
 
-	useEffect(() => {
-		void loadImages().catch((error) => pushNotice("error", `读取图片模型失败：${errorText(error)}`));
-	}, [loadImages, pushNotice]);
+	const reload = useCallback(async () => {
+		setLoading(true);
+		setLoadError("");
+		try { await loadImages(); }
+		catch (cause) { setLoadError(errorText(cause)); }
+		finally { setLoading(false); }
+	}, [loadImages]);
+	useEffect(() => { if (active) void reload(); }, [active, reload]);
 
-	const model = useMemo(() => imageModels.find((m) => m.key === modelKey) ?? imageModels[0], [imageModels, modelKey]);
-	useEffect(() => {
-		if (model && !model.sizes.includes(size)) setSize(model.sizes[0] ?? "1024x1024");
-	}, [model, size]);
+	const model = imageModels.find((item) => item.key === modelKey) ?? imageModels[0];
+	const sizes = [...new Set(model?.sizes.filter(Boolean) ?? [])];
+	const preferred = model ? sizeSelections[model.key] : undefined;
+	const size = preferred && sizes.includes(preferred) ? preferred : sizes[0];
+	const canReference = !!model?.edits;
+	const effectiveReference = canReference ? reference?.image : undefined;
+	const batch = createdIds.flatMap((id) => { const item = images.find((image) => image.id === id); return item ? [item] : []; });
+	const history = images.filter((image) => !createdIds.includes(image.id)).slice(0, 8);
+	const selected = images.find((image) => image.id === selectedId) ?? batch[0];
+	const preview = useImagePreview(selected?.id ?? "");
+	const stage = busy ? "generating" : error ? "error" : selected ? "ready" : "idle";
+	const canGenerate = !busy && !reading && !!model && !!prompt.trim();
 
-	const pickReference = async (file: File) => {
-		const data = await new Promise<string>((resolve, reject) => {
-			const reader = new FileReader();
-			reader.onerror = () => reject(reader.error ?? new Error("读取参考图失败"));
-			reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]+,/, ""));
-			reader.readAsDataURL(file);
-		});
-		setReference({ type: "image", mimeType: file.type || "image/png", data });
-	};
-
-	const run = async () => {
-		if (!prompt.trim()) {
-			pushNotice("warning", "先写一句提示词");
+	async function pickReference(file: File) {
+		setReferenceError("");
+		if (!REFERENCE_TYPES.includes(file.type) || file.size === 0 || file.size > MAX_REFERENCE_BYTES) {
+			setReferenceError("请选择不超过 12 MB 的 PNG、JPG 或 WebP 图片。");
 			return;
 		}
+		setReading(true);
 		try {
-			const result = await generateImages({
-				model: model?.key,
-				prompt,
-				size,
-				quality,
-				count,
-				reference: reference ? { dataBase64: reference.data, mimeType: reference.mimeType } : undefined,
+			const data = await new Promise<string>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onerror = () => reject(reader.error ?? new Error("无法读取参考图"));
+				reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
+				reader.readAsDataURL(file);
 			});
-			setCreated(result);
-			pushNotice("info", `生成完成：${result.length} 张`);
-		} catch (error) {
-			pushNotice("error", errorText(error));
-		}
-	};
+			if (!data) throw new Error("参考图没有可读取的内容。");
+			setReference({ fileName: file.name, image: { type: "image", mimeType: file.type, data } });
+		} catch (cause) { setReferenceError(errorText(cause)); }
+		finally { setReading(false); }
+	}
+
+	async function run() {
+		if (running.current || !canGenerate || !model) return;
+		running.current = true;
+		setError("");
+		try {
+			const result = await generateImages({ model: model.key, prompt: prompt.trim(), size, count,
+				quality: effectiveReference ? undefined : quality,
+				reference: effectiveReference ? { dataBase64: effectiveReference.data, mimeType: effectiveReference.mimeType } : undefined });
+			setCreatedIds(result.map((image) => image.id));
+			setSelectedId(result[0]?.id);
+		} catch (cause) { setError(errorText(cause)); }
+		finally { running.current = false; }
+	}
+
+	async function bringToChat(image: GeneratedImage) {
+		setAttaching(true);
+		try {
+			await attachImage(image.id);
+			setView("chat");
+			pushNotice("info", "图片已添加到会话输入框，尚未发送。");
+		} catch (cause) { pushNotice("error", errorText(cause)); }
+		finally { setAttaching(false); }
+	}
+
+	async function download(image: GeneratedImage) {
+		try {
+			const file = await api.images.read(image.id);
+			const link = document.createElement("a");
+			link.href = `data:${file.mimeType};base64,${file.dataBase64}`;
+			link.download = image.id;
+			link.click();
+		} catch (cause) { pushNotice("error", errorText(cause)); }
+	}
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col">
-			<PageHeading
-				title="图片生成"
-				detail={activeProjectId ? `可插入：${sessionName || "当前会话"}` : "从提示词或本地参考图开始。"}
-				actions={<><Button variant="ghost" onClick={() => useApp.getState().setView("gallery")}>打开图片库</Button>{!model && <Button variant="primary" onClick={() => useApp.getState().setView("settings", "custom")}>配置图片模型</Button>}</>}
-			/>
-
-			<div className="fw-media-layout min-h-0 flex-1 overflow-y-auto bg-bg">
-				{/* 左：参数 */}
-				<div className="min-w-0 space-y-4">
-					<div className="fw-card p-5">
-						<h2 className="mb-3 text-[16px] font-semibold">描述画面</h2>
-						<TextArea rows={5} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="描述你想生成的画面…" />
-
-						<div className="mt-3 flex items-center gap-2.5">
-							<span className="shrink-0 text-[12.5px] text-muted">参考图</span>
-							<button
-								type="button"
-								onClick={() => fileRef.current?.click()}
-								className="flex size-12 shrink-0 items-center justify-center rounded-[10px] border border-dashed border-border-strong text-faint hover:text-fg"
-								title="选一张本地图片作为参考（图生图）"
-							>
-								<Icon name="plus" className="size-4" />
-							</button>
-							{reference && (
-								<span className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-[10px] border border-border">
-									<img src={`data:${reference.mimeType};base64,${reference.data}`} alt="参考图" className="size-full object-cover" />
-								</span>
-							)}
-							<div className="flex-1" />
-							{reference ? (
-								<Button variant="ghost" size="sm" onClick={() => setReference(undefined)}>
-									去掉参考图
-								</Button>
-							) : (
-								<span className="text-[11.5px] text-faint">{model?.edits ? "这个模型支持图生图" : "当前模型不支持参考图"}</span>
-							)}
-						</div>
-						<input
-							ref={fileRef}
-							type="file"
-							accept="image/*"
-							className="hidden"
-							onChange={(e) => {
-								const file = e.target.files?.[0];
-								if (file) void pickReference(file);
-								e.target.value = "";
-							}}
-						/>
-					</div>
-
-					<div className="fw-card p-5">
-						<h2 className="mb-3 text-[16px] font-semibold">生成设置</h2>
-						<div className="space-y-4">
-							<div>
-								<div className="mb-1.5 text-[12.5px] text-muted">模型</div>
-								{imageModels.length > 0 ? (
-									<Select value={model?.key ?? ""} onChange={(e) => setModelKey(e.target.value)}>
-										{imageModels.map((m) => (
-											<option key={m.key} value={m.key}>
-												{m.key}
-											</option>
-										))}
-									</Select>
-								) : (
-									<div className="rounded-[10px] bg-warn-soft px-3 py-2 text-[12.5px] leading-relaxed text-warn">
-										请先在自定义端点中添加图片模型。
-									</div>
-								)}
+		<div className="fw-image-studio flex min-h-0 flex-1 flex-col">
+			<PageHeading title="图片生成" detail="从提示词开始，生成的图片会保存在本机。" actions={
+				<Button size="sm" onClick={() => setView("gallery")}><Icon name="image" className="size-4" />打开图片库</Button>
+			} />
+			<div className="fw-studio-layout">
+				<section className="fw-studio-output" aria-label="生成结果">
+					<header className="fw-studio-output-header">
+						<h2 className="text-base font-semibold">画布</h2>
+						{selected && <span className="min-w-0 truncate text-[12px] text-muted" title={selected.model}>{sizeText(selected.size)} · {selected.model}</span>}
+					</header>
+					<div className="fw-studio-stage" data-image-stage data-state={stage} aria-busy={busy}>
+						{selected ? (
+							preview?.url ? <img className="fw-studio-result" src={preview.url} alt={selected.prompt} /> : <div className="fw-studio-placeholder"><Icon name="image" className="size-6" /><p>{preview ? "无法读取本地预览，请从图片库检查原图。" : "正在读取本地预览…"}</p></div>
+						) : !busy && !error && (
+							<div className="fw-studio-placeholder" role="status">
+								<span className="fw-studio-blank-mark"><Icon name="image" className="size-8" /></span>
+								<h3>{loading ? "正在读取图片模型" : loadError ? "暂时无法读取图片配置" : model ? "画布已就绪" : "先添加一个图片模型"}</h3>
+								<p>{model ? "写下画面的主体、风格与构图，生成结果会显示在这里。" : !loading && !loadError ? "图片模型在「设置 → 自定义端点」中独立配置。" : null}</p>
+								{!loading && (loadError ? <Button size="sm" onClick={() => void reload()}>重新读取</Button>
+									: model ? <Button size="sm" variant="ghost" onClick={() => promptRef.current?.focus()}>填写提示词 <Icon name="arrow-right" className="size-3.5" /></Button>
+									: <Button size="sm" variant="primary" onClick={() => setView("settings", "custom")}>前往配置 <Icon name="arrow-right" className="size-3.5" /></Button>)}
 							</div>
-
-							<div className="flex items-center gap-3">
-								<span className="w-12 shrink-0 text-[12.5px] text-muted">尺寸</span>
-								<Select value={size} onChange={(e) => setSize(e.target.value)} className="w-auto">
-									{(model?.sizes ?? ["1024x1024"]).map((s) => (
-										<option key={s} value={s}>
-											{s}
-										</option>
-									))}
+						)}
+						{busy && (
+							<div className={`fw-studio-stage-status ${selected ? "is-overlay" : ""}`} role="status">
+								<Icon name="refresh" className="size-4 animate-spin" />
+								<div><strong>正在生成图片</strong><p className="text-[12px] text-muted">等待模型返回结果。切换页面不会丢失本次任务。</p></div>
+							</div>
+						)}
+						{!busy && error && (
+							<div className={`fw-studio-stage-status ${selected ? "is-overlay" : ""}`} role="alert">
+								<div className="min-w-0"><strong className="text-err">生成失败</strong><p className="mt-1 max-h-24 overflow-auto break-words text-[12px] text-muted">{error}</p></div>
+								<Button size="sm" disabled={!canGenerate} onClick={() => void run()}>重试</Button>
+							</div>
+						)}
+					</div>
+					{selected && (
+						<div className="fw-studio-resultbar">
+							<p className="min-w-0 flex-1 truncate text-[12px] text-muted" title={selected.prompt}>{selected.prompt}</p>
+							<Button size="sm" disabled={!hasProject || attaching} title={hasProject ? undefined : "请先打开一个项目会话"} onClick={() => void bringToChat(selected)}>插入会话</Button>
+							<Button size="sm" onClick={() => void download(selected)}>下载</Button>
+							<Button size="sm" variant="ghost" className="hover:text-err" onClick={() => void removeImage(selected.id).catch((cause) => pushNotice("error", errorText(cause)))}>删除</Button>
+						</div>
+					)}
+					{(batch.length > 1 || history.length > 0) && (
+						<div className="fw-studio-filmstrip">
+							{batch.length > 1 && <div><h3>本次结果 · {batch.length} 张</h3><div className="fw-studio-thumbnails">{batch.map((image) => <ImageThumbnail key={image.id} image={image} selected={selected?.id === image.id} onSelect={() => setSelectedId(image.id)} />)}</div></div>}
+							{history.length > 0 && <div><h3>最近生成</h3><div className="fw-studio-thumbnails">{history.map((image) => <ImageThumbnail key={image.id} image={image} selected={selected?.id === image.id} onSelect={() => setSelectedId(image.id)} />)}</div></div>}
+						</div>
+					)}
+				</section>
+				<form className="fw-studio-form" onSubmit={(event) => { event.preventDefault(); void run(); }}>
+					<fieldset disabled={busy} className="fw-studio-fields">
+						<section className="fw-studio-settings-group">
+							<label className="fw-studio-field-label" htmlFor="fw-image-prompt">提示词</label>
+							<textarea ref={promptRef} id="fw-image-prompt" className="fw-studio-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="例如：雨后街角的书店，暖光透过玻璃窗，电影感横幅构图…" />
+							<div className="fw-studio-reference">
+								{reference && <img src={`data:${reference.image.mimeType};base64,${reference.image.data}`} alt="参考图预览" />}
+								<div className="min-w-0 flex-1"><p className="truncate text-[12px] font-medium" title={reference?.fileName}>{reference?.fileName ?? "参考图（可选）"}</p><p className="mt-0.5 text-[11.5px] text-muted">{reference && !canReference ? "当前模型不支持参考图，本次不发送。" : model && !canReference ? "当前模型不支持参考图" : "PNG、JPG 或 WebP，最大 12 MB"}</p></div>
+								{reference && <Button size="sm" variant="ghost" disabled={reading} onClick={() => { setReference(undefined); setReferenceError(""); }}>移除</Button>}
+								<Button size="sm" disabled={!canReference || reading} aria-label="添加参考图" onClick={() => fileRef.current?.click()}>{reading ? "读取中…" : reference ? "更换" : "添加"}</Button>
+							</div>
+							{referenceError && <p role="alert" className="text-[12px] text-err">{referenceError}</p>}
+							<input ref={fileRef} type="file" accept={REFERENCE_TYPES.join(",")} className="hidden" onChange={(event) => {
+								const file = event.target.files?.[0];
+								event.target.value = "";
+								if (file && canReference && !busy) void pickReference(file);
+							}} />
+						</section>
+						<section className="fw-studio-settings-group">
+							<h2 className="fw-studio-field-label">图片模型</h2>
+							{imageModels.length > 1 ? (
+								<Select aria-label="图片模型" value={model?.key ?? ""} onChange={(event) => setModelKey(event.target.value)}>
+									{imageModels.map((item) => <option key={item.key} value={item.key}>{item.name || item.id} · {item.provider}</option>)}
 								</Select>
+							) : model ? <div className="fw-studio-static"><strong className="min-w-0 break-words">{model.name || model.id}</strong><span className="shrink-0 text-muted">{model.provider}</span></div> :
+								<p className="text-[12px] text-muted">{loading ? "正在读取…" : loadError ? "未能读取配置，请重试。" : "还没有可用的图片模型。"}</p>}
+							<div className="flex flex-wrap items-center gap-2 text-[12px]">
+								<button type="button" className="text-primary-strong hover:underline" onClick={() => setView("settings", "custom")}>{model ? "管理图片模型" : "配置图片模型"}</button>
+								{loadError && <button type="button" title={loadError} className="text-err hover:underline" onClick={() => void reload()}>重新读取</button>}
 							</div>
-
-							<div className="flex items-center gap-3">
-								<span className="w-12 shrink-0 text-[12.5px] text-muted">数量</span>
-								<div className="fw-seg">
-									{COUNTS.map((n) => (
-										<button
-											type="button"
-											key={n}
-											onClick={() => setCount(n)}
-											className={`fw-seg-item ${n === count ? "fw-seg-item-active" : ""}`}
-										>
-											{n} 张
-										</button>
-									))}
-								</div>
-							</div>
-
-							<div className="flex items-center gap-3">
-								<span className="flex-1 text-[13px] text-fg">高质量</span>
-								<div className="fw-seg">
-									{(["standard", "hd"] as const).map((q) => (
-										<button
-											type="button"
-											key={q}
-											onClick={() => setQuality(q)}
-											className={`fw-seg-item ${q === quality ? "fw-seg-item-active" : ""}`}
-										>
-											{q === "standard" ? "标准" : "高清"}
-										</button>
-									))}
-								</div>
-							</div>
-						</div>
-
-						<div className="mt-4 flex items-center gap-3 border-t border-border pt-4">
-							<span className="text-[11.5px] tabular-nums text-faint">
-								{model?.price ? `约 ¥${(model.price * count).toFixed(2)}` : "价格未配置"}
-							</span>
-							<div className="flex-1" />
-							<Button variant="primary" disabled={busy || !model} onClick={() => void run()}>
-								<Icon name="sparkles" className="size-4" />
-								{busy ? "生成中…" : `生成 ${count} 张`}
-							</Button>
-						</div>
-					</div>
-				</div>
-
-				{/* 右：结果 */}
-				<div className="min-w-0 flex-1">
-					<div className="flex items-center gap-2">
-						<h2 className="text-[16px] font-semibold">本次生成</h2>
-						{created.length > 0 && <Badge tone="ok">{created.length} 张</Badge>}
-						<div className="flex-1" />
-					</div>
-					{created.length > 0 ? (
-						<div className="mt-3 grid grid-cols-2 gap-4">
-							{created.map((image) => (
-								<GeneratedTile key={image.id} image={image} tall />
-							))}
-						</div>
-					) : (
-						<div className="fw-preview-empty mt-3">
-							<WorkbenchEmpty icon="image" title="等待生成" detail="准备好提示词和模型后，生成的图片会显示在这里。" />
-						</div>
-					)}
-
-					<div className="mt-6 flex items-center gap-2">
-						<h2 className="text-[16px] font-semibold">最近生成</h2>
-						<Badge tone="muted">{images.length}</Badge>
-					</div>
-					{images.length > 0 ? (
-						<div className="fw-image-grid mt-3">
-							{images.slice(0, 8).map((image) => (
-								<GeneratedTile key={image.id} image={image} />
-							))}
-						</div>
-					) : (
-						<div className="mt-3 text-[12.5px] text-faint">还没有生成过图片。</div>
-					)}
-				</div>
-			</div>
-
-			<div className="shrink-0 border-t border-border px-6 py-3 text-[11.5px] leading-relaxed text-faint">
-				生成结果保存在本机。「插入会话」会将图片添加到当前输入框。
+						</section>
+						{model && (
+							<section className="fw-studio-settings-group">
+								<h2 className="fw-studio-field-label">输出设置</h2>
+								{sizes.length > 1 ? (
+									<div role="group" aria-label="输出尺寸" className="fw-studio-sizes">
+										{sizes.map((value) => {
+											const dimensions = /^(\d{1,5})x(\d{1,5})$/i.exec(value);
+											const ratio = dimensions && Number(dimensions[2]) ? Number(dimensions[1]) / Number(dimensions[2]) : 1;
+											return <button key={value} type="button" data-image-size={value} aria-pressed={size === value} className="fw-studio-size" onClick={() => setSizeSelections((previous) => ({ ...previous, [model.key]: value }))}>
+												<span className="fw-studio-size-mark" style={{ width: ratio >= 1 ? 20 : Math.max(8, 20 * ratio), height: ratio <= 1 ? 20 : Math.max(8, 20 / ratio) }} aria-hidden="true" />{sizeText(value)}
+											</button>;
+										})}
+									</div>
+								) : <div className="fw-studio-static" data-image-size-fixed><span className="text-muted">尺寸</span><strong>{size ? sizeText(size) : "模型默认"}</strong></div>}
+								<div className="fw-studio-option-row"><span>数量</span><div className="fw-seg" role="group" aria-label="生成数量">{COUNTS.map((value) => <button key={value} type="button" aria-pressed={count === value} className={`fw-seg-item ${count === value ? "fw-seg-item-active" : ""}`} onClick={() => setCount(value)}>{value} 张</button>)}</div></div>
+								<div className="fw-studio-option-row"><span>质量</span>{effectiveReference ? <span className="text-[12px] text-muted">参考图模式使用默认质量</span> : <div className="fw-seg" role="group" aria-label="输出质量">{(["standard", "hd"] as const).map((value) => <button key={value} type="button" aria-pressed={quality === value} className={`fw-seg-item ${quality === value ? "fw-seg-item-active" : ""}`} onClick={() => setQuality(value)}>{value === "hd" ? "高清" : "标准"}</button>)}</div>}</div>
+							</section>
+						)}
+					</fieldset>
+					<footer className="fw-studio-submit">
+						<p className="text-[12px] text-muted">{!model ? "配置图片模型后可生成" : !prompt.trim() ? "填写提示词后可生成" : model.price == null ? "此模型未设置参考价格" : `预估 ¥${(model.price * count).toFixed(2)} · ${count} 张`}</p>
+						<Button type="submit" variant="primary" disabled={!canGenerate} className="w-full"><Icon name={busy ? "refresh" : "sparkles"} className={`size-4 ${busy ? "animate-spin" : ""}`} />{busy ? "生成中…" : `生成 ${count} 张`}</Button>
+					</footer>
+				</form>
 			</div>
 		</div>
 	);

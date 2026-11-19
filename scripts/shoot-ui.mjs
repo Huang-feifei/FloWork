@@ -11,6 +11,7 @@ import electronPath from "electron";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { root } from "./runtime.mjs";
+import { imageStudioRegression, seedImageStudioCache } from "./image-studio-fixtures.mjs";
 
 const outDir = resolve(process.argv[2] ?? join(root, "out/shots"));
 const prefix = process.argv[3] ?? "ui";
@@ -193,6 +194,8 @@ const scenes = {
 	settings: [setView("settings")],
 	database: [setView("database")],
 	imagegen: [setView("imagegen")],
+	"imagegen-regression": [{ js: imageStudioRegression, wait: 120 }],
+	"imagegen-regression-dark": [`document.documentElement.dataset.theme = "dark"`, { js: imageStudioRegression, wait: 120 }],
 	gallery: [setView("gallery")],
 	"database-dialog": [setView("database"), { js: `(() => { const button = [...document.querySelectorAll('main button')].find(node => node.textContent.includes('新建连接')); if (!button) throw new Error('找不到新建连接'); button.click(); })()`, wait: 120 }],
 };
@@ -205,6 +208,7 @@ for (const [name, steps] of selectedScenes) {
 	const temp = mkdtempSync(join(tmpdir(), "flowork-shot-"));
 	try {
 		for (const dir of ["home", "data", "agent"]) mkdirSync(join(temp, dir), { recursive: true });
+		if (name.startsWith("imagegen-regression")) seedImageStudioCache(join(temp, "agent"));
 		if (name === "settings-image-only") {
 			const endpoint = { api: "openai-responses", baseUrl: "https://example.invalid/v1", apiKey: "example-only", models: [], imageModels: [{ id: "image-example", name: "图片生成示例" }] };
 			writeFileSync(join(temp, "agent", "models.json"), JSON.stringify({ providers: { "image-demo": endpoint, "paused-demo": { ...endpoint, imageEnabled: false } } }));
