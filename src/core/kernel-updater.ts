@@ -10,6 +10,8 @@ import {
 } from "./kernel-package";
 import { extractKernelRuntime } from "./kernel-archive";
 
+const CHECK_TIMEOUT_MS = 12_000;
+
 interface ReleaseAsset { id?: number; name: string; browser_download_url: string }
 interface Release { tag_name: string; draft: boolean; prerelease: boolean; body: string | null; assets: ReleaseAsset[] }
 interface Selection { active: string | null; previous: string | null; pending?: string | null }
@@ -48,6 +50,8 @@ export interface KernelUpdaterOptions extends Omit<KernelEnvironment, "adapterSh
 	/** 只启动隔离的自检进程，不打开真实会话、加载用户扩展或调用模型。 */
 	probe: (entry: string) => Promise<void>;
 	fetch?: typeof fetch;
+	/** 检查发布和签名清单的共同时间上限；离线回归可缩短。 */
+	checkTimeoutMs?: number;
 }
 
 export class KernelUpdater implements KernelUpdateController {
@@ -212,8 +216,9 @@ export class KernelUpdater implements KernelUpdateController {
 		}
 		throw new Error("GitHub 下载跳转次数过多");
 	}
-	private async json(url: string, maxBytes: number): Promise<unknown> {
-		const response = await this.request(url, AbortSignal.timeout(30_000));
+	private async json(url: string, maxBytes: number, signal = AbortSignal.timeout(30_000)): Promise<unknown> {
+		signal.throwIfAborted();
+		const response = await this.request(url, signal);
 		if (!response.body) throw new Error("GitHub 返回空响应");
 		const chunks: Uint8Array[] = [];
 		let size = 0;
@@ -222,6 +227,7 @@ export class KernelUpdater implements KernelUpdateController {
 			if (size > maxBytes) throw new Error("GitHub 响应超出大小限制");
 			chunks.push(chunk);
 		}
+		signal.throwIfAborted();
 		return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 	}
 	private assetUrl(asset: ReleaseAsset, tag: string): string {
@@ -238,34 +244,57 @@ export class KernelUpdater implements KernelUpdateController {
 
 	check(): Promise<KernelUpdateStatus> {
 		return this.operation(async () => {
-			if (!this.state.configured) throw new Error("请先配置 kernel.config.json 的兼容清单仓库与签名公钥");
-			this.publish({ phase: "checking", latest: undefined, message: undefined });
+			if (!this.state.configured) throw new Error("请先配置内核发布仓库与签名公钥");
+			this.publish({ phase: "checking", checkResult: undefined, latest: undefined, message: undefined });
 			this.candidate = undefined;
-			const releases = await this.json(`https://api.github.com/repos/${this.options.repository}/releases?per_page=100`, 4 * 1024 * 1024);
-			if (!Array.isArray(releases)) throw new Error("GitHub Releases 响应格式无效");
-			const candidates = (releases as Release[]).filter((r) => !r.draft && !r.prerelease &&
-				typeof r.tag_name === "string" && r.tag_name.startsWith("kernel-v") && isVersion(r.tag_name.slice(8)))
-				.sort((a, b) => compareVersions(b.tag_name.slice(8), a.tag_name.slice(8)));
-			let reason: string | undefined;
-			const base = this.state.pending?.source === "downloaded" ? this.state.pending.version : this.state.current.version;
-			for (const release of candidates) {
-				if (compareVersions(release.tag_name.slice(8), base) <= 0) continue;
-				const asset = release.assets?.find((a) => a.name === `flowork-kernel-${this.options.platform}-${this.options.arch}.json`);
-				if (!asset) continue;
-				const verified = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), MAX_MANIFEST_BYTES), this.options.publicKey);
-				const m = verified.manifest;
-				if (m.format !== 3) throw new Error("此发布不是签名完整内核包，请维护者重新打包发布");
-				if (!release.assets.some(a => a.name === m.archive.name)) { reason ??= "维护者尚未上传完整内核包"; continue; }
-				if (`kernel-v${m.version}` !== release.tag_name) throw new Error("内核版本与 Release 标签不一致");
-				const incompatible = incompatibility(m, this.environment());
-				if (incompatible) { reason ??= incompatible; continue; }
-				const releaseUrl = `https://github.com/${this.options.repository}/releases/tag/${release.tag_name}`;
-				this.candidate = { envelope: verified.envelope, manifest: m, notes: (release.body ?? "").slice(0, 20_000), releaseUrl };
-				this.publish({ latest: { version: m.version, piVersion: m.piVersion, source: "downloaded", notes: this.candidate.notes, releaseUrl } });
-				break;
+			const signal = AbortSignal.timeout(this.options.checkTimeoutMs ?? CHECK_TIMEOUT_MS);
+			try { await this.checkReleases(signal); }
+			catch (error) {
+				if (signal.aborted) throw new Error("连接 GitHub 检查内核更新超时。请确认网络可访问 GitHub，再重试。");
+				if (error instanceof TypeError && error.message === "fetch failed") throw new Error("无法连接 GitHub 检查内核更新。请检查网络后重试。", { cause: error });
+				throw error;
 			}
-			this.publish({ phase: this.state.pending ? "ready" : "idle", message: this.candidate ? "发现维护者已测试并签名批准的完整 Pi 内核包，将从 GitHub 下载" : reason ?? "暂无维护者已批准的 Pi 更新" });
 		});
+	}
+
+	private async checkReleases(signal: AbortSignal): Promise<void> {
+		const releases = await this.json(`https://api.github.com/repos/${this.options.repository}/releases?per_page=100`, 4 * 1024 * 1024, signal);
+		if (!Array.isArray(releases)) throw new Error("GitHub Releases 响应格式无效");
+		const candidates = (releases as Release[]).filter((r) => !r.draft && !r.prerelease &&
+			typeof r.tag_name === "string" && r.tag_name.startsWith("kernel-v") && isVersion(r.tag_name.slice(8)))
+			.sort((a, b) => compareVersions(b.tag_name.slice(8), a.tag_name.slice(8)));
+		let unavailable: { result: "incompatible" | "incomplete"; message: string } | undefined;
+		const base = this.state.pending?.source === "downloaded" ? this.state.pending.version : this.state.current.version;
+		const phase = this.state.pending ? "ready" : "idle";
+		for (const release of candidates) {
+			const batch = release.tag_name.slice(8);
+			if (compareVersions(batch, base) <= 0) continue;
+			const assets = release.assets;
+			const asset = assets?.find((a) => a.name === `flowork-kernel-${this.options.platform}-${this.options.arch}.json`);
+			if (!asset) {
+				unavailable ??= { result: "incomplete", message: `内核批次 ${batch} 未提供适用于此设备的签名清单，当前内核未更改。` };
+				continue;
+			}
+			const verified = verifyManifest(await this.json(this.assetUrl(asset, release.tag_name), MAX_MANIFEST_BYTES, signal), this.options.publicKey);
+			const m = verified.manifest;
+			if (m.format !== 3) throw new Error("此发布不是签名完整内核包，请维护者重新打包发布");
+			if (`kernel-v${m.version}` !== release.tag_name) throw new Error("内核版本与 Release 标签不一致");
+			const incompatible = incompatibility(m, this.environment());
+			if (incompatible) {
+				unavailable ??= { result: "incompatible", message: `内核批次 ${m.version}（Pi ${m.piVersion}）不可安装：${incompatible}。当前内核未更改。` };
+				continue;
+			}
+			if (!assets.some((a) => a.name === m.archive.name)) {
+				unavailable ??= { result: "incomplete", message: `内核批次 ${m.version} 尚未上传完整内核包，当前内核未更改。` };
+				continue;
+			}
+			const releaseUrl = `https://github.com/${this.options.repository}/releases/tag/${release.tag_name}`;
+			this.candidate = { envelope: verified.envelope, manifest: m, notes: (release.body ?? "").slice(0, 20_000), releaseUrl };
+			this.publish({ phase, checkResult: "available", message: `已找到可安装的独立内核 Pi ${m.piVersion}，尚未下载。`,
+				latest: { version: m.version, piVersion: m.piVersion, source: "downloaded", notes: this.candidate.notes, releaseUrl } });
+			return;
+		}
+		this.publish({ phase, checkResult: unavailable?.result ?? "none", message: unavailable?.message ?? "未发现新版独立内核，当前内核未更改。" });
 	}
 
 	install(): Promise<KernelUpdateStatus> {

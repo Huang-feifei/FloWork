@@ -16,6 +16,8 @@ export interface KernelUpdateStatus {
 	pending?: KernelVersion;
 	latest?: KernelVersion & { notes: string; releaseUrl: string };
 	phase: "idle" | "checking" | "downloading" | "verifying" | "ready" | "error";
+	/** 最近一次成功完成的独立内核检查；失败不能视为没有更新。 */
+	checkResult?: "available" | "none" | "incompatible" | "incomplete";
 	downloadedBytes: number;
 	totalBytes: number;
 	message?: string;

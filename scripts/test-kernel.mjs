@@ -126,14 +126,68 @@ try {
 	await test("官方即使有新版，维护者未放行也不提供更新、不查询 npm latest", async () => {
 		responses.set(releaseApi, () => Response.json([]));
 		const before = requests.length;
-		assert.equal((await updater.check()).latest, undefined);
+		const status = await updater.check();
+		assert.equal(status.latest, undefined);
+		assert.equal(status.checkResult, "none");
+		assert.match(status.message, /当前内核未更改/);
 		await assert.rejects(updater.install(), /先检查/);
 		assert.ok(requests.slice(before).every((url) => url.startsWith("https://api.github.com/")));
 		responses.set(releaseApi, () => Response.json([release]));
 	});
+	await test("只发布了不适用于当前桌面版的内核时，说明原因且不下载", async () => {
+		const item = new KernelUpdater(options("app-mismatch", { appVersion: "1.0.9" }));
+		await item.initialize();
+		const before = requests.length;
+		const status = await item.check();
+		assert.equal(status.phase, "idle");
+		assert.equal(status.checkResult, "incompatible");
+		assert.equal(status.latest, undefined);
+		assert.equal(status.current.source, "bundled");
+		assert.match(status.message, /1\.0\.1.*Pi 1\.2\.0.*当前 FloWork 版本是 1\.0\.9.*仅适用于 FloWork 1\.0\.8.*当前内核未更改/);
+		assert.deepEqual(requests.slice(before), [releaseApi, approvalUrl]);
+	});
+	await test("发布列表和签名清单共用检查时限，超时后可立即重试", async () => {
+		let firstSignal;
+		let stalled = true;
+		const item = new KernelUpdater(options("check-timeout", {
+			checkTimeoutMs: 80,
+			fetch: async (url, { signal }) => {
+				if (url === releaseApi) { firstSignal = signal; return Response.json([release]); }
+				assert.equal(url, approvalUrl);
+				assert.equal(signal, firstSignal);
+				if (!stalled) return Response.json(envelope(manifest));
+				return new Promise((_, reject) => {
+					const guard = setTimeout(() => reject(new Error("模拟请求未收到取消信号")), 1_000);
+					const abort = () => { clearTimeout(guard); reject(signal.reason); };
+					if (signal.aborted) abort();
+					else signal.addEventListener("abort", abort, { once: true });
+				});
+			},
+		}));
+		await item.initialize();
+		const checking = item.check();
+		assert.equal(item.status().phase, "checking");
+		await assert.rejects(checking, /连接 GitHub.*超时/);
+		assert.equal(item.status().phase, "error");
+		assert.equal(item.status().checkResult, undefined);
+		assert.equal(item.status().latest, undefined);
+		stalled = false;
+		const status = await item.check();
+		assert.equal(status.phase, "idle");
+		assert.equal(status.error, undefined);
+		assert.equal(status.checkResult, "available");
+	});
+	await test("GitHub 连接失败不误报暂无更新", async () => {
+		const item = new KernelUpdater(options("network-offline", { fetch: async () => { throw new TypeError("fetch failed"); } }));
+		await item.initialize();
+		await assert.rejects(item.check(), /无法连接 GitHub/);
+		assert.equal(item.status().checkResult, undefined);
+		assert.equal(item.status().phase, "error");
+	});
 	await test("只接受正式签名放行，忽略应用标签与预发布", async () => {
 		responses.set(releaseApi, () => Response.json([{ ...release, tag_name: "v99.0.0" }, { ...release, tag_name: "kernel-v99.0.0", prerelease: true }, release]));
 		const status = await updater.check(); assert.equal(status.latest.piVersion, "1.2.0"); assert.equal(status.current.source, "bundled");
+		assert.equal(status.checkResult, "available"); assert.match(status.message, /尚未下载/);
 	});
 	await test("安装前重新确认放行；撤回或修改清单后不能沿用缓存安装", async () => {
 		responses.set(releaseTagApi, () => Response.json({ ...release, draft: true }));
@@ -239,7 +293,9 @@ try {
 	});
 	await test("完整包缺失/撤回、下载跨源跳转时拒绝安装", async()=>{
 		const item=new KernelUpdater(options('missing-archive'));await item.initialize();
-		responses.set(releaseApi,()=>Response.json([{...release,assets:[release.assets[0]]}]));assert.equal((await item.check()).latest,undefined);responses.set(releaseApi,()=>Response.json([release]));await item.check();
+		responses.set(releaseApi, () => Response.json([{ ...release, assets: [release.assets[0]] }]));
+		const status = await item.check(); assert.equal(status.latest, undefined); assert.equal(status.checkResult, "incomplete");
+		responses.set(releaseApi, () => Response.json([release])); await item.check();
 		responses.set(releaseTagApi,()=>Response.json({...release,assets:[release.assets[0]]}));await assert.rejects(item.install(),/撤回/);responses.set(releaseTagApi,()=>Response.json(release));
 		for(const location of ['https://evil.example/kernel.tgz','http://github.com/kernel.tgz','https://github.com:444/kernel.tgz']){responses.set(archiveUrl,()=>new Response(null,{status:302,headers:{location}}));await assert.rejects(item.install(),/GitHub HTTPS/);}
 		responses.set(archiveUrl,()=>new Response(runtimeBytes));

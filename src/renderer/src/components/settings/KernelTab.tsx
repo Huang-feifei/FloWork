@@ -4,14 +4,17 @@ import { api, errorText } from "../../api/client";
 import { Badge, Button, Card } from "../ui";
 
 const PHASE_LABELS: Record<KernelUpdateStatus["phase"], string> = {
-	idle: "等待检查", checking: "检查更新中…", downloading: "下载内核中…", verifying: "校验并自检中…", ready: "重启后生效", error: "操作失败",
+	idle: "尚未检查", checking: "正在检查", downloading: "下载内核中…", verifying: "校验并自检中…", ready: "重启后生效", error: "操作失败",
+};
+const RESULT_LABELS: Record<NonNullable<KernelUpdateStatus["checkResult"]>, string> = {
+	available: "有可用更新", none: "没有新版独立内核", incompatible: "无兼容更新", incomplete: "暂无可下载的内核",
 };
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
 export function KernelTab() {
 	const [status, setStatus] = useState<KernelUpdateStatus | null>(null);
 	const [error, setError] = useState<string | null>(null);
-	const [requesting, setRequesting] = useState(false);
+	const [requesting, setRequesting] = useState<"check" | "action" | null>(null);
 
 	useEffect(() => {
 		let alive = true;
@@ -23,13 +26,22 @@ export function KernelTab() {
 		return () => { alive = false; unsubscribe(); };
 	}, []);
 
-	const busy = requesting || status?.phase === "checking" || status?.phase === "downloading" || status?.phase === "verifying";
-	const run = async (action: () => Promise<unknown>) => {
+	const checking = requesting === "check" || status?.phase === "checking";
+	const busy = !!requesting || checking || status?.phase === "downloading" || status?.phase === "verifying";
+	const phase = checking ? "checking" : status?.phase ?? "idle";
+	const failure = checking ? null : error || status?.error;
+	const label = failure ? "操作失败" : !status && !checking ? "读取内核状态…" : phase === "idle" && status?.checkResult ? RESULT_LABELS[status.checkResult] : PHASE_LABELS[phase];
+	const report = checking ? "正在从 GitHub 检查适用于此应用版本的签名内核。不会自动下载或切换内核。" : status?.message;
+	const latest = checking ? undefined : status?.latest;
+
+	const run = async (action: () => Promise<KernelUpdateStatus | null>, kind: "check" | "action" = "action") => {
 		setError(null);
-		setRequesting(true);
-		try { await action(); }
-		catch (e) { setError(errorText(e)); }
-		finally { setRequesting(false); }
+		setRequesting(kind);
+		try {
+			const next = await action();
+			if (next) setStatus(next);
+		} catch (e) { setError(errorText(e)); }
+		finally { setRequesting(null); }
 	};
 
 	return (
@@ -39,16 +51,15 @@ export function KernelTab() {
 					<h3 className="text-[15px] font-semibold">当前内核</h3>
 					{status && <Badge tone="primary">{status.current.source === "bundled" ? "应用内置" : "独立更新"}</Badge>}
 					<div className="flex-1" />
-					{status && <Badge tone={status.phase === "error" ? "err" : status.pending ? "warn" : "muted"}>{PHASE_LABELS[status.phase]}</Badge>}
+					<Badge tone={failure ? "err" : status?.pending ? "warn" : status?.checkResult === "available" ? "ok" : "muted"}>{label}</Badge>
 				</div>
 				<dl className="mt-4 grid grid-cols-[100px_1fr] gap-y-2 text-[13.5px]">
-					<dt className="text-muted">更新批次</dt><dd className="font-mono">{status?.current.version ?? "…"}</dd>
+					<dt className="text-muted">当前内核批次</dt><dd className="font-mono">{status?.current.version ?? "…"}</dd>
 					<dt className="text-muted">Pi 版本</dt><dd className="font-mono">{status?.current.piVersion ?? "…"}</dd>
 					<dt className="text-muted">发布仓库</dt><dd className="break-all">{status?.repository ? `GitHub · ${status.repository}` : "尚未配置"}</dd>
-					<dt className="text-muted">内核来源</dt><dd>维护者签名完整包 · GitHub Releases</dd>
 				</dl>
-				{status?.message && <p className="mt-4 text-[13px] leading-6 text-muted">{status.message}</p>}
-				{(error || status?.error) && <div role="alert" className="mt-4 rounded-xl bg-err-soft px-4 py-3 text-[13px] text-err">{error || status?.error}</div>}
+				{report && !failure && <p role="status" className="mt-4 rounded-lg bg-panel-2 px-3 py-2.5 text-[13px] leading-6 text-fg">{report}</p>}
+				{failure && <div role="alert" className="mt-4 rounded-xl bg-err-soft px-4 py-3 text-[13px] text-err">{failure}</div>}
 				{status?.phase === "downloading" && (
 					<div className="mt-4" aria-live="polite">
 						<progress className="h-2 w-full" max={status.totalBytes || 1} value={status.downloadedBytes} aria-label="内核下载进度" />
@@ -56,10 +67,10 @@ export function KernelTab() {
 					</div>
 				)}
 				<div className="mt-5 flex flex-wrap gap-2">
-					<Button disabled={!status?.configured || busy} onClick={() => void run(api.kernel.check)}>检查更新</Button>
-					{status?.latest && (
-						<Button variant="primary" disabled={busy || status.pending?.version === status.latest.version} onClick={() => void run(api.kernel.install)}>
-							下载并更新 Pi {status.latest.piVersion}
+					<Button disabled={!status?.configured || busy} onClick={() => void run(api.kernel.check, "check")}>{checking ? "检查中…" : "检查更新"}</Button>
+					{latest && (
+						<Button variant="primary" disabled={busy || status?.pending?.version === latest.version} onClick={() => void run(api.kernel.install)}>
+							下载并更新 Pi {latest.piVersion}
 						</Button>
 					)}
 					{status?.pending && <Button variant="primary" disabled={busy} onClick={() => void run(api.kernel.restart)}>重启并应用</Button>}
@@ -71,14 +82,14 @@ export function KernelTab() {
 				</div>
 			</Card>
 			{status?.pending && <Card><h3 className="text-[15px] font-semibold">待生效：{status.pending.version}</h3><p className="mt-2 text-[13px] leading-6 text-muted">Pi {status.pending.piVersion} · {status.pending.source === "bundled" ? "恢复应用内置版" : "已下载并通过签名校验与启动自检"}。当前进程继续使用原内核，下次启动时切换。</p></Card>}
-			{status?.latest && (
+			{latest && (
 				<Card>
-					<h3 className="text-[15px] font-semibold">可用更新 · {status.latest.version} / Pi {status.latest.piVersion}</h3>
-					<pre className="mt-3 whitespace-pre-wrap break-words font-sans text-[13px] leading-6 text-muted">{status.latest.notes || "此版本未提供更新说明。"}</pre>
-					<a className="mt-3 inline-block text-[13px] text-primary hover:underline" href={status.latest.releaseUrl} target="_blank" rel="noreferrer">在 GitHub 查看发布详情</a>
+					<h3 className="text-[15px] font-semibold">可用更新 · {latest.version} / Pi {latest.piVersion}</h3>
+					<pre className="mt-3 whitespace-pre-wrap break-words font-sans text-[13px] leading-6 text-muted">{latest.notes || "此版本未提供更新说明。"}</pre>
+					<a className="mt-3 inline-block text-[13px] text-primary hover:underline" href={latest.releaseUrl} target="_blank" rel="noreferrer">在 GitHub 查看发布详情</a>
 				</Card>
 			)}
-			<p className="text-[12.5px] leading-6 text-faint">仅显示维护者测试并签名放行的 Pi 版本；完整内核包从维护者的 GitHub Releases 下载，不在客户端运行 npm，也不自动追随官方最新版。继续使用当前应用内置的 Worker 适配层，不从网络替换适配代码。启动自检失败会回退旧内核；更新不会删除会话与配置。运行中或等待交互的会话需先结束再重启。</p>
+			<p className="text-[12.5px] leading-6 text-muted">这里查的是独立内核，不是 FloWork 桌面版。桌面版请到「帮助 → 检查应用更新」。内核只有通过维护者签名和兼容性校验才可安装，下载后需重启才生效；启动自检失败会回退。</p>
 		</div>
 	);
 }

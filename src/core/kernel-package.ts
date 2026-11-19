@@ -101,7 +101,10 @@ export interface KernelEnvironment {
 export function incompatibility(m: KernelManifest, env: KernelEnvironment): string | undefined {
 	if (m.platform !== env.platform || m.arch !== env.arch) return "该版本尚未批准用于当前操作系统或 CPU 架构";
 	if (m.protocolVersion !== KERNEL_PROTOCOL_VERSION) return "内核协议已变化，请先更新 FloWork 应用";
-	if (compareVersions(env.appVersion, m.minAppVersion) < 0 || compareVersions(env.appVersion, m.maxAppVersion) > 0) return "该 Pi 尚未批准用于当前 FloWork 版本";
+	if (compareVersions(env.appVersion, m.minAppVersion) < 0 || compareVersions(env.appVersion, m.maxAppVersion) > 0) {
+		const supported = m.minAppVersion === m.maxAppVersion ? m.minAppVersion : `${m.minAppVersion}–${m.maxAppVersion}`;
+		return `当前 FloWork 版本是 ${env.appVersion}，此内核仅适用于 FloWork ${supported}`;
+	}
 	if (m.adapterSha256 !== env.adapterSha256) return "该 Pi 未通过当前 FloWork 适配层的兼容性放行，请更新应用或等待维护者测试";
 	if (compareVersions(env.nodeVersion, m.minNodeVersion) < 0 || compareVersions(env.electronVersion, m.minElectronVersion) < 0) {
 		return "该内核需要更新的 Electron / Node 运行环境，请先更新 FloWork 应用";
