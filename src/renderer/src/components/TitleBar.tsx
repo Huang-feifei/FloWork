@@ -6,7 +6,7 @@
  */
 import { useEffect, useState } from "react";
 import { isMac } from "../lib/desktop";
-import { projectName, useApp } from "../store";
+import { canToggleRightPanel, projectName, useApp } from "../store";
 import { requestAppUpdateCheck } from "./AppUpdateNotice";
 import { Icon, type IconName } from "./Icon";
 import { Menu, type MenuItem } from "./sidebar/Menu";
@@ -70,6 +70,7 @@ function Location() {
 export function TitleBar() {
 	const sidebarOpen = useApp((s) => s.sidebarOpen);
 	const rightPanel = useApp((s) => s.rightPanel);
+	const canToggleTools = useApp(canToggleRightPanel);
 	const railVisible = useApp((s) => s.railVisible);
 	const terminalPanel = useApp((s) => s.terminalPanel);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
@@ -89,15 +90,14 @@ export function TitleBar() {
 				];
 			case "编辑":
 				return [
-					{ label: "快速打开文件…", hint: isMac ? "⌘P" : "Ctrl+P", onClick: () => s.setQuickOpen(true) },
 					{ label: "命令面板…", hint: isMac ? "⌘K" : "Ctrl+K", onClick: () => s.setPalette(true) },
 				];
 			case "视图":
 				return [
 					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", disabled: view === "imagegen", onClick: () => s.toggleSidebar() },
-					{ label: rightPanel ? "收起右侧面板" : "显示右侧面板", hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", onClick: () => s.setRightPanel(rightPanel ? null : "session") },
+					{ label: canToggleTools && rightPanel ? "收起工具面板" : "打开工具面板", hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", disabled: !canToggleTools, onClick: s.toggleRightPanel },
 					{ label: "数据库工作台", onClick: () => s.setView("database") },
-					{ label: "打开内置浏览器", onClick: () => { s.setView("chat"); s.setRightPanel("browser"); } },
+					{ label: "打开内置浏览器", onClick: () => s.openRightPanel("browser") },
 				];
 			case "会话":
 				return [
@@ -160,9 +160,9 @@ export function TitleBar() {
 			}
 			// Ctrl+Alt+B：右侧面板（用 code 判断，避免 Alt 在部分布局下改变 key）
 			if (e.altKey) {
-				if (e.code === "KeyB") {
+				if (e.code === "KeyB" && canToggleRightPanel(s)) {
 					e.preventDefault();
-					s.setRightPanel(s.rightPanel ? null : "session");
+					s.toggleRightPanel();
 				}
 				return;
 			}

@@ -19,16 +19,13 @@ import { MentionMenu, useMentionMenu, type MentionItem } from "./MentionMenu";
 import { Transcript } from "./Transcript";
 import { TrustBanner } from "./TrustBanner";
 import { FilePreview } from "../panels/FilePreview";
-import { QuickOpen } from "../panels/QuickOpen";
 import { RightPanel, useChangedCount } from "../panels/RightPanel";
 import { displayUserText } from "@shared/skill-text";
 
 function SessionHeader() {
 	const rightPanel = useApp((s) => s.rightPanel);
-	const terminalPanel = useApp((s) => s.terminalPanel);
-	const foldProcess = useApp((s) => s.foldProcess);
 	const changedCount = useChangedCount();
-	const { setView, toggleFoldProcess, setRightPanel, setTerminalPanel } = useApp.getState();
+	const { setView, toggleRightPanel } = useApp.getState();
 	return (
 		<header className="fw-page-heading fw-session-toolbar">
 			<div className="min-w-0 flex-1">
@@ -36,21 +33,15 @@ function SessionHeader() {
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
 				{changedCount > 0 && (
-					<button type="button" title={`查看本会话的文件改动（${changedCount} 个文件）`} onClick={() => setView("review")} className="fw-workbench-button fw-review-link">
+					<button type="button" aria-label={`查看本会话的文件改动（${changedCount} 个文件）`} title={`查看本会话的文件改动（${changedCount} 个文件）`} onClick={() => setView("review")} className="fw-workbench-button fw-review-link">
 						<Icon name="git-compare" className="size-4" />
 						<span className="fw-review-word">文件改动</span>
 						<span className="rounded-sm bg-panel-2 px-1 text-[11px] tabular-nums text-muted">{changedCount}</span>
 					</button>
 				)}
-				<button type="button" aria-pressed={foldProcess} onClick={toggleFoldProcess} className="fw-workbench-button fw-fold-button">
-					{foldProcess ? "展开过程" : "折叠过程"}
-				</button>
-				<button type="button" title="终端" aria-pressed={terminalPanel} onClick={() => setTerminalPanel(!terminalPanel)} className="grid size-8 place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-fg">
-					<Icon name="square-terminal" className="size-4" />
-				</button>
-				<button type="button" aria-expanded={!!rightPanel} onClick={() => setRightPanel(rightPanel ? null : "session")} className="fw-workbench-button">
+				<button type="button" aria-expanded={!!rightPanel} aria-controls={rightPanel ? "conversation-tools" : undefined} onClick={toggleRightPanel} className="fw-workbench-button fw-session-tools">
 					<Icon name="panel-right" className="size-4" />
-					{rightPanel ? "收起面板" : "会话文件"}
+					工具面板
 				</button>
 			</div>
 		</header>
@@ -774,7 +765,6 @@ export function TerminalView() {
 				<SessionRail scrollRef={scrollRef} />
 				<RightPanel />
 			</div>
-			<QuickOpen />
 		</div>
 	);
 }

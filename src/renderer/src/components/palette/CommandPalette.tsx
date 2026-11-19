@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFileSearch } from "../../lib/useFileSearch";
 import { useBrowserOcclusion } from "../../lib/browser";
 import { relativeTime } from "../../lib/format";
-import { projectName, useApp } from "../../store";
+import { canToggleRightPanel, projectName, useApp } from "../../store";
 import { Icon, type IconName } from "../Icon";
 
 interface Item {
@@ -34,6 +34,8 @@ export function CommandPalette() {
 	const projects = useApp((s) => s.projects.projects);
 	const projectSessions = useApp((s) => s.projectSessions);
 	const foldProcess = useApp((s) => s.foldProcess);
+	const activeProjectId = useApp((s) => s.activeProjectId);
+	const canToggleTools = useApp(canToggleRightPanel);
 	const [text, setText] = useState("");
 	const [active, setActive] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -68,31 +70,30 @@ export function CommandPalette() {
 
 		const commands: Item[] = (
 			[
-				{ icon: "square-pen", label: "新建会话", key: "Ctrl+N", when: s.activeProjectId !== null, run: () => void s.newSession() },
-				{ icon: "git-compare", label: "查看本会话的文件改动", key: "Ctrl+Shift+D", when: s.activeProjectId !== null, run: () => s.setView("review") },
+				{ icon: "square-pen", label: "新建会话", key: "Ctrl+N", when: activeProjectId !== null, run: () => void s.newSession() },
+				{ icon: "git-compare", label: "查看本会话的文件改动", key: "Ctrl+Shift+D", when: activeProjectId !== null, run: () => s.setView("review") },
 				{ icon: "folder-plus", label: "导入项目文件夹…", key: "Ctrl+O", when: true, run: () => void s.importProjects() },
 				{ icon: "server", label: "添加远程项目（SSH）…", when: true, run: () => s.setRemoteOpen(true) },
-				{ icon: "search", label: "快速打开文件…", key: "Ctrl+P", when: s.activeProjectId !== null, run: () => s.setQuickOpen(true) },
 				{ icon: "cpu", label: "配置模型…", key: "Ctrl+M", when: true, run: () => s.setView("settings", "custom") },
-				{ icon: "square-terminal", label: "切换终端面板", key: "Ctrl+`", when: true, run: () => s.setTerminalPanel(!s.terminalPanel) },
+				{ icon: "square-terminal", label: "切换终端面板", key: "Ctrl+`", when: true, run: () => s.setTerminalPanel(!useApp.getState().terminalPanel) },
 				{ icon: "database", label: "打开数据库工作台", when: true, run: () => s.setView("database") },
 				{ icon: "settings", label: "打开设置", when: true, run: () => s.setView("settings") },
 				{ icon: "messages", label: "回到会话", when: true, run: () => s.setView("chat") },
-				{ icon: "globe", label: "打开内置浏览器", when: true, run: () => { s.setView("chat"); s.setRightPanel("browser"); } },
-				{ icon: "files", label: "显示项目文件", when: true, run: () => s.setRightPanel("files") },
-				{ icon: "panel-right", label: "切换右侧面板", key: "Ctrl+Alt+B", when: true, run: () => s.setRightPanel(s.rightPanel ? null : "session") },
-				{ icon: "list-tree", label: "切换会话树轨道", when: true, run: () => s.toggleRail() },
+				{ icon: "globe", label: "打开内置浏览器", when: true, run: () => s.openRightPanel("browser") },
+				{ icon: "files", label: "显示项目文件", when: activeProjectId !== null, run: () => s.openRightPanel("files") },
+				{ icon: "panel-right", label: "切换工具面板", key: "Ctrl+Alt+B", when: canToggleTools, run: s.toggleRightPanel },
+				{ icon: "list-tree", label: "切换会话树轨道", when: activeProjectId !== null, run: s.toggleRail },
 				{ icon: "message-square", label: "查看更新内容", when: true, run: () => s.setUpdatedTo(s.info?.version ?? null) },
 				{
 					icon: "folder-open",
 					label: "打开服务器目录",
-					when: !!s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId,
-					run: () => s.setRightPanel("server"),
+					when: projects.some((project) => project.id === activeProjectId && !!project.hostId),
+					run: () => s.openRightPanel("server"),
 				},
 				{
 					icon: foldProcess ? "chevron-down" : "chevron-right",
 					label: foldProcess ? "展开思考与工具调用" : "折叠思考与工具调用",
-					when: s.activeProjectId !== null,
+					when: activeProjectId !== null,
 					run: () => s.toggleFoldProcess(),
 				},
 				{
@@ -134,7 +135,7 @@ export function CommandPalette() {
 		if (search !== "commands" && sessions.length > 0) out.push({ title: "会话", items: sessions });
 		if (search !== "commands" && files.length > 0) out.push({ title: "文件", items: files });
 		return out;
-	}, [query, search, projects, projectSessions, result, foldProcess]);
+	}, [query, search, projects, projectSessions, result, foldProcess, activeProjectId, canToggleTools]);
 
 	const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 	const current = Math.min(active, Math.max(0, flat.length - 1));

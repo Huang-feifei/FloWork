@@ -25,7 +25,7 @@ export function TurnFooter({
 }) {
 	const preview = useApp((s) => s.preview);
 	const isRunning = useApp((s) => s.isRunning);
-	const { openPreview, navigateTo, forkFrom, pushNotice, setView } = useApp.getState();
+	const { openPreview, navigateTo, forkFrom, pushNotice } = useApp.getState();
 
 	const duration = formatDuration(turn.endTimestamp - turn.user.timestamp);
 	const entryId = turn.user.entryId;
@@ -53,10 +53,7 @@ export function TurnFooter({
 		<div className="mt-2">
 			{changed.length > 0 && (
 				<div className="mb-2 overflow-hidden rounded-lg border border-border">
-					<div className="flex items-center justify-between gap-3 bg-term-bar px-3 py-2 text-[12px] text-muted">
-						<span>本轮修改 · {changed.length} 个文件</span>
-						<button type="button" onClick={() => setView("review")} className="shrink-0 text-fg hover:underline">查看会话改动</button>
-					</div>
+					<div className="bg-term-bar px-3 py-2 text-[12px] text-muted">本轮修改 · {changed.length} 个文件</div>
 					{changed.map((f) => {
 						const inside = isInsideWorkspace(f.path);
 						const name = f.path.split("/").pop() ?? f.path;

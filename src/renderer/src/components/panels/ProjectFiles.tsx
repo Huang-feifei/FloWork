@@ -266,7 +266,7 @@ export function ProjectFiles() {
 				<input
 					value={filter}
 					onChange={(e) => setFilter(e.target.value)}
-					placeholder="搜索整个项目（Ctrl+P）"
+					placeholder="搜索整个项目"
 					onKeyDown={(e) => {
 						if (e.key === "Escape") setFilter("");
 						if (e.key === "Enter" && search.result?.matches[0]) openPreview(search.result.matches[0].path);

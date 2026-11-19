@@ -8,7 +8,7 @@ export function SessionFiles() {
 	const messages = useApp((s) => s.messages);
 	const cwd = useApp((s) => s.cwd);
 	const preview = useApp((s) => s.preview);
-	const { openPreview, insertIntoPrompt, setView } = useApp.getState();
+	const { openPreview, insertIntoPrompt } = useApp.getState();
 	const files = useMemo(() => collectSessionFiles(messages, cwd), [messages, cwd]);
 	const changedFiles = files.filter((f) => f.changes.some((c) => !c.isError));
 	const readOnly = files.filter((f) => !f.changes.some((c) => !c.isError));
@@ -72,10 +72,6 @@ export function SessionFiles() {
 						<span className="font-medium tabular-nums text-diff-add-fg">+{totals.added}</span>&nbsp;<span className="font-medium tabular-nums text-diff-del-fg">−{totals.removed}</span>
 					</div>
 					{changedFiles.map(row)}
-					<button type="button" onClick={() => setView("review")} className="fw-workbench-button mt-3 mb-2 w-full">
-						查看文件改动
-						<Icon name="arrow-right" className="size-3.5" />
-					</button>
 				</>
 			)}
 			{readOnly.length > 0 && (

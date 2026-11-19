@@ -12,7 +12,6 @@ import { Button } from "../ui";
 
 const KEYS: Array<[string, string]> = [
 	["Ctrl+K", "命令面板"],
-	["Ctrl+P", "快速打开文件"],
 	["Ctrl+N", "新会话"],
 	["Ctrl+`", "终端"],
 	["Esc", "中断运行中的任务"],

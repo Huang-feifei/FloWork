@@ -137,16 +137,15 @@ interface AppState extends SessionSlice {
 	draft: { text: string; images?: ImageAttachment[]; seq: number; append?: boolean };
 	/** 版本更新提示：启动时发现版本变化则置为当前版本号，null 表示不弹 */
 	updatedTo: string | null;
-	/** 右侧面板：项目文件 / 会话文件 / 浏览器；null 表示收起 */
+	/** 右侧工具面板；null 表示收起。 */
 	rightPanel: RightPanel | null;
+	lastRightPanel: RightPanel;
 	/** 会话树窄轨是否显示（贴会话区右缘） */
 	railVisible: boolean;
 	/** 会话记录里历史轮次的「思考 + 工具调用」是否折叠成一行（运行中的一轮始终展开） */
 	foldProcess: boolean;
 	/** 左侧项目栏是否展开（Ctrl+B） */
 	sidebarOpen: boolean;
-	/** Ctrl+P 快速打开文件弹窗 */
-	quickOpen: boolean;
 	/** Ctrl+K 命令面板 */
 	palette: { open: boolean; query: string; mode: PaletteMode };
 	/** 底部面板（终端 / 输出 / pi 日志）是否展开 */
@@ -226,12 +225,13 @@ interface AppState extends SessionSlice {
 	/** 应答扩展对话框；response 为空表示取消 */
 	respondExtUI(id: string, response: { value?: string; confirmed?: boolean } | null): Promise<void>;
 	setRightPanel(panel: RightPanel | null): void;
+	openRightPanel(panel: RightPanel): void;
+	toggleRightPanel(): void;
 	/** 显示 / 隐藏会话树窄轨 */
 	toggleRail(): void;
 	/** 折叠 / 展开会话记录里历史轮次的思考与工具调用 */
 	toggleFoldProcess(): void;
 	toggleSidebar(): void;
-	setQuickOpen(open: boolean): void;
 	setPalette(open: boolean, mode?: PaletteMode): void;
 	setTerminalPanel(open: boolean): void;
 	setPanelTab(tab: BottomTab): void;
@@ -257,6 +257,7 @@ const LEGACY_LAST_CWD_KEY = "flowork.lastCwd";
 const LAST_VERSION_KEY = "flowork.lastVersion";
 const APPROVAL_KEY = "flowork.approvalMode";
 const PANEL_KEY = "flowork.rightPanel";
+const LAST_PANEL_KEY = "flowork.lastRightPanel";
 const RAIL_KEY = "flowork.sessionRail";
 const FOLD_PROCESS_KEY = "flowork.foldProcess";
 const SIDEBAR_KEY = "flowork.sidebarOpen";
@@ -264,9 +265,13 @@ const EXPANDED_KEY = "flowork.expandedProjects";
 /** 图库收藏：按图片 id 记录，与缓存文件生命周期解耦（清空缓存后收藏保留） */
 const IMAGE_FAVORITES_KEY = "flowork.imageFavorites";
 
-function storedPanel(): RightPanel | null {
-	const v = localStorage.getItem(PANEL_KEY);
-	return v === "files" || v === "session" || v === "server" || v === "services" || v === "browser" ? v : null;
+function storedPanel(key = PANEL_KEY): RightPanel | null {
+	const v = localStorage.getItem(key);
+	return v === "files" || v === "execution" || v === "session" || v === "server" || v === "services" || v === "browser" ? v : null;
+}
+
+export function canToggleRightPanel(s: Pick<AppState, "view" | "activeProjectId" | "rightPanel" | "lastRightPanel">): boolean {
+	return s.view === "chat" && (s.activeProjectId !== null || (s.rightPanel ?? s.lastRightPanel) === "browser");
 }
 
 /** 会话树窄轨默认显示；只有显式关过才隐藏 */
@@ -664,10 +669,10 @@ export const useApp = create<AppState>()((set, get) => {
 		draft: { text: "", seq: 0 },
 		updatedTo: null,
 		rightPanel: storedPanel(),
+		lastRightPanel: storedPanel(LAST_PANEL_KEY) ?? storedPanel() ?? "session",
 		railVisible: storedRail(),
 		foldProcess: storedFoldProcess(),
 		sidebarOpen: localStorage.getItem(SIDEBAR_KEY) !== "0",
-		quickOpen: false,
 		palette: { open: false, query: "", mode: "all" },
 		terminalPanel: false,
 		panelTab: "terminal",
@@ -1185,7 +1190,27 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setRightPanel(panel) {
 			localStorage.setItem(PANEL_KEY, panel ?? "");
-			set({ rightPanel: panel });
+			if (panel) localStorage.setItem(LAST_PANEL_KEY, panel);
+			set(panel ? { rightPanel: panel, lastRightPanel: panel } : { rightPanel: null });
+		},
+
+		openRightPanel(panel) {
+			const s = get();
+			if (panel !== "browser" && !s.activeProjectId) return;
+			if (s.view !== "chat") s.setView("chat");
+			s.setRightPanel(panel);
+		},
+
+		toggleRightPanel() {
+			const s = get();
+			if (!canToggleRightPanel(s)) return;
+			if (s.rightPanel) {
+				s.setRightPanel(null);
+				return;
+			}
+			const remote = s.projects.projects.some((project) => project.id === s.activeProjectId && !!project.hostId);
+			const panel = s.lastRightPanel;
+			s.setRightPanel((panel === "server" || panel === "services") && !remote ? "files" : panel);
 		},
 
 		toggleRail() {
@@ -1205,10 +1230,6 @@ export const useApp = create<AppState>()((set, get) => {
 			const next = !get().sidebarOpen;
 			localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
 			set({ sidebarOpen: next });
-		},
-
-		setQuickOpen(open) {
-			set({ quickOpen: open && !!get().cwd });
 		},
 
 		setPalette(open, mode = "all") {
