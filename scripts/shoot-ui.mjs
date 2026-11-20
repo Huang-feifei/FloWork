@@ -156,7 +156,8 @@ const verifyWorkspace = `(async () => {
 	await waitFor(() => !document.contains(palette), '命令面板未关闭');
 	const tools = () => document.querySelector('.fw-session-tools');
 	const panel = () => document.getElementById('conversation-tools');
-	const tab = () => panel()?.querySelector('select[aria-label="切换工具页签"]');
+	const tab = () => panel()?.querySelector('.fw-inspector-trigger');
+	const menu = () => panel()?.querySelector('[role="menu"][aria-label="切换工具页签"]');
 	const toolsShortcut = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', ctrlKey: true, altKey: true, cancelable: true }));
 	if (document.querySelectorAll('.fw-session-toolbar button').length !== 2) throw new Error('会话顶部仍有重复按钮');
 	const previousPanel = store.getState().rightPanel;
@@ -164,7 +165,7 @@ const verifyWorkspace = `(async () => {
 	toolsShortcut();
 	if (store.getState().rightPanel !== previousPanel) throw new Error('在设置页误改了会话工具面板状态');
 	open('项目文件'); await heading('修复 relativeTime 的边界问题');
-	await waitFor(() => tab()?.value === 'files' && document.querySelector('input[placeholder="搜索整个项目"]'), '从设置页打开项目文件失败');
+	await waitFor(() => tab()?.dataset.panel === 'files' && document.querySelector('input[placeholder="搜索整个项目"]'), '从设置页打开项目文件失败');
 	const search = document.querySelector('input[placeholder="搜索整个项目"]');
 	const searchFor = (value) => {
 		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, value);
@@ -177,20 +178,28 @@ const verifyWorkspace = `(async () => {
 	search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 	if (store.getState().preview) throw new Error('搜索期间的回车打开了旧结果');
 	await waitFor(() => panel()?.textContent.includes('没有找到匹配的文件'), '没有搜索无结果提示');
-	tab().value = 'execution';
-	tab().dispatchEvent(new Event('change', { bubbles: true }));
-	await waitFor(() => tab()?.value === 'execution', '无法切换到执行树');
+	tab().click();
+	const checked = await waitFor(() => menu()?.querySelector('[role="menuitemradio"][aria-checked="true"]'), '工具菜单未标记当前项');
+	if (checked.dataset.panel !== 'files' || document.activeElement !== checked || menu().querySelectorAll('[role="menuitemradio"]').length !== 4) throw new Error('本地工具菜单当前项或焦点不正确');
+	checked.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+	await waitFor(() => !menu() && document.activeElement === tab(), 'Esc 关闭菜单后未恢复焦点');
+	tab().dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+	await waitFor(() => document.activeElement === menu()?.querySelector('[aria-checked="true"]'), '键盘未打开工具菜单');
+	document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+	if (document.activeElement.dataset.panel !== 'execution') throw new Error('方向键未切换焦点');
+	document.activeElement.click();
+	await waitFor(() => tab()?.dataset.panel === 'execution' && !menu() && document.activeElement === tab(), '无法切换到执行树并恢复焦点');
 	panel().querySelector('button[aria-label="收起工具面板"]').click();
 	await waitFor(() => !panel() && tools()?.getAttribute('aria-expanded') === 'false', '收起后工具按钮状态不符');
 	toolsShortcut();
-	await waitFor(() => tab()?.value === 'execution' && tools()?.getAttribute('aria-expanded') === 'true', '快捷键未恢复上次使用的执行树页签');
+	await waitFor(() => tab()?.dataset.panel === 'execution' && tools()?.getAttribute('aria-expanded') === 'true', '快捷键未恢复上次使用的执行树页签');
 	if (localStorage.getItem('flowork.lastRightPanel') !== 'execution') throw new Error('工具页签未记住');
 	toolsShortcut();
 	await waitFor(() => !panel(), '快捷键未收起面板');
 	tools().click();
-	await waitFor(() => tab()?.value === 'execution', '工具按钮未恢复上次使用的执行树页签');
+	await waitFor(() => tab()?.dataset.panel === 'execution', '工具按钮未恢复上次使用的执行树页签');
 	store.getState().setRightPanel('session');
-	await waitFor(() => tab()?.value === 'session' && panel()?.textContent.includes('已修改 1 个文件'), '会话文件列表或改动统计被影响');
+	await waitFor(() => tab()?.dataset.panel === 'session' && panel()?.textContent.includes('已修改 1 个文件'), '会话文件列表或改动统计被影响');
 	const chat = document.querySelector('main[data-view="chat"]');
 	if (!chat.textContent.includes('本轮修改 · 1 个文件')) throw new Error('本轮修改摘要被影响');
 	if ([...chat.querySelectorAll('button')].some(button => /^(查看会话改动|查看文件改动)$/.test(button.textContent.trim()))) throw new Error('会话内仍有重复的改动入口');
@@ -296,6 +305,7 @@ const scenes = {
 	empty: [`window.__floworkStore.setState({ view: "chat", activeProjectId: null, cwd: null, handleId: null, messages: [], state: null })`],
 	chat: [mock, showSessionFiles, { js: verifyWorkspace, wait: 80 }, { js: chatTop, wait: 80 }],
 	"chat-dark": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`, { js: chatTop, wait: 80 }],
+	"tools-menu-dark": [mock, `window.__floworkStore.getState().setRightPanel('files'); document.documentElement.dataset.theme = 'dark'`, { js: `document.querySelector('.fw-inspector-trigger').click()`, wait: 80 }],
 	"composer-running-dark": [mock, showSessionFiles, modelExamples, `document.documentElement.dataset.theme = "dark"`, { js: verifyComposerLayout, wait: 100 }],
 	"app-update": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`,
 		{ appUpdate: { phase: "downloading", version: "1.1.10", downloaded: 45, total: 100 }, wait: 100 },

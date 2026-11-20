@@ -1,21 +1,22 @@
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { collectSessionFiles } from "../../lib/session-files";
-import { type RightPanel as Panel, useApp } from "../../store";
+import { useApp } from "../../store";
 import { BrowserPanel } from "../browser/BrowserPanel";
 import { Icon } from "../Icon";
 import { ExecutionTreePanel } from "./ExecutionTreePanel";
+import { PanelChooser, type PanelTab } from "./PanelChooser";
 import { ProjectFiles } from "./ProjectFiles";
 import { ServerFiles } from "./ServerFiles";
 import { ServerStatus } from "./ServerStatus";
 import { SessionFiles } from "./SessionFiles";
 
-export const PANEL_TABS: Array<{ id: Panel; label: string; hint: string; remoteOnly?: boolean }> = [
-	{ id: "files", label: "项目文件", hint: "浏览工作区目录" },
-	{ id: "execution", label: "执行树", hint: "查看任务执行进度树、工具链与每步输出" },
-	{ id: "session", label: "会话文件", hint: "本会话读取和修改过的文件" },
-	{ id: "browser", label: "内置浏览器", hint: "在聊天旁浏览网页、预览本地 HTML（桌面版）" },
-	{ id: "server", label: "服务器目录", hint: "浏览服务器上的任意目录、上传下载", remoteOnly: true },
-	{ id: "services", label: "服务状态", hint: "远端主机的负载、服务与端口（只读）", remoteOnly: true },
+const PANEL_TABS: readonly PanelTab[] = [
+	{ id: "files", label: "项目文件", hint: "浏览、搜索与引用项目文件", icon: "files" },
+	{ id: "execution", label: "执行树", hint: "查看任务步骤和工具输出", icon: "list-tree" },
+	{ id: "session", label: "会话文件", hint: "本会话读写过的文件", icon: "file-code" },
+	{ id: "browser", label: "内置浏览器", hint: "在会话旁浏览网页或预览 HTML", icon: "globe" },
+	{ id: "server", label: "服务器目录", hint: "浏览远端文件、上传和下载", icon: "folder-open", remoteOnly: true },
+	{ id: "services", label: "服务状态", hint: "查看远端负载、服务与端口", icon: "server", remoteOnly: true },
 ];
 
 
@@ -94,18 +95,9 @@ export function RightPanel() {
 					setRatio(next);
 					localStorage.setItem(WIDTH_KEY, String(next));
 				}} />}
-			<div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
+			<div className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-3">
 				<div className="min-w-0 flex-1">
-					{tabs.length === 1 ? <h2 className="text-[13px] font-semibold">{tabs[0]?.label}</h2> : (
-						<select
-							aria-label="切换工具页签"
-							value={active ?? ""}
-							onChange={(event) => setRightPanel(event.target.value as Panel)}
-							className="max-w-full rounded-md py-1 pr-1 text-[13px] font-semibold text-fg outline-offset-2 hover:bg-panel-2 focus-visible:outline-primary"
-						>
-							{tabs.map((tab) => <option key={tab.id} value={tab.id} title={tab.hint}>{tab.label}</option>)}
-						</select>
-					)}
+					<PanelChooser tabs={tabs} active={active} onSelect={setRightPanel} />
 				</div>
 				<button
 					type="button"
