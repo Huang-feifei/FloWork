@@ -1,4 +1,5 @@
 import { Icon, type IconName } from "./Icon";
+import { AppUpdateNotice } from "./AppUpdateNotice";
 import { useApp } from "../store";
 
 type Section = "main" | "tools" | "settings";
@@ -57,6 +58,7 @@ export function ActivityBar() {
 			<div className="fw-rail-separator" />
 			{render("tools")}
 			<div className="flex-1" />
+			<AppUpdateNotice />
 			{render("settings")}
 		</nav>
 	);

@@ -11,7 +11,7 @@ import { Button, Field, Input, Modal, Select, TextArea, Toggle } from "../ui";
 export interface ImageModelDraft {
 	id: string;
 	name: string;
-	/** 支持的尺寸，例如 ["1024x1024", "1536x1024"] */
+	/** 工作台尺寸预设（可为空），不是强制限制。 */
 	sizes: string[];
 	/** 是否支持参考图（图生图，走 /images/edits） */
 	edits: boolean;
@@ -25,7 +25,7 @@ export interface ImageModelDraft {
 export const SIZE_PRESETS = ["1024x1024", "1536x1024", "1024x1536", "512x512"];
 
 export function emptyImageModel(id = ""): ImageModelDraft {
-	return { id, name: "", sizes: ["1024x1024"], edits: true, price: "", advanced: "" };
+	return { id, name: "", sizes: [], edits: true, price: "", advanced: "" };
 }
 
 /** 把 models.json 里的一条 imageModels 读成草稿 */
@@ -33,7 +33,7 @@ export function toImageModelDraft(entry: Record<string, unknown>): ImageModelDra
 	const draft = emptyImageModel(String(entry.id ?? ""));
 	draft.name = typeof entry.name === "string" ? entry.name : "";
 	const sizes = Array.isArray(entry.sizes) ? entry.sizes.map(String).filter(Boolean) : [];
-	draft.sizes = sizes.length > 0 ? sizes : ["1024x1024"];
+	draft.sizes = sizes;
 	draft.edits = entry.edits === true;
 	if (entry.price !== undefined && Number.isFinite(Number(entry.price))) draft.price = String(entry.price);
 	const known = new Set(["id", "name", "sizes", "edits", "price"]);
@@ -63,7 +63,6 @@ export function toImageModelEntry(model: ImageModelDraft): Record<string, unknow
 export function validateImageModel(model: ImageModelDraft): string | undefined {
 	const id = model.id.trim();
 	if (!id) return "图片模型的 ID 不能为空";
-	if (model.sizes.length === 0) return `${id}：至少要选一个尺寸`;
 	if (model.price.trim() && !(Number.isFinite(Number(model.price)) && Number(model.price) >= 0)) {
 		return `${id}：每张价格必须是非负数`;
 	}
@@ -92,6 +91,7 @@ export function ImageModelDialog({
 	onSave: (model: ImageModelDraft) => void;
 }) {
 	const [d, setD] = useState(initial);
+	const [customSizes, setCustomSizes] = useState(() => initial.sizes.filter(size => !SIZE_PRESETS.includes(size)).join(", "));
 	const [error, setError] = useState<string | undefined>();
 	const patch = (next: Partial<ImageModelDraft>) => setD((prev) => ({ ...prev, ...next }));
 
@@ -100,12 +100,15 @@ export function ImageModelDialog({
 	};
 
 	const submit = () => {
-		const invalid = validateImageModel(d);
+		const chosen = new Set([...d.sizes.filter(size => SIZE_PRESETS.includes(size)), ...customSizes.split(/[,，]/).map(size => size.trim()).filter(Boolean)]);
+		const sizes = [...new Set([...d.sizes.filter(size => chosen.has(size)), ...chosen])];
+		const draft = { ...d, sizes, id: d.id.trim() };
+		const invalid = validateImageModel(draft);
 		if (invalid) {
 			setError(invalid);
 			return;
 		}
-		onSave({ ...d, id: d.id.trim() });
+		onSave(draft);
 	};
 
 	return (
@@ -158,8 +161,8 @@ export function ImageModelDialog({
 
 			<div className="mt-5">
 				<div className="mb-2 flex items-center gap-2.5">
-					<span className="text-[12.5px] font-medium text-fg">支持的尺寸</span>
-					<span className="text-[12px] text-faint">勾上的会出现在生成工作台的尺寸下拉里</span>
+					<span className="text-[12.5px] font-medium text-fg">尺寸预设（可选）</span>
+					<span className="text-[12px] text-faint">用于工作台快速选择，不限制自定义尺寸</span>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
 					{SIZE_PRESETS.map((size) => {
@@ -179,14 +182,9 @@ export function ImageModelDialog({
 						);
 					})}
 					<Input
-						value={d.sizes.filter((s) => !SIZE_PRESETS.includes(s)).join(",")}
-						onChange={(e) => {
-							const custom = e.target.value
-								.split(",")
-								.map((s) => s.trim())
-								.filter(Boolean);
-							patch({ sizes: [...d.sizes.filter((s) => SIZE_PRESETS.includes(s)), ...custom] });
-						}}
+						aria-label="自定义尺寸预设"
+						value={customSizes}
+						onChange={(e) => setCustomSizes(e.target.value)}
 						placeholder="自定义，逗号分隔"
 						className="h-8 w-44 px-3 text-[12px]"
 					/>

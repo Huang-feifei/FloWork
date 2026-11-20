@@ -10,6 +10,7 @@
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { GeneratedImage, ImageModelInfo } from "@shared/protocol";
+import { normalizeImageSize } from "@shared/image-size";
 import { getPiAgentDir } from "./paths";
 
 /** 单张图片的上限：接口返回超过这个大小就拒绝（避免把内存撑爆） */
@@ -82,7 +83,7 @@ export async function listImageModels(): Promise<ImageModelInfo[]> {
 				provider,
 				id,
 				name: String(model.name ?? id),
-				sizes: (model.sizes ?? ["1024x1024"]).map(String),
+				sizes: Array.isArray(model.sizes) ? model.sizes.map(value => String(value).trim()).filter(Boolean) : [],
 				edits: model.edits === true,
 				price: typeof model.price === "number" ? model.price : undefined,
 			});
@@ -200,7 +201,9 @@ export async function generateImages(input: GenerateInput): Promise<GeneratedIma
 
 	const base = config.baseUrl.replace(/\/+$/, "");
 	const count = Math.min(Math.max(input.count ?? 1, 1), 4);
-	const size = input.size ?? chosen.sizes[0] ?? "1024x1024";
+	const requestedSize = input.size?.trim();
+	const size = requestedSize ? normalizeImageSize(requestedSize, chosen.sizes) : undefined;
+	if (requestedSize && !size) throw new Error("尺寸格式无效，请输入宽 × 高，或留空使用服务商默认尺寸。");
 
 	let entries: Array<{ b64_json?: string; url?: string }>;
 	if (input.reference) {
@@ -208,7 +211,7 @@ export async function generateImages(input: GenerateInput): Promise<GeneratedIma
 		form.append("model", chosen.id);
 		form.append("prompt", prompt);
 		form.append("n", String(count));
-		form.append("size", size);
+		if (size) form.append("size", size);
 		form.append("image", new Blob([Buffer.from(input.reference.dataBase64, "base64")], { type: input.reference.mimeType }), "reference.png");
 		const response = await fetch(`${base}/images/edits`, {
 			method: "POST",
@@ -221,7 +224,7 @@ export async function generateImages(input: GenerateInput): Promise<GeneratedIma
 		const response = await fetch(`${base}/images/generations`, {
 			method: "POST",
 			headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-			body: JSON.stringify({ model: chosen.id, prompt, n: count, size, ...(input.quality ? { quality: input.quality } : {}) }),
+			body: JSON.stringify({ model: chosen.id, prompt, n: count, ...(size ? { size } : {}), ...(input.quality ? { quality: input.quality } : {}) }),
 		});
 		if (!response.ok) throw new Error(`生成失败：HTTP ${response.status} ${await response.text().catch(() => "")}`.trim());
 		entries = ((await response.json()) as { data?: Array<{ b64_json?: string; url?: string }> }).data ?? [];
@@ -239,7 +242,7 @@ export async function generateImages(input: GenerateInput): Promise<GeneratedIma
 			id,
 			prompt,
 			model: chosen.key,
-			size,
+			size: size === "auto" || !size ? "服务商默认" : size,
 			quality: input.quality ?? "standard",
 			bytes: data.byteLength,
 			createdAt: Date.now(),

@@ -84,11 +84,11 @@ export function App() {
 
 			<div className="fw-shell fw-workbench relative flex h-full flex-col">
 				<TitleBar />
-				<AppUpdateNotice />
 
 				{view === "welcome" ? (
 					<div className="fw-welcome-frame min-h-0 flex-1">
 						<WelcomeView />
+						<AppUpdateNotice welcome />
 					</div>
 				) : (
 					<>

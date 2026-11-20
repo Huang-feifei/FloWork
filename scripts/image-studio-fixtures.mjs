@@ -83,6 +83,11 @@ async function verifyImageStudio({ models, prompt, png, results, previews }) {
 	const waitState = state => waitFor(() => stage()?.dataset.state === state, `画布未进入预期状态：${state}`);
 	const addReference = () => [...(main()?.querySelectorAll("button") ?? [])].find(button => name(button) === "添加参考图");
 	const unavailable = button => !button || button.matches(":disabled") || button.getAttribute("aria-disabled") === "true";
+	const sizeInput = () => find('#fw-image-size');
+	const enterSize = value => {
+		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(sizeInput(), value);
+		sizeInput().dispatchEvent(new Event("input", { bubbles: true }));
+	};
 	const sizeButtons = () => [...main().querySelectorAll("button[data-image-size]")];
 	const choice = () => find('select[aria-label="图片模型"]');
 	const hasSizeOptions = () => [...main().querySelectorAll("select option")].some(option => models.some(model => model.sizes.includes(option.value)));
@@ -128,7 +133,7 @@ async function verifyImageStudio({ models, prompt, png, results, previews }) {
 		check(editor().value.trim() === prompt && !editor().matches(":disabled"), "失败后未保留提示词或恢复编辑");
 	};
 	const checkReady = async index => {
-		resolveCall(null, { ...results[index], size: calls.at(-1).size });
+		resolveCall(null, { ...results[index], size: calls.at(-1).size ?? "服务商默认" });
 		await waitState("ready");
 		await waitFor(() => stageImages().some(image => image.naturalWidth > 0 && image.currentSrc.endsWith(previews[index])), "成功后没有在画布显示本次生成的缓存图片");
 	};
@@ -146,7 +151,7 @@ async function verifyImageStudio({ models, prompt, png, results, previews }) {
 	try {
 		await waitFor(() => find("h1")?.textContent.trim() === "图片生成" && editor() && submit() && choice(), "未加载生图工作台");
 		await waitState("idle");
-		await waitFor(() => find("[data-image-size-fixed]"), "没有直接显示模型的唯一尺寸");
+		await waitFor(() => sizeInput()?.value === "1024x1024" && !sizeInput().readOnly, "唯一预设应可直接编辑");
 		check(!hasSizeOptions() && sizeButtons().length === 0, "唯一尺寸仍然显示为下拉或选项按钮");
 		check(unavailable(addReference()), "文生图模型仍可添加参考图");
 		check(unavailable(submit()), "空提示词仍可提交");
@@ -157,7 +162,7 @@ async function verifyImageStudio({ models, prompt, png, results, previews }) {
 
 		await setModel(models[1]);
 		await waitFor(() => sizeButtons().length === models[1].sizes.length && !unavailable(addReference()), "多尺寸选项或参考图入口未显示");
-		check(!hasSizeOptions() && !find("[data-image-size-fixed]"), "多尺寸没有切换至选项按钮");
+		check(!hasSizeOptions() && sizeInput(), "多预设旁未保留尺寸编辑框");
 		check(JSON.stringify(sizeButtons().map(button => button.dataset.imageSize)) === JSON.stringify(models[1].sizes), "尺寸选项未按模型声明显示");
 		const preferred = sizeButtons().find(button => button.dataset.imageSize === "1536x1024");
 		preferred.click();
@@ -175,8 +180,17 @@ async function verifyImageStudio({ models, prompt, png, results, previews }) {
 		await checkFailed();
 
 		await setModel(models[0]);
-		await waitFor(() => find("[data-image-size-fixed]") && unavailable(addReference()), "切换模型后没有更新尺寸或能力");
-		await begin(models[0], "1024x1024", false);
+		await waitFor(() => sizeInput()?.value === "1024x1024" && unavailable(addReference()), "切换模型后没有更新尺寸或能力");
+		enterSize("0x1080");
+		await waitFor(() => sizeInput().getAttribute("aria-invalid") === "true" && unavailable(submit()), "非法尺寸未拦截");
+		enterSize("1920 × 1080");
+		await waitFor(() => !unavailable(submit()), "有效自定义尺寸未解锁生成");
+		await begin(models[0], "1920x1080", false);
+		await checkFailed();
+		check(sizeInput().value === "1920 × 1080", "失败后没有保留自定义尺寸");
+		[...main().querySelectorAll('button')].find(button => button.textContent.trim() === "用默认").click();
+		await waitFor(() => sizeInput().value === "", "服务商默认没有清空尺寸");
+		await begin(models[0], undefined, false);
 		await checkReady(0);
 
 		await setModel(models[1]);

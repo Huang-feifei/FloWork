@@ -1,6 +1,9 @@
-import { app, type BrowserWindow, ipcMain, type IpcMainInvokeEvent, nativeTheme, net, shell } from "electron";
-import { APP_UPDATE_CHANNELS } from "@shared/app-update";
+import { app, type BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, nativeTheme, net, shell } from "electron";
+import { join } from "node:path";
+import { APP_UPDATE_CHANNELS, type AppUpdateResult } from "@shared/app-update";
 import { appReleasePage, createAppUpdateChecker } from "./app-update";
+import { AppUpdateDownload } from "./app-update-download";
+import { logError } from "./log";
 import { BROWSER_CHANNELS } from "@shared/browser";
 import { type BackendMethod, ELECTRON_CHANNELS } from "@shared/protocol";
 // 窗口背景色只在页面渲染前可见，必须与 styles.css 的 --color-window 一致；三处取值统一从这里来。
@@ -22,6 +25,7 @@ export function registerIpc(
 	getWindow: () => BrowserWindow | undefined,
 	getBrowser: (win: BrowserWindow) => BrowserManager | undefined,
 	isAppUrl: (url: string) => boolean,
+	restartForAppUpdate: (installer: string) => void,
 ): void {
 	const requireAppFrame = (event: IpcMainInvokeEvent): BrowserWindow => {
 		const win = getWindow();
@@ -33,14 +37,42 @@ export function registerIpc(
 	};
 
 	const checkAppUpdate = createAppUpdateChecker(app.getVersion(), net.fetch);
-	ipcMain.handle(APP_UPDATE_CHANNELS.check, (event, manual: unknown) => {
+	const supportsAppUpdate = app.isPackaged && process.platform === "win32" && process.arch === "x64" && !process.argv.includes("--smoke");
+	const updates = new AppUpdateDownload({
+		directory: join(app.getPath("userData"), "app-update-cache"),
+		publish: (state) => {
+			const win = getWindow();
+			if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) win.webContents.send(APP_UPDATE_CHANNELS.changed, state);
+		},
+		logError: (error) => logError("app-update", error),
+	});
+	ipcMain.handle(APP_UPDATE_CHANNELS.check, async (event, manual: unknown): Promise<AppUpdateResult> => {
 		requireAppFrame(event);
-		if (!app.isPackaged || process.platform !== "win32" || process.arch !== "x64" || process.argv.includes("--smoke")) return { status: "unsupported" };
-		return checkAppUpdate(manual === true);
+		if (!supportsAppUpdate) return { status: "unsupported" };
+		const result = await checkAppUpdate(manual === true);
+		void updates.prepare(result, manual === true).catch((error) => logError("app-update", error));
+		return result.status === "available" ? { status: "available", version: result.version, current: result.current } : result;
+	});
+	ipcMain.handle(APP_UPDATE_CHANNELS.status, (event) => {
+		requireAppFrame(event);
+		return updates.status();
 	});
 	ipcMain.handle(APP_UPDATE_CHANNELS.open, (event, version: unknown) => {
 		requireAppFrame(event);
 		return shell.openExternal(appReleasePage(version));
+	});
+	ipcMain.handle(APP_UPDATE_CHANNELS.install, (event) => {
+		const win = requireAppFrame(event);
+		if (!supportsAppUpdate) throw new Error("当前客户端不支持在应用内安装更新。");
+		if (backend.workers.hasBusySessions()) throw new Error("有会话正在运行或等待交互，请先结束任务再重启安装。");
+		return updates.install(async (version) => {
+			const answer = await dialog.showMessageBox(win, {
+				type: "question", buttons: ["稍后", "重启安装"], defaultId: 0, cancelId: 0,
+				message: `重启 FloWork 并安装 v${version}？`,
+				detail: "终端连接会关闭，请先保存尚未提交的输入和编辑。安装完成后 FloWork 将重新打开。",
+			});
+			return answer.response === 1 && !win.isDestroyed();
+		}, restartForAppUpdate);
 	});
 
 	// 请求与推送都先序列化成字符串再跨进程：contextBridge 只允许 1000 层嵌套，

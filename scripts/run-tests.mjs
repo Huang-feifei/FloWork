@@ -20,6 +20,7 @@ process.on("exit", () => rmSync(reportDir, { recursive: true, force: true }));
 const SUITES = [
 	{ name: "kernel", file: "scripts/test-kernel.mjs", needsBuild: false },
 	{ name: "app-update", file: "scripts/test-app-update.mjs", needsBuild: false },
+	{ name: "image-size", file: "scripts/test-image-size.mjs", needsBuild: false },
 	{ name: "database", file: "scripts/test-database.mjs", needsBuild: false },
 	{ name: "hosts", file: "scripts/test-hosts.mjs", needsBuild: false },
 	{ name: "command-risk", file: "scripts/test-command-risk.mjs", needsBuild: false },

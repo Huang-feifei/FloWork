@@ -230,11 +230,39 @@ const waitForReview = `(async () => {
 	throw new Error('文件改动页面未加载');
 })()`;
 
+const verifyUpdateDownload = `(() => {
+	const trigger = document.querySelector('.fw-app-rail .fw-update-trigger');
+	const settings = document.querySelector('.fw-app-rail [title="设置"]');
+	if (!trigger || trigger.dataset.phase !== 'downloading' || !settings || trigger.getBoundingClientRect().bottom > settings.getBoundingClientRect().top) throw new Error('更新入口没有放在左下角设置上方');
+	if (document.querySelector('#fw-update-popover')) throw new Error('后台下载不应主动弹出浮层');
+	trigger.click();
+})()`;
+const verifyUpdateProgress = `(() => {
+	const panel = document.querySelector('#fw-update-popover');
+	const progress = panel?.querySelector('progress');
+	if (progress?.value !== 45 || progress?.max !== 100 || panel.textContent.includes('重启安装')) throw new Error('下载安装前的进度或动作不正确');
+	const rect = panel.getBoundingClientRect();
+	if (rect.left >= 100 || rect.bottom <= innerHeight - 100) throw new Error('更新浮层没有贴近左下角');
+})()`;
+const verifyUpdateReady = `(async () => {
+	const button = label => [...document.querySelectorAll('#fw-update-popover button')].find(node => node.textContent.trim() === label);
+	const trigger = document.querySelector('.fw-app-rail .fw-update-trigger');
+	if (trigger?.dataset.phase !== 'ready' || !button('重启安装') || !button('稍后')) throw new Error('校验完成后未提示可以重启安装');
+	button('稍后').click();
+	await new Promise(resolve => setTimeout(resolve, 60));
+	if (document.querySelector('#fw-update-popover') || !trigger.isConnected) throw new Error('稍后应收起详情，保留左下角入口');
+	trigger.click();
+})()`;
+
 const scenes = {
 	welcome: [setView("welcome")],
 	empty: [`window.__floworkStore.setState({ view: "chat", activeProjectId: null, cwd: null, handleId: null, messages: [], state: null })`],
 	chat: [mock, showSessionFiles, { js: verifyWorkspace, wait: 80 }, { js: chatTop, wait: 80 }],
 	"chat-dark": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`, { js: chatTop, wait: 80 }],
+	"app-update": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`,
+		{ appUpdate: { phase: "downloading", version: "1.1.10", downloaded: 45, total: 100 }, wait: 100 },
+		{ js: verifyUpdateDownload, wait: 100 }, { js: verifyUpdateProgress, wait: 80 },
+		{ appUpdate: { phase: "ready", version: "1.1.10" }, wait: 100 }, { js: verifyUpdateReady, wait: 100 }],
 	thinking: [mock, showSessionFiles, modelExamples, { js: verifyThinking, wait: 100 }, { js: openThinking, wait: 100 }],
 	"thinking-dark": [mock, showSessionFiles, modelExamples, `document.documentElement.dataset.theme = "dark"`, { js: openThinking, wait: 100 }],
 	review: [mock, `document.querySelector('.fw-review-link').click()`, { js: waitForReview, wait: 120 }],

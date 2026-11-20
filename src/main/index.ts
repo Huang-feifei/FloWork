@@ -279,7 +279,7 @@ app.whenReady().then(async () => {
 	if (!primaryInstance) return;
 	logLine("main", `启动 FloWork ${app.getVersion()}（Electron ${process.versions.electron}）`);
 	await kernelUpdates.initialize();
-	registerIpc(backend, () => mainWindow, (win) => browsers.get(win), isAppUrl);
+	registerIpc(backend, () => mainWindow, (win) => browsers.get(win), isAppUrl, restartForAppUpdate);
 	mainWindow = createWindow(!isSmoke && !isUIShot);
 
 	if (isSmoke || isUIShot) {
@@ -308,6 +308,32 @@ app.on("window-all-closed", () => {
 });
 
 let quitting = false;
+let installerOnQuit: string | undefined;
+
+function restartForAppUpdate(installer: string) {
+	if (quitting || installerOnQuit) throw new Error("FloWork 正在退出。");
+	if (backend.workers.hasBusySessions()) throw new Error("有会话正在运行或等待交互，请先结束任务再重启安装。");
+	installerOnQuit = installer;
+	app.quit();
+}
+
+app.on("will-quit", (event) => {
+	const installer = installerOnQuit;
+	if (!installer) return;
+	installerOnQuit = undefined;
+	event.preventDefault();
+	// 此时窗口与后端已关闭；安装器负责在安装完成后启动新版本。
+	const failed = (error: unknown) => {
+		logError("app-update", error);
+		dialog.showErrorBox("无法启动 FloWork 更新", "请重新打开 FloWork 重试，或从 GitHub 发布页手动安装。");
+		app.quit();
+	};
+	try {
+		const child = spawn(installer, ["/S", "--updated", "--force-run"], { detached: true, stdio: "ignore", windowsHide: true });
+		child.once("error", failed);
+		child.once("spawn", () => { child.unref(); app.quit(); });
+	} catch (error) { failed(error); }
+});
 app.on("before-quit", (event) => {
 	if (quitting) return;
 	quitting = true;

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GeneratedImage, ImageAttachment } from "@shared/protocol";
+import { normalizeImageSize } from "@shared/image-size";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Icon } from "../Icon";
 import { askConfirm } from "../ConfirmDialog";
-import { Button, Select } from "../ui";
+import { Button, Input, Select } from "../ui";
 import { PageHeading } from "../PageHeading";
 import "./image-studio.css";
 
@@ -84,8 +85,12 @@ export function ImageStudio({ active }: { active: boolean }) {
 
 	const model = imageModels.find((item) => item.key === modelKey) ?? imageModels[0];
 	const sizes = [...new Set(model?.sizes.filter(Boolean) ?? [])];
-	const preferred = model ? sizeSelections[model.key] : undefined;
-	const size = preferred && sizes.includes(preferred) ? preferred : sizes[0];
+	const sizeTextInput = model ? sizeSelections[model.key] ?? sizes[0] ?? "" : "";
+	const size = normalizeImageSize(sizeTextInput, sizes);
+	const sizeInvalid = !!sizeTextInput.trim() && !size;
+	const setSize = (value: string) => {
+		if (model) setSizeSelections((previous) => ({ ...previous, [model.key]: value }));
+	};
 	const canReference = !!model?.edits;
 	const effectiveReference = canReference ? reference?.image : undefined;
 	const batch = createdIds.flatMap((id) => { const item = images.find((image) => image.id === id); return item ? [item] : []; });
@@ -93,7 +98,7 @@ export function ImageStudio({ active }: { active: boolean }) {
 	const selected = images.find((image) => image.id === selectedId) ?? batch[0];
 	const preview = useImagePreview(selected?.id ?? "");
 	const stage = busy ? "generating" : error ? "error" : selected ? "ready" : "idle";
-	const canGenerate = !busy && !reading && !!model && !!prompt.trim();
+	const canGenerate = !busy && !reading && !sizeInvalid && !!model && !!prompt.trim();
 
 	async function pickReference(file: File) {
 		setReferenceError("");
@@ -242,17 +247,25 @@ export function ImageStudio({ active }: { active: boolean }) {
 						{model && (
 							<section className="fw-studio-settings-group">
 								<h2 className="fw-studio-field-label">输出设置</h2>
-								{sizes.length > 1 ? (
+								<div className="flex min-w-0 items-center gap-2">
+									<label htmlFor="fw-image-size" className="shrink-0 text-[12px] text-muted">尺寸</label>
+									<Input id="fw-image-size" maxLength={64} value={sizeTextInput} placeholder="服务商默认" aria-invalid={sizeInvalid || undefined} aria-describedby="fw-image-size-hint" onChange={(event) => setSize(event.target.value)} className="min-w-0 flex-1" />
+									{sizeTextInput && <Button size="sm" variant="ghost" onClick={() => setSize("")}>用默认</Button>}
+								</div>
+								<p id="fw-image-size-hint" className={`text-[11.5px] ${sizeInvalid ? "text-err" : "text-muted"}`}>
+									{sizeInvalid ? "请输入有效宽高，例如 1920 × 1080，或留空。" : "可填自定义宽高，留空用服务商默认。实际支持以服务商为准。"}
+								</p>
+								{sizes.length > 1 && (
 									<div role="group" aria-label="输出尺寸" className="fw-studio-sizes">
 										{sizes.map((value) => {
 											const dimensions = /^(\d{1,5})x(\d{1,5})$/i.exec(value);
 											const ratio = dimensions && Number(dimensions[2]) ? Number(dimensions[1]) / Number(dimensions[2]) : 1;
-											return <button key={value} type="button" data-image-size={value} aria-pressed={size === value} className="fw-studio-size" onClick={() => setSizeSelections((previous) => ({ ...previous, [model.key]: value }))}>
+											return <button key={value} type="button" data-image-size={value} aria-pressed={size === normalizeImageSize(value, sizes)} className="fw-studio-size" onClick={() => setSize(value)}>
 												<span className="fw-studio-size-mark" style={{ width: ratio >= 1 ? 20 : Math.max(8, 20 * ratio), height: ratio <= 1 ? 20 : Math.max(8, 20 / ratio) }} aria-hidden="true" />{sizeText(value)}
 											</button>;
 										})}
 									</div>
-								) : <div className="fw-studio-static" data-image-size-fixed><span className="text-muted">尺寸</span><strong>{size ? sizeText(size) : "模型默认"}</strong></div>}
+								)}
 								<div className="fw-studio-option-row"><span>数量</span><div className="fw-seg" role="group" aria-label="生成数量">{COUNTS.map((value) => <button key={value} type="button" aria-pressed={count === value} className={`fw-seg-item ${count === value ? "fw-seg-item-active" : ""}`} onClick={() => setCount(value)}>{value} 张</button>)}</div></div>
 								<div className="fw-studio-option-row"><span>质量</span>{effectiveReference ? <span className="text-[12px] text-muted">参考图模式使用默认质量</span> : <div className="fw-seg" role="group" aria-label="输出质量">{(["standard", "hd"] as const).map((value) => <button key={value} type="button" aria-pressed={quality === value} className={`fw-seg-item ${quality === value ? "fw-seg-item-active" : ""}`} onClick={() => setQuality(value)}>{value === "hd" ? "高清" : "标准"}</button>)}</div>}</div>
 							</section>

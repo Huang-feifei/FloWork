@@ -167,7 +167,7 @@ Electron 二进制在首次运行（`npm run dev`）与打包（`npm run pack:wi
 
 发布 Windows 桌面版时，请为对应源码创建 `vX.Y.Z` 标签，并在公开的 GitHub Release 上传 `FloWork-X.Y.Z-x64-setup.exe`；确认附件上传完成后再公开发布。客户端只检测有此附件的正式版，不把内核版本或预发布版算作应用更新。
 
-从 v1.1.6 起，已打包的 Windows x64 客户端会在启动后、窗口重新获得焦点时及运行期间定期检查新版（带本地缓存）。也可选择「帮助 → 检查应用更新」。提示只打开 GitHub 发布页，不自动下载或安装，也不发送项目配置或凭据。
+已打包的 Windows x64 客户端会在启动后、窗口重新获得焦点时及运行期间定期检查新版，也可选择「帮助 → 检查应用更新」。支持后台更新的客户端会在左下角显示下载状态：安装包通过 GitHub 发布记录的文件大小和 SHA-256 校验后，用户可选择「重启安装」。不会自动重启；有正在运行或等待交互的会话时不能安装。缺少可校验的摘要或下载失败时，可打开发布页手动安装。更新检查不发送项目配置或凭据；v1.1.6～v1.1.9 的旧客户端仍需从发布页手动下载安装。
 
 打包内容只有 `out/main`、`out/preload`、`out/renderer` 与 package.json 里的生产依赖；测试入口（`out/test-support`）、开发脚本与源码不进安装包。`node-pty` 与 `esbuild` 带原生模块 / 可执行文件，通过 `asarUnpack` 解包到 `app.asar.unpacked/`（asar 内的 `.node` 加载不到、`esbuild.exe` 也执行不了）。`npmRebuild` 关闭：node-pty 自带 N-API 预编译二进制，跨 Electron ABI 可用，不需要本地 C++ 工具链。
 

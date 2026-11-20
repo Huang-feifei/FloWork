@@ -2,7 +2,9 @@
 import { readFile, writeFile } from "node:fs/promises";
 import type { BrowserWindow } from "electron";
 
-type Step = string | { js?: string; wait?: number; shot?: string | number; result?: string };
+import { APP_UPDATE_CHANNELS, type AppUpdateState } from "@shared/app-update";
+
+type Step = string | { js?: string; wait?: number; shot?: string | number; result?: string; appUpdate?: AppUpdateState };
 export async function runUIScreenshot(win: BrowserWindow): Promise<number> {
 	try {
 		// 性能压测需要真实帧时钟，隐藏窗口不会持续派发 requestAnimationFrame。
@@ -33,6 +35,7 @@ export async function runUIScreenshot(win: BrowserWindow): Promise<number> {
 		if (out.includes("{n}") && !named) await capture(0);
 		for (const [i, value] of steps.entries()) {
 			const step = typeof value === "string" ? { js: value } : value;
+			if (step.appUpdate) win.webContents.send(APP_UPDATE_CHANNELS.changed, step.appUpdate);
 			if (step.js) {
 				const result: unknown = await win.webContents.executeJavaScript(step.js);
 				if (step.result) await writeFile(step.result, JSON.stringify(result, null, 2));
