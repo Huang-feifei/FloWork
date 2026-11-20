@@ -299,6 +299,8 @@ export function ProjectFiles() {
 				{filter.trim() ? (
 					<>
 						{search.error && <div className="px-3 py-1 text-err">{search.error}</div>}
+						{search.loading && <div role="status" className="px-3 py-1 text-muted">正在搜索…</div>}
+						{search.result?.matches.length === 0 && <div role="status" className="px-3 py-1 text-muted">没有找到匹配的文件。</div>}
 						{search.result?.matches.map((m) => {
 							const mark = changed.get(m.path.toLowerCase());
 							return (
@@ -331,7 +333,6 @@ export function ProjectFiles() {
 								</div>
 							);
 						})}
-						{search.result && search.result.matches.length === 0 && <div className="px-3 text-muted">没有匹配的文件</div>}
 						{search.result && (
 							<div className="px-3 pt-2 text-[11px] text-muted">
 								在 {search.result.total} 个文件中搜索（不含被忽略的目录）{search.result.truncated ? "，文件过多，只索引了一部分" : ""}

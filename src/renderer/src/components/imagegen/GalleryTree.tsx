@@ -1,7 +1,7 @@
 /**
- * 图片库侧栏（「图片生成」与「图片库」两个视图共用）：
+ * 图片库侧栏：
  * 按收藏 / 时间 / 模型三种维度分组，选中后通过全局的图片筛选状态驱动主区的网格。
- * 底部显示缓存占用与「清空缓存」。
+ * 底部显示缓存占用。
  */
 import { useMemo } from "react";
 import { useApp } from "../../store";
@@ -9,7 +9,7 @@ import { Icon } from "../Icon";
 
 function formatBytes(bytes: number): string {
 	if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-	return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+	return bytes ? `${Math.max(1, Math.round(bytes / 1024))} KB` : "0 KB";
 }
 
 export function GalleryTree() {
@@ -34,6 +34,7 @@ export function GalleryTree() {
 	const Row = ({ id, label, count, icon }: { id: string; label: string; count?: number; icon?: "sparkles" }) => (
 		<button
 			type="button"
+			aria-pressed={filter === id}
 			onClick={() => {
 				setImageFilter(id);
 				setView("gallery");
@@ -52,7 +53,7 @@ export function GalleryTree() {
 		<div className="space-y-0.5">
 			<Row id="all" label="全部图片" count={images.length} />
 			<Row id="favorite" label="收藏" count={favorites} />
-			<Row id="week" label="本周" count={week} />
+			<Row id="week" label="最近 7 天" count={week} />
 
 			{byModel.length > 0 && (
 				<div className="mt-3 space-y-0.5 border-t border-border pt-3">
@@ -66,6 +67,7 @@ export function GalleryTree() {
 								setView("gallery");
 							}}
 							title={model}
+							aria-pressed={filter === `model:${model}`}
 							className={`flex h-8 w-full items-center gap-2 rounded-[10px] px-2.5 text-left ${
 								filter === `model:${model}` ? "bg-primary-soft text-primary" : "text-muted hover:bg-panel-2 hover:text-fg"
 							}`}

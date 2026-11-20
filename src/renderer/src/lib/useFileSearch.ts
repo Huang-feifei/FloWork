@@ -7,33 +7,25 @@ import { useApp } from "../store";
 export function useFileSearch(query: string, limit = 100) {
 	const cwd = useApp((s) => s.cwd);
 	const filesVersion = useApp((s) => s.filesVersion);
-	const [result, setResult] = useState<FileSearchResult | null>(null);
-	const [error, setError] = useState<string | null>(null);
-	const [loading, setLoading] = useState(false);
-	const indexedVersion = useRef(-1);
+	const [settled, setSettled] = useState<{ key: string; result: FileSearchResult | null; error: string | null }>();
+	const indexed = useRef<{ cwd: string; version: number } | null>(null);
+	const q = query.trim();
+	const key = cwd && q ? JSON.stringify([cwd, q, limit, filesVersion]) : null;
 
 	useEffect(() => {
-		const q = query.trim();
-		if (!cwd || !q) {
-			setResult(null);
-			return;
-		}
+		if (!cwd || !key) return;
 		let cancelled = false;
-		setLoading(true);
 		const timer = setTimeout(() => {
-			const fresh = indexedVersion.current !== filesVersion;
+			const fresh = indexed.current?.cwd !== cwd || indexed.current.version !== filesVersion;
 			api.searchWorkspace(cwd, q, { limit, fresh }).then(
 				(r) => {
 					if (cancelled) return;
-					indexedVersion.current = filesVersion;
-					setResult(r);
-					setError(null);
-					setLoading(false);
+					indexed.current = { cwd, version: filesVersion };
+					setSettled({ key, result: r, error: null });
 				},
 				(e: unknown) => {
 					if (cancelled) return;
-					setError(errorText(e));
-					setLoading(false);
+					setSettled({ key, result: null, error: errorText(e) });
 				},
 			);
 		}, 120);
@@ -41,9 +33,10 @@ export function useFileSearch(query: string, limit = 100) {
 			cancelled = true;
 			clearTimeout(timer);
 		};
-	}, [cwd, query, limit, filesVersion]);
+	}, [cwd, q, key, limit, filesVersion]);
 
-	return { result, error, loading };
+	const current = key && settled?.key === key ? settled : undefined;
+	return { result: current?.result ?? null, error: current?.error ?? null, loading: !!key && !current };
 }
 
 /** 把路径中与查询字符（按顺序）匹配的位置标出来，用于高亮 */

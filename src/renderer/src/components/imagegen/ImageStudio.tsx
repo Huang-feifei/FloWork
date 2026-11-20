@@ -3,6 +3,7 @@ import type { GeneratedImage, ImageAttachment } from "@shared/protocol";
 import { api, errorText } from "../../api/client";
 import { useApp } from "../../store";
 import { Icon } from "../Icon";
+import { askConfirm } from "../ConfirmDialog";
 import { Button, Select } from "../ui";
 import { PageHeading } from "../PageHeading";
 import "./image-studio.css";
@@ -10,7 +11,7 @@ import "./image-studio.css";
 const COUNTS = [1, 2, 4];
 
 /** 缓存里的图片按需读成 data URL（生成历史不大，单张读一次即可） */
-function useImagePreview(id: string) {
+export function useImagePreview(id: string) {
 	const [preview, setPreview] = useState<{ id: string; url?: string }>();
 	useEffect(() => {
 		if (!id) return;
@@ -30,75 +31,6 @@ function useImagePreview(id: string) {
 
 export function useImageUrl(id: string): string | undefined {
 	return useImagePreview(id)?.url;
-}
-
-/** 一张生成结果：预览 + 提示词 + 尺寸/耗时 + 操作 */
-export function GeneratedTile({ image, tall = false }: { image: GeneratedImage; tall?: boolean }) {
-	const url = useImageUrl(image.id);
-	const attachImage = useApp((s) => s.attachImage);
-	const removeImage = useApp((s) => s.removeImage);
-	const pushNotice = useApp((s) => s.pushNotice);
-	const setView = useApp((s) => s.setView);
-	const [busy, setBusy] = useState(false);
-
-	const insert = async () => {
-		setBusy(true);
-		try {
-			await attachImage(image.id);
-			pushNotice("info", "已放进输入框，切回会话即可随下一条消息发送");
-			if (useApp.getState().activeProjectId) setView("chat");
-		} catch (error) {
-			pushNotice("error", errorText(error));
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	const download = async () => {
-		try {
-			const file = await api.images.read(image.id);
-			const link = document.createElement("a");
-			link.href = `data:${file.mimeType};base64,${file.dataBase64}`;
-			link.download = `${image.model.replace(/[^\w.-]+/g, "_")}-${image.id}`;
-			link.click();
-		} catch (error) {
-			pushNotice("error", errorText(error));
-		}
-	};
-
-	return (
-		<div className="overflow-hidden rounded-2xl border border-border bg-surface-raised">
-			<div className={`${tall ? "aspect-[4/3]" : "aspect-square"} bg-panel-2`}>
-				{url ? (
-					<img src={url} alt={image.prompt} className="size-full object-cover" />
-				) : (
-					<div className="flex size-full items-center justify-center text-faint">
-						<Icon name="image" className="size-5" />
-					</div>
-				)}
-			</div>
-			<div className="px-3 py-2.5">
-				<div className="truncate text-[12px] text-muted" title={image.prompt}>
-					{image.prompt}
-				</div>
-				<div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-faint">
-					<span className="shrink-0 font-mono">{image.size}</span>
-					<span className="shrink-0">· {Math.round(image.bytes / 1024)} KB</span>
-					{image.edited && <span className="shrink-0">· 参考图</span>}
-					<div className="flex-1" />
-					<button type="button" disabled={busy} onClick={() => void insert()} className="shrink-0 text-primary hover:underline">
-						插入会话
-					</button>
-					<button type="button" onClick={() => void download()} className="shrink-0 hover:text-fg">
-						下载
-					</button>
-					<button type="button" onClick={() => void removeImage(image.id)} className="shrink-0 hover:text-err">
-						删除
-					</button>
-				</div>
-			</div>
-		</div>
-	);
 }
 
 const REFERENCE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -207,6 +139,13 @@ export function ImageStudio({ active }: { active: boolean }) {
 		finally { setAttaching(false); }
 	}
 
+	async function remove(image: GeneratedImage) {
+		if (!await askConfirm({ title: "删除这张图片？", message: "将从本机图片库移除这张图片，已插入会话的附件不受影响。", confirmLabel: "删除图片", danger: true })) return;
+		if (useApp.getState().imageBusy) return;
+		try { await removeImage(image.id); }
+		catch (cause) { pushNotice("error", errorText(cause)); }
+	}
+
 	async function download(image: GeneratedImage) {
 		try {
 			const file = await api.images.read(image.id);
@@ -259,7 +198,7 @@ export function ImageStudio({ active }: { active: boolean }) {
 							<p className="min-w-0 flex-1 truncate text-[12px] text-muted" title={selected.prompt}>{selected.prompt}</p>
 							<Button size="sm" disabled={!hasProject || attaching} title={hasProject ? undefined : "请先打开一个项目会话"} onClick={() => void bringToChat(selected)}>插入会话</Button>
 							<Button size="sm" onClick={() => void download(selected)}>下载</Button>
-							<Button size="sm" variant="ghost" className="hover:text-err" onClick={() => void removeImage(selected.id).catch((cause) => pushNotice("error", errorText(cause)))}>删除</Button>
+							<Button size="sm" variant="ghost" disabled={busy} className="hover:text-err" onClick={() => void remove(selected)}>删除</Button>
 						</div>
 					)}
 					{(batch.length > 1 || history.length > 0) && (

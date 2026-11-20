@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { root } from "./runtime.mjs";
 import { imageStudioRegression, seedImageStudioCache } from "./image-studio-fixtures.mjs";
+import { imageLibraryRegression } from "./image-library-fixtures.mjs";
 
 const outDir = resolve(process.argv[2] ?? join(root, "out/shots"));
 const prefix = process.argv[3] ?? "ui";
@@ -164,6 +165,18 @@ const verifyWorkspace = `(async () => {
 	if (store.getState().rightPanel !== previousPanel) throw new Error('在设置页误改了会话工具面板状态');
 	open('项目文件'); await heading('修复 relativeTime 的边界问题');
 	await waitFor(() => tab()?.value === 'files' && document.querySelector('input[placeholder="搜索整个项目"]'), '从设置页打开项目文件失败');
+	const search = document.querySelector('input[placeholder="搜索整个项目"]');
+	const searchFor = (value) => {
+		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(search, value);
+		search.dispatchEvent(new Event('input', { bubbles: true }));
+	};
+	searchFor('useFileSearch.ts');
+	await waitFor(() => panel()?.querySelector('button[title="src/renderer/src/lib/useFileSearch.ts"]'), '项目搜索未返回匹配的文件');
+	searchFor('no-such-flowork-test-file-qz98');
+	await waitFor(() => panel()?.textContent.includes('正在搜索') && !panel()?.querySelector('button[title="src/renderer/src/lib/useFileSearch.ts"]'), '新查询仍暴露上次搜索结果');
+	search.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+	if (store.getState().preview) throw new Error('搜索期间的回车打开了旧结果');
+	await waitFor(() => panel()?.textContent.includes('没有找到匹配的文件'), '没有搜索无结果提示');
 	tab().value = 'execution';
 	tab().dispatchEvent(new Event('change', { bubbles: true }));
 	await waitFor(() => tab()?.value === 'execution', '无法切换到执行树');
@@ -235,6 +248,8 @@ const scenes = {
 	"imagegen-regression": [{ js: imageStudioRegression, wait: 120 }],
 	"imagegen-regression-dark": [`document.documentElement.dataset.theme = "dark"`, { js: imageStudioRegression, wait: 120 }],
 	gallery: [setView("gallery")],
+	"gallery-populated": [setView("gallery")],
+	"gallery-regression": [setView("gallery"), { js: imageLibraryRegression, wait: 120 }],
 	"database-dialog": [setView("database"), { js: `(() => { const button = [...document.querySelectorAll('main button')].find(node => node.textContent.includes('新建连接')); if (!button) throw new Error('找不到新建连接'); button.click(); })()`, wait: 120 }],
 };
 
@@ -246,7 +261,7 @@ for (const [name, steps] of selectedScenes) {
 	const temp = mkdtempSync(join(tmpdir(), "flowork-shot-"));
 	try {
 		for (const dir of ["home", "data", "agent"]) mkdirSync(join(temp, dir), { recursive: true });
-		if (name.startsWith("imagegen-regression")) seedImageStudioCache(join(temp, "agent"));
+		if (name.startsWith("imagegen-regression") || name === "gallery-populated" || name === "gallery-regression") seedImageStudioCache(join(temp, "agent"));
 		if (name === "settings-image-only") {
 			const endpoint = { api: "openai-responses", baseUrl: "https://example.invalid/v1", apiKey: "example-only", models: [], imageModels: [{ id: "image-example", name: "图片生成示例" }] };
 			writeFileSync(join(temp, "agent", "models.json"), JSON.stringify({ providers: { "image-demo": endpoint, "paused-demo": { ...endpoint, imageEnabled: false } } }));
