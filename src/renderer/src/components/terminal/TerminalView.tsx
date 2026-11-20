@@ -563,50 +563,48 @@ function ComposerToolbar({ canSend, onSend, canMention, onMention }: { canSend: 
 				{ value: "ask_all", title: "审批：全部工具" },
 				{ value: "auto", title: "审批：关闭（连接仍确认）" },
 			];
-	const approvalLabel = approvalItems.find((o) => o.value === approvalMode)?.title ?? "审批";
+	const approvalLabel = approvalItems.find((item) => item.value === approvalMode)?.title ?? "工具审批";
+	const approvalName = workMode === "plan" ? "审批：计划限制优先" : approvalLabel;
+	const approvalShort = workMode === "plan" ? "只读" : ({ ask_writes: "按需审批", ask_all: "逐项审批", auto: "自动审批" })[approvalMode];
 
 	return (
-		<div className="fw-composer-tools flex min-w-0 flex-wrap items-center gap-x-1 gap-y-2 px-3 pt-1 pb-2.5 whitespace-nowrap">
-			<button type="button" title="引用项目文件或技能" disabled={!canMention} onClick={onMention} className="grid size-8 shrink-0 place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-fg disabled:opacity-40">
-				<Icon name="at-sign" className="size-4" />
-			</button>
-			<Picker
-				label={workMode === "plan" ? "计划模式 · 只读" : "执行模式"}
-				title={isRunning || waiting > 0 ? "请先结束或中断当前运行，再切换模式" : "计划模式先讨论并确认方案，执行模式允许实施"}
-				items={[
-					{ value: "plan", title: "计划模式：只读分析，提问并确认方案" },
-					{ value: "execute", title: "执行模式：允许修改和运行命令" },
-				]}
-				value={workMode}
-				tone={workMode === "plan" ? "warn" : "muted"}
-				disabled={!state || isRunning || waiting > 0}
-				onSelect={(next) => void setWorkMode(next as WorkMode)}
-			/>
-			<Picker
-				label={workMode === "plan" ? "审批：计划限制优先" : approvalLabel}
-				title={isOps ? "命令审批（高危命令始终需要确认）" : "工具审批"}
-				items={approvalItems}
-				value={approvalMode}
-				tone={approvalMode === "auto" ? "warn" : "muted"}
-				disabled={workMode === "plan"}
-				onSelect={(next) => void setApprovalMode(next as ApprovalMode)}
-			/>
-			<div className="ml-auto flex min-w-0 max-w-full items-center gap-1">
-				{state ? (
-					<ModelThinkingPicker
-						key={state.sessionId}
-						state={state}
-						models={models}
-						onModel={setModel}
-						onThinking={setThinkingLevel}
-						onRefresh={loadModels}
-					/>
-				) : null}
+		<div className="fw-composer-tools">
+			<div className="fw-composer-options">
+				<button type="button" title="引用项目文件或技能" disabled={!canMention} onClick={onMention} className="grid size-8 shrink-0 place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-fg focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-40">
+					<Icon name="at-sign" className="size-4" />
+				</button>
+				<Picker
+					label={workMode === "plan" ? "计划模式" : "执行模式"}
+					accessibleLabel={workMode === "plan" ? "计划模式（只读）" : "执行模式"}
+					compactIcon="list-checks"
+					title={isRunning || waiting > 0 ? "请先结束或中断当前运行，再切换模式" : "计划模式先讨论并确认方案，执行模式允许实施"}
+					items={[
+						{ value: "plan", title: "计划模式：只读分析，提问并确认方案" },
+						{ value: "execute", title: "执行模式：允许修改和运行命令" },
+					]}
+					value={workMode}
+					tone={workMode === "plan" ? "warn" : "muted"}
+					disabled={!state || isRunning || waiting > 0}
+					onSelect={(next) => void setWorkMode(next as WorkMode)}
+				/>
+				<Picker
+					label={approvalShort}
+					accessibleLabel={approvalName}
+					compactIcon="shield-alert"
+					title={approvalName}
+					items={approvalItems}
+					value={approvalMode}
+					tone={approvalMode === "auto" ? "warn" : "muted"}
+					disabled={workMode === "plan"}
+					onSelect={(next) => void setApprovalMode(next as ApprovalMode)}
+				/>
+			</div>
+			<div className="fw-composer-actions">
+				{state && <ModelThinkingPicker key={state.sessionId} state={state} models={models} onModel={setModel} onThinking={setThinkingLevel} onRefresh={loadModels} />}
 				{isRunning && !canSend ? (
-					<button type="button" onClick={() => void abort()} title="中断当前任务" className="fw-workbench-button ml-1">
+					<button type="button" onClick={() => void abort()} title="中断当前任务（Esc）" aria-label="中断当前任务" className="fw-workbench-button fw-composer-action fw-composer-stop">
 						<Icon name="stop" className="size-3.5" />
-						中断
-						<kbd className="font-mono text-[11px] text-faint">Esc</kbd>
+						<span className="fw-composer-stop-label">中断</span>
 					</button>
 				) : (
 					<button
@@ -614,7 +612,7 @@ function ComposerToolbar({ canSend, onSend, canMention, onMention }: { canSend: 
 						disabled={!canSend}
 						onClick={onSend}
 						title={isRunning ? "加入队列（Enter）· Ctrl+Enter 插话" : "发送（Enter）"}
-						className="fw-workbench-button fw-workbench-primary ml-1 w-9 !px-0"
+						className="fw-workbench-button fw-workbench-primary fw-composer-action !px-0"
 					>
 						<Icon name="arrow-up" />
 					</button>

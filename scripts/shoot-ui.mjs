@@ -254,11 +254,49 @@ const verifyUpdateReady = `(async () => {
 	trigger.click();
 })()`;
 
+const verifyComposerLayout = `(async () => {
+	const store = window.__floworkStore;
+	const current = store.getState().state;
+	const model = { ...current.model, provider: 'workbuddy', id: 'deepseek-v4.1-flash-long-provider-variant', name: 'workbuddy/deepseek-v4.1-flash-long-provider-variant' };
+	store.setState({ isRunning: true, approvalMode: 'auto', state: { ...current, model, thinkingLevel: 'high' } });
+	const tick = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+	await tick();
+	const toolbar = document.querySelector('.fw-composer-tools');
+	const composer = toolbar?.closest('.fw-composer');
+	const modelButton = toolbar?.querySelector('.fw-model-trigger');
+	const stop = toolbar?.querySelector('.fw-composer-stop');
+	if (!composer || !modelButton || !stop) throw new Error('未进入长模型名的运行中状态');
+	if (!modelButton.title.includes(model.id)) throw new Error('完整模型名称无法查看');
+	for (const width of [690, 440, 300, 230]) {
+		composer.style.width = width + 'px';
+		await tick();
+		const row = toolbar.getBoundingClientRect();
+		const controls = [...toolbar.querySelectorAll('button')].map(button => button.getBoundingClientRect());
+		if (controls.some(box => box.left < row.left - 1 || box.right > row.right + 1 || Math.abs(box.top - controls[0].top) > 1)) {
+			throw new Error('输入工具栏在 ' + width + ' px 下发生换行或溢出');
+		}
+	}
+	const approval = toolbar.querySelector('button[aria-label^="审批"]');
+	approval.click();
+	await tick();
+	if (!toolbar.querySelector('.fw-picker-panel')?.textContent.includes('审批：全部工具')) throw new Error('窄工具栏丢失完整审批选项');
+	approval.click();
+	await tick();
+	modelButton.click();
+	await tick();
+	if (!toolbar.querySelector('.fw-model-panel')) throw new Error('窄工具栏未打开模型与推理');
+	document.activeElement.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+	await tick();
+	if (toolbar.querySelector('.fw-model-panel') || document.activeElement !== modelButton) throw new Error('模型面板关闭后未恢复焦点');
+	composer.style.removeProperty('width');
+})()`;
+
 const scenes = {
 	welcome: [setView("welcome")],
 	empty: [`window.__floworkStore.setState({ view: "chat", activeProjectId: null, cwd: null, handleId: null, messages: [], state: null })`],
 	chat: [mock, showSessionFiles, { js: verifyWorkspace, wait: 80 }, { js: chatTop, wait: 80 }],
 	"chat-dark": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`, { js: chatTop, wait: 80 }],
+	"composer-running-dark": [mock, showSessionFiles, modelExamples, `document.documentElement.dataset.theme = "dark"`, { js: verifyComposerLayout, wait: 100 }],
 	"app-update": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`,
 		{ appUpdate: { phase: "downloading", version: "1.1.10", downloaded: 45, total: 100 }, wait: 100 },
 		{ js: verifyUpdateDownload, wait: 100 }, { js: verifyUpdateProgress, wait: 80 },

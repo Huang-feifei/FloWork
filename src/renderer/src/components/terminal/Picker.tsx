@@ -5,7 +5,7 @@
  * 选中行还是系统的蓝色高亮，和界面其它部分不是一个语言。
  */
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react";
-import { Icon } from "../Icon";
+import { Icon, type IconName } from "../Icon";
 
 export interface PickerItem {
 	/** 分组标题：相邻同组只渲染一次标题 */
@@ -34,6 +34,8 @@ export function Picker({
 	emptyText = "没有匹配项",
 	disabled = false,
 	shrink = false,
+	compactIcon,
+	accessibleLabel,
 }: {
 	label: string;
 	items: PickerItem[];
@@ -49,6 +51,8 @@ export function Picker({
 	disabled?: boolean;
 	/** 允许在窄容器里收缩（用于输入框底部工具条，避免换行） */
 	shrink?: boolean;
+	compactIcon?: IconName;
+	accessibleLabel?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
@@ -119,13 +123,16 @@ export function Picker({
 				type="button"
 				disabled={disabled}
 				title={title}
+				aria-label={accessibleLabel}
+				aria-expanded={open}
 				onClick={() => setOpen((o) => !o)}
 				className={`fw-picker-trigger flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full px-3 text-[12.5px] hover:bg-panel-2 hover:text-fg disabled:opacity-40 ${
 					open ? "bg-panel-2 text-fg" : toneCls
 				}`}
 			>
-				<span className={`min-w-0 max-w-[280px] truncate ${mono ? "font-mono" : ""}`}>{label}</span>
-				<Icon name="chevron-down" className="size-3 shrink-0 text-faint" />
+				{compactIcon && <Icon name={compactIcon} className="size-3.5 shrink-0" />}
+				<span className={`fw-picker-label min-w-0 max-w-[280px] truncate ${mono ? "font-mono" : ""}`}>{label}</span>
+				<Icon name="chevron-down" className="fw-picker-chevron size-3 shrink-0 text-faint" />
 			</button>
 
 			{open && (

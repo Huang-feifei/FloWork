@@ -158,16 +158,16 @@ export function ModelThinkingPicker({ state, models, onModel, onThinking, onRefr
 	}
 
 	return (
-		<div ref={root} className="min-w-0" onKeyDown={onKeyDown} onBlur={(event) => {
+		<div ref={root} className="fw-model-trigger-wrap min-w-0" onKeyDown={onKeyDown} onBlur={(event) => {
 			if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget)) dismiss();
 		}}>
-			<button ref={trigger} type="button" title="模型与推理" aria-label="模型与推理" aria-haspopup="dialog" aria-expanded={open}
+			<button ref={trigger} type="button" title={active ? `模型与推理：${current}` : "模型与推理"} aria-label={active ? `模型与推理：${current}，${adjustable ? thinkingLabel(state.thinkingLevel) : "推理不可调"}` : "模型与推理"} aria-haspopup="dialog" aria-expanded={open}
 				aria-controls={open ? panelId : undefined} className="fw-model-trigger" onClick={() => open ? dismiss(true) : show()}
 				onKeyDown={(event) => { if (!open && ["ArrowDown", "ArrowUp"].includes(event.key)) { event.preventDefault(); show(); } }}>
 				<Icon name="cpu" className="fw-model-trigger-icon size-3.5 shrink-0" />
-				<span className="min-w-0 truncate" title={active?.id}>{active?.name || active?.id || "选择模型"}</span>
+				<span className="fw-model-trigger-name min-w-0 truncate">{active?.name || active?.id || "选择模型"}</span>
 				{active && <span className="fw-model-trigger-level">{adjustable ? `推理 ${thinkingLabel(state.thinkingLevel)}` : "推理不可调"}</span>}
-				<Icon name={open ? "chevron-up" : "chevron-down"} className="size-3.5 shrink-0" />
+				<Icon name={open ? "chevron-up" : "chevron-down"} className="fw-model-trigger-chevron size-3.5 shrink-0" />
 			</button>
 			{open && (
 				<section id={panelId} role="dialog" aria-labelledby={`${panelId}-name`} className="fw-model-panel" style={{ height }}>
