@@ -1,4 +1,4 @@
-/* 远程工作台：暖纸作底，橙金只用于连接入口与主机标记。 */
+/* 浅色保留暖纸质感，深色沿用 FloWork 的墨蓝灰；橙金用于主操作。 */
 .fw-remote-workspace {
 	--remote-paper: #f8f4ec;
 	--remote-rail: #efebe2;
@@ -21,16 +21,25 @@
 }
 
 html[data-theme="dark"] .fw-remote-workspace {
-	--remote-paper: #262523;
-	--remote-rail: #2f2b26;
-	--remote-card: #34312d;
-	--remote-well: #211f1c;
-	--remote-line: #544b41;
-	--remote-ink: #f3ebe0;
-	--remote-muted: #c5b8a8;
-	--remote-accent: #ffc17f;
+	--remote-paper: var(--color-bg);
+	--remote-rail: var(--color-sidebar);
+	--remote-card: var(--color-surface-raised);
+	--remote-well: var(--color-pre-bg);
+	--remote-line: var(--color-border-strong);
+	--remote-ink: var(--color-fg);
+	--remote-muted: var(--color-muted);
+	--remote-accent: var(--fw-signal);
 	--remote-console: #11141a;
 }
+
+html[data-theme="dark"] .fw-remote-workspace :is(.fw-remote-sidebar-icon, .fw-remote-host-icon) {
+	background: var(--color-panel-2);
+	box-shadow: inset 0 1px var(--color-border);
+	color: var(--remote-muted);
+}
+
+html[data-theme="dark"] .fw-remote-nav button[aria-current="page"] { background: var(--color-panel-2); }
+html[data-theme="dark"] .fw-remote-workspace :is(.fw-remote-kicker span, .fw-remote-group-title h2 svg) { color: var(--remote-muted); }
 
 html[data-contrast="high"] .fw-remote-workspace {
 	--remote-line: var(--color-border-strong);
@@ -185,7 +194,7 @@ html[data-contrast="high"] .fw-remote-workspace {
 .fw-remote-warning { display: flex; align-items: center; gap: 8px; padding: 9px 11px; margin-bottom: 14px; border-radius: 7px; background: color-mix(in srgb, var(--remote-gold) 15%, var(--remote-paper)); color: var(--remote-ink); }
 .fw-remote-warning svg { color: var(--remote-accent); }
 .fw-remote-empty { display: grid; align-content: center; justify-items: center; gap: 7px; min-height: 164px; padding: 20px; text-align: center; color: var(--remote-muted); }
-.fw-remote-empty svg { color: var(--remote-accent); }
+.fw-remote-empty svg { color: var(--remote-muted); }
 .fw-remote-empty h2, .fw-remote-empty h3 { color: var(--remote-ink); font-size: 14px; font-weight: 650; }
 .fw-remote-console {
 	display: flex;
