@@ -300,6 +300,72 @@ const verifyComposerLayout = `(async () => {
 	composer.style.removeProperty('width');
 })()`;
 
+const remoteHosts = [
+	{ id: "sample-build", name: "构建服务器", host: "build.example.invalid", user: "deploy" },
+	{ id: "sample-test", name: "测试环境", host: "staging.example.invalid", user: "devops", port: 2222 },
+	{ id: "sample-data", name: "数据备份", host: "backup.example.invalid", user: "backup" },
+].map((host) => ({ ...host, auth: "agent", createdAt: Date.now() }));
+
+const verifyRemoteWorkspace = `(async () => {
+	const store = window.__floworkStore;
+	const wait = async (test, message) => {
+		for (let i = 0; i < 60; i++) {
+			const found = test();
+			if (found) return found;
+			await new Promise(resolve => setTimeout(resolve, 50));
+		}
+		throw new Error(message);
+	};
+	const byLabel = (label, root = document) => [...root.querySelectorAll('button')].find(button => button.textContent.trim() === label);
+	const setInput = (input, text) => {
+		Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, text);
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+	};
+	const catalog = () => document.querySelector('main[data-view="remote"]');
+	const dialog = () => document.querySelector('[role="dialog"]');
+	const cards = (section) => catalog()?.querySelectorAll('section[aria-label="' + section + '"] article');
+	const key = () => window.dispatchEvent(new KeyboardEvent('keydown', { key: String.fromCharCode(96), ctrlKey: true, cancelable: true }));
+	await wait(() => store.getState().hosts.length === 3, '测试主机未加载');
+	const time = Date.now();
+	store.setState({ view: 'chat', recentRemoteHosts: { 'sample-build': time - 360000, 'sample-test': time - 2400000 }, projects: {
+		groups: [{ id: 'test-group', name: '基础设施' }], projects: [{ id: 'test-project', hostId: 'sample-build', groupId: 'test-group', path: '/srv/build', order: 0, addedAt: time }],
+	} });
+	await wait(() => document.querySelector('.fw-app-rail [title="远程主机（SSH）"]'), '缺少远程工作台入口').then(button => button.click());
+	await wait(() => cards('全部主机')?.length === 3, '主机没有显示在目录里');
+	if (cards('最近连接').length !== 2 || dialog() || document.querySelector('.fw-context-sidebar')) throw new Error('最近连接没有渲染，或仍在使用旧弹窗/项目栏');
+	catalog().querySelector('section[aria-label="项目分组"] .fw-remote-card').click();
+	await wait(() => cards('分组：基础设施')?.length === 1, '分组筛选失败');
+	byLabel('返回全部主机', catalog()).click();
+	const search = catalog().querySelector('[aria-label="查找主机"]');
+	setInput(search, 'devops 2222');
+	await wait(() => cards('搜索结果')?.length === 1, '未按用户名与端口筛选');
+	setInput(search, 'no-match');
+	await wait(() => catalog().textContent.includes('没有找到匹配的主机'), '缺少无结果提示');
+	catalog().querySelector('[aria-label="清空搜索"]').click();
+	await wait(() => cards('全部主机')?.length === 3, '清空搜索没有恢复主机');
+	byLabel('新建主机', catalog()).click();
+	await wait(dialog, '新增主机表单未出现');
+	setInput(dialog().querySelector('input[placeholder="例如 测试机"]'), '临时测试主机');
+	setInput(dialog().querySelector('input[placeholder="IP 地址或域名"]'), 'temp.example.invalid');
+	await wait(() => !byLabel('保存', dialog())?.disabled && byLabel('保存', dialog()), '新增表单未启用保存').then(button => button.click());
+	await wait(() => !dialog() && cards('全部主机')?.length === 4, '保存主机后目录没有更新');
+	catalog().querySelector('[aria-label="主机操作：临时测试主机"]').click();
+	await wait(() => byLabel('编辑 / 测试连接…'), '主机操作菜单未显示').then(button => button.click());
+	await wait(dialog, '编辑主机表单没有出现');
+	setInput(dialog().querySelector('input[placeholder="例如 测试机"]'), '已修改的主机');
+	byLabel('保存', dialog()).click();
+	await wait(() => !dialog() && catalog()?.querySelector('[aria-label="主机操作：已修改的主机"]'), '编辑结果没有刷新').then(button => button.click());
+	await wait(() => byLabel('删除主机…'), '缺少删除菜单项').then(button => button.click());
+	await wait(dialog, '缺少删除确认');
+	byLabel('删除主机', dialog()).click();
+	await wait(() => !dialog() && cards('全部主机')?.length === 3, '删除数据后目录没有更新');
+	key();
+	await wait(() => catalog().querySelector('#fw-remote-terminal')?.textContent.includes('没有打开的远程终端'), '终端快捷键没有打开独立终端');
+	key();
+	await wait(() => cards('全部主机')?.length === 3, '终端快捷键没有返回主机目录');
+	if (catalog().scrollWidth > catalog().clientWidth + 1) throw new Error('远程工作台发生横向溢出');
+})()`;
+
 const scenes = {
 	welcome: [setView("welcome")],
 	empty: [`window.__floworkStore.setState({ view: "chat", activeProjectId: null, cwd: null, handleId: null, messages: [], state: null })`],
@@ -320,6 +386,8 @@ const scenes = {
 	"review-empty": [mock, `window.__floworkStore.setState({ view: 'review', messages: [] })`, { js: waitForReview, wait: 120 }],
 	"settings-image-only": [setView("settings"), { js: verifyImageOnlyEndpoint, wait: 120 }],
 	palette: [mock, `window.__floworkStore.getState().setPalette(true)`],
+	remote: ["window.__floworkStore.getState().setTheme('light')", { js: verifyRemoteWorkspace, wait: 150 }],
+	"remote-dark": ["window.__floworkStore.getState().setTheme('dark')", { js: verifyRemoteWorkspace, wait: 150 }],
 	terminal: [mock, { js: `(async () => {
 		const pause = () => new Promise(resolve => setTimeout(resolve, 50));
 		const until = async (test, message) => { for (let i = 0; i < 60; i++) { const value = test(); if (value) return value; await pause(); } throw new Error(message); };
@@ -353,8 +421,12 @@ const selectedScenes = Object.entries(scenes).filter(([name]) => requested.lengt
 if (requested.some((name) => !Object.hasOwn(scenes, name))) throw new Error(`未知场景，可选：${Object.keys(scenes).join("、")}`);
 for (const [name, steps] of selectedScenes) {
 	const temp = mkdtempSync(join(tmpdir(), "flowork-shot-"));
+	const isRemoteScene = name === "remote" || name === "remote-dark";
 	try {
 		for (const dir of ["home", "data", "agent"]) mkdirSync(join(temp, dir), { recursive: true });
+		if (isRemoteScene) {
+			writeFileSync(join(temp, "data", "hosts.json"), JSON.stringify({ version: 1, hosts: remoteHosts }));
+		}
 		if (name.startsWith("imagegen-regression") || name === "gallery-populated" || name === "gallery-regression") seedImageStudioCache(join(temp, "agent"));
 		if (name === "settings-image-only") {
 			const endpoint = { api: "openai-responses", baseUrl: "https://example.invalid/v1", apiKey: "example-only", models: [], imageModels: [{ id: "image-example", name: "图片生成示例" }] };
@@ -374,6 +446,8 @@ for (const [name, steps] of selectedScenes) {
 			SHOT_OUT: out,
 			SHOT_STEPS_FILE: stepsFile,
 			SHOT_WAIT: "2000",
+			// 隐藏窗口可能拍到交互回归过程中的旧帧。
+			...(isRemoteScene ? { SHOT_SHOW: "1" } : {}),
 		};
 		delete env.ELECTRON_RUN_AS_NODE;
 		delete env.ELECTRON_RENDERER_URL;

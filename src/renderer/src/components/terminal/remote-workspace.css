@@ -1,0 +1,207 @@
+/* 远程工作台：暖纸作底，橙金只用于连接入口与主机标记。 */
+.fw-remote-workspace {
+	--remote-paper: #f8f4ec;
+	--remote-rail: #efebe2;
+	--remote-card: #fffdf8;
+	--remote-well: #eee9e0;
+	--remote-line: #ddd4c7;
+	--remote-ink: #30271f;
+	--remote-muted: #6e6255;
+	--remote-accent: #9a480d;
+	--remote-gold: #eea637;
+	--remote-gold-hover: #f5b64f;
+	--remote-console: #ffffff;
+	display: flex;
+	flex: 1;
+	min-height: 0;
+	min-width: 0;
+	border-radius: 0 9px 9px 0;
+	background: var(--remote-paper);
+	color: var(--remote-ink);
+}
+
+html[data-theme="dark"] .fw-remote-workspace {
+	--remote-paper: #262523;
+	--remote-rail: #2f2b26;
+	--remote-card: #34312d;
+	--remote-well: #211f1c;
+	--remote-line: #544b41;
+	--remote-ink: #f3ebe0;
+	--remote-muted: #c5b8a8;
+	--remote-accent: #ffc17f;
+	--remote-console: #11141a;
+}
+
+html[data-contrast="high"] .fw-remote-workspace {
+	--remote-line: var(--color-border-strong);
+	--remote-muted: var(--remote-ink);
+}
+
+.fw-remote-workspace :where(button):focus-visible {
+	outline: 2px solid var(--remote-accent);
+	outline-offset: 2px;
+}
+
+.fw-remote-sidebar {
+	display: flex;
+	flex: 0 0 clamp(144px, 14vw, 184px);
+	flex-direction: column;
+	gap: 18px;
+	min-width: 0;
+	padding: 21px 10px 14px;
+	background: var(--remote-rail);
+	box-shadow: inset -1px 0 var(--remote-line);
+}
+
+.fw-remote-sidebar-heading {
+	display: flex;
+	align-items: center;
+	gap: 9px;
+	padding-inline: 5px;
+	font-size: 15px;
+	font-weight: 680;
+	white-space: nowrap;
+}
+
+.fw-remote-sidebar-icon {
+	display: grid;
+	place-items: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 8px;
+	background: linear-gradient(145deg, #fbbb59, #e99c2c);
+	box-shadow: inset 0 1px #ffffff75, 0 1px 2px #63381525;
+	color: #3c230c;
+}
+
+.fw-remote-nav { display: grid; gap: 3px; }
+.fw-remote-nav button {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 37px;
+	padding: 5px 9px;
+	border-radius: 7px;
+	color: var(--remote-muted);
+	text-align: left;
+	white-space: nowrap;
+}
+.fw-remote-nav button:hover { color: var(--remote-ink); background: color-mix(in srgb, var(--remote-line) 45%, transparent); }
+.fw-remote-nav button[aria-current="page"] { color: var(--remote-ink); background: color-mix(in srgb, var(--remote-line) 72%, transparent); font-weight: 650; }
+.fw-remote-nav button[aria-current="page"] svg { color: var(--remote-accent); }
+.fw-remote-count { margin-inline-start: auto; color: var(--remote-muted); font: 11px var(--font-mono); }
+.fw-remote-sidebar-note { display: flex; align-items: center; gap: 6px; margin-top: auto; padding: 0 5px; color: var(--remote-muted); font-size: 11px; line-height: 1.5; }
+
+.fw-remote-main {
+	--remote-pad: clamp(15px, 2vw, 28px);
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.fw-remote-header { flex: none; padding: 22px var(--remote-pad) 13px; }
+.fw-remote-kicker { color: var(--remote-muted); font-size: 11px; font-weight: 550; }
+.fw-remote-kicker span { margin-inline: 4px; color: var(--remote-accent); }
+.fw-remote-header h1 { margin-top: 4px; font-size: 26px; font-weight: 730; letter-spacing: -.035em; line-height: 1.25; }
+.fw-remote-toolbar { display: flex; flex: none; flex-wrap: wrap; gap: 8px; padding: 0 var(--remote-pad) 16px; }
+.fw-remote-searchbar { display: flex; flex: 1 1 250px; align-items: center; gap: 8px; min-width: 0; }
+.fw-remote-search {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 9px;
+	min-width: 0;
+	height: 38px;
+	padding-inline: 10px 5px;
+	border: 1px solid var(--remote-line);
+	border-radius: 8px;
+	background: var(--remote-well);
+	color: var(--remote-muted);
+}
+.fw-remote-search:focus-within { border-color: var(--remote-accent); box-shadow: 0 0 0 1px var(--remote-accent); }
+.fw-remote-search input { flex: 1; min-width: 0; outline: 0; color: var(--remote-ink); }
+.fw-remote-search input::placeholder { color: var(--remote-muted); }
+.fw-remote-button {
+	display: inline-flex;
+	flex: none;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	height: 38px;
+	padding-inline: 12px;
+	border-radius: 8px;
+	background: var(--remote-well);
+	font-weight: 580;
+	white-space: nowrap;
+}
+.fw-remote-button:hover:not(:disabled) { background: color-mix(in srgb, var(--remote-well) 64%, var(--remote-line)); }
+.fw-remote-button:disabled { opacity: .53; cursor: not-allowed; }
+.fw-remote-button.fw-remote-primary { background: var(--remote-gold); color: #372109; font-weight: 700; box-shadow: inset 0 1px #ffffff69, inset 0 -1px #9e5d253a; }
+.fw-remote-button.fw-remote-primary:hover { background: var(--remote-gold-hover); }
+
+.fw-remote-content { flex: 1; min-height: 0; overflow-y: auto; padding: 5px var(--remote-pad) 28px; }
+.fw-remote-group + .fw-remote-group { margin-top: 25px; }
+.fw-remote-group-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; color: var(--remote-muted); font-size: 11px; }
+.fw-remote-group-title h2 { display: flex; align-items: center; gap: 6px; color: var(--remote-ink); font-size: 13px; font-weight: 670; }
+.fw-remote-group-title h2 svg { color: var(--remote-accent); }
+.fw-remote-link { display: inline-flex; align-items: center; gap: 3px; color: var(--remote-accent); }
+.fw-remote-link:hover { text-decoration: underline; }
+.fw-remote-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(min(100%, max(213px, calc((100% - 24px) / 3))), 1fr));
+	gap: 12px;
+}
+.fw-remote-card {
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	padding-right: 6px;
+	border: 1px solid var(--remote-line);
+	border-radius: 10px;
+	background: var(--remote-card);
+	box-shadow: inset 0 1px color-mix(in srgb, var(--remote-card) 92%, white), 0 2px 5px #593e1f0a;
+}
+.fw-remote-card:hover, .fw-remote-card:focus-within { border-color: color-mix(in srgb, var(--remote-accent) 46%, var(--remote-line)); }
+.fw-remote-card-main { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; min-height: 66px; padding: 9px 4px 9px 10px; border-radius: 9px; text-align: left; }
+.fw-remote-card-main:disabled { cursor: not-allowed; }
+.fw-remote-card-main strong { font-size: 13px; font-weight: 680; }
+.fw-remote-host-icon {
+	display: grid;
+	flex: none;
+	place-items: center;
+	width: 38px;
+	height: 38px;
+	border-radius: 9px;
+	background: linear-gradient(145deg, #c4692c, #ae4c19);
+	box-shadow: inset 0 1px #ffffff63, inset 0 -1px #67331046;
+	color: #fffaf0;
+}
+.fw-remote-folder-icon { background: linear-gradient(145deg, #f9bd60, #e7a139); color: #452707; }
+.fw-remote-address, .fw-remote-meta { display: block; margin-top: 2px; color: var(--remote-muted); font: 11px/1.35 var(--font-mono); }
+.fw-remote-meta { font: 10px/1.35 var(--font-sans); }
+.fw-remote-icon-button { display: grid; flex: none; place-items: center; width: 26px; height: 26px; border-radius: 6px; color: var(--remote-muted); }
+.fw-remote-icon-button:hover, .fw-remote-icon-button[aria-expanded="true"] { background: var(--remote-well); color: var(--remote-ink); }
+.fw-remote-warning { display: flex; align-items: center; gap: 8px; padding: 9px 11px; margin-bottom: 14px; border-radius: 7px; background: color-mix(in srgb, var(--remote-gold) 15%, var(--remote-paper)); color: var(--remote-ink); }
+.fw-remote-warning svg { color: var(--remote-accent); }
+.fw-remote-empty { display: grid; align-content: center; justify-items: center; gap: 7px; min-height: 164px; padding: 20px; text-align: center; color: var(--remote-muted); }
+.fw-remote-empty svg { color: var(--remote-accent); }
+.fw-remote-empty h2, .fw-remote-empty h3 { color: var(--remote-ink); font-size: 14px; font-weight: 650; }
+.fw-remote-console {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	margin: 3px var(--remote-pad) 19px;
+	overflow: hidden;
+	border: 1px solid var(--remote-line);
+	border-radius: 9px;
+	background: var(--remote-console);
+}
+
+@media (max-width: 760px) {
+	.fw-remote-sidebar { flex-basis: 122px; padding-inline: 6px; }
+	.fw-remote-sidebar-heading { font-size: 13px; gap: 6px; }
+	.fw-remote-sidebar-icon { width: 26px; height: 26px; }
+	.fw-remote-nav button { padding-inline: 6px; gap: 4px; }
+}

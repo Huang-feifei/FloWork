@@ -16,7 +16,7 @@ export function Sidebar() {
 	const inImages = view === "imagegen" || view === "gallery";
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const canNewSession = useApp((s) => s.handleId !== null && hasProject);
-	const { importProjects, setView, setDiscoverOpen, setRemoteOpen, pushNotice, newSession } = useApp.getState();
+	const { importProjects, setView, setDiscoverOpen, pushNotice, newSession } = useApp.getState();
 	const projectIds = useApp(useShallow((s) => s.projects.projects.map((p) => p.id)));
 	const expandedCount = useApp((s) => projectIds.filter((id) => s.expanded[id]).length);
 	const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -104,7 +104,7 @@ export function Sidebar() {
 					onClose={() => setMenu(null)}
 					items={[
 						{ label: "导入文件夹…", onClick: () => void importProjects() },
-						{ label: "添加远程项目（SSH）…", onClick: () => setRemoteOpen(true) },
+						{ label: "添加远程项目（SSH）…", onClick: () => setView("remote") },
 						{ label: "从已有会话发现项目…", onClick: () => setDiscoverOpen(true) },
 						{ separator: true, label: "" },
 						{

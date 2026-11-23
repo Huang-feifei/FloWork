@@ -36,6 +36,7 @@ export function CommandPalette() {
 	const foldProcess = useApp((s) => s.foldProcess);
 	const activeProjectId = useApp((s) => s.activeProjectId);
 	const canToggleTools = useApp(canToggleRightPanel);
+	const inRemote = useApp((s) => s.view === "remote");
 	const [text, setText] = useState("");
 	const [active, setActive] = useState(0);
 	const inputRef = useRef<HTMLInputElement>(null);
@@ -73,9 +74,9 @@ export function CommandPalette() {
 				{ icon: "square-pen", label: "新建会话", key: "Ctrl+N", when: activeProjectId !== null, run: () => void s.newSession() },
 				{ icon: "git-compare", label: "查看本会话的文件改动", key: "Ctrl+Shift+D", when: activeProjectId !== null, run: () => s.setView("review") },
 				{ icon: "folder-plus", label: "导入项目文件夹…", key: "Ctrl+O", when: true, run: () => void s.importProjects() },
-				{ icon: "server", label: "添加远程项目（SSH）…", when: true, run: () => s.setRemoteOpen(true) },
+				{ icon: "server", label: "远程主机与项目（SSH）…", when: true, run: () => s.setView("remote") },
 				{ icon: "cpu", label: "配置模型…", key: "Ctrl+M", when: true, run: () => s.setView("settings", "custom") },
-				{ icon: "square-terminal", label: "切换终端面板", key: "Ctrl+`", when: true, run: () => s.setTerminalPanel(!useApp.getState().terminalPanel) },
+				{ icon: "square-terminal", label: inRemote ? "切换远程终端" : "切换终端面板", key: "Ctrl+`", when: true, run: s.toggleTerminalSurface },
 				{ icon: "database", label: "打开数据库工作台", when: true, run: () => s.setView("database") },
 				{ icon: "settings", label: "打开设置", when: true, run: () => s.setView("settings") },
 				{ icon: "messages", label: "回到会话", when: true, run: () => s.setView("chat") },
@@ -135,7 +136,7 @@ export function CommandPalette() {
 		if (search !== "commands" && sessions.length > 0) out.push({ title: "会话", items: sessions });
 		if (search !== "commands" && files.length > 0) out.push({ title: "文件", items: files });
 		return out;
-	}, [query, search, projects, projectSessions, result, foldProcess, activeProjectId, canToggleTools]);
+	}, [query, search, projects, projectSessions, result, foldProcess, activeProjectId, canToggleTools, inRemote]);
 
 	const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);
 	const current = Math.min(active, Math.max(0, flat.length - 1));

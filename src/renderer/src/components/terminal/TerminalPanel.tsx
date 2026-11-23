@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { FitAddon } from "@xterm/addon-fit";
 import { type ITheme, Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { api, errorText } from "../../api/client";
+import { api, errorText, hostKeyErrorHost } from "../../api/client";
 import { isMac } from "../../lib/desktop";
 import { normalizedPath, useApp } from "../../store";
 import { Icon } from "../Icon";
@@ -113,6 +113,7 @@ interface Entry {
 const EMPTY_VIEW: EntryView = { status: "idle", shell: null, exitCode: null, error: null };
 
 const entries = new Map<string, Entry>();
+let lastRemoteKey: string | null = null;
 let listening = false;
 
 /** 连接列表的订阅：entries 的增删与状态变化都改这个版本号，供连接条重渲染 */
@@ -332,8 +333,12 @@ async function openEntry(entry: Entry): Promise<void> {
 			}
 		}
 		setView(entry, { status: "running", shell: result.shell, exitCode: null, error: null });
+		if (entry.hostId) useApp.getState().rememberRemoteHost(entry.hostId);
 	} catch (error) {
+		if (entry.disposed) return;
+		const hostId = hostKeyErrorHost(error);
 		const text = errorText(error);
+		if (hostId) useApp.getState().setHostKeyPrompt(hostId, () => void restart(entry));
 		entry.term.write(`\r\n\x1b[31m[终端启动失败] ${text}\x1b[0m\r\n`);
 		setView(entry, { status: "error", error: text });
 	}
@@ -345,9 +350,11 @@ async function restart(entry: Entry): Promise<void> {
 	const previous = entry.terminalId;
 	entry.terminalId = null;
 	entry.hostKeyWarned = false;
-	setView(entry, { status: "idle", exitCode: null, error: null });
+	setView(entry, { status: "opening", exitCode: null, error: null });
 	entry.term.reset();
 	if (previous) await api.terminal.close(previous).catch(() => undefined);
+	if (entry.disposed) return;
+	setView(entry, { status: "idle" });
 	await openEntry(entry);
 }
 
@@ -480,30 +487,49 @@ function ConnectDialog({ onClose, onOpen }: { onClose: () => void; onOpen: (cwd:
 					/>
 				</Field>
 				{error && <div className="rounded border border-err/40 bg-err-soft px-2 py-1 text-[12px] text-err">{error}</div>}
-				{hosts.length === 0 && <div className="text-[12px] text-muted">还没有远程主机：在侧边栏「远程主机」里添加后就能在这里选。</div>}
+				{hosts.length === 0 && <div className="text-[12px] text-muted">还没有远程主机。请先在「远程」工作台中新建主机。</div>}
 			</div>
 		</Modal>
 	);
 }
 
-export function TerminalTab() {
+export type RemoteTerminalRequest = { cwd: string; hostId: string };
+
+export function TerminalTab({ remote }: { remote?: {
+	request: RemoteTerminalRequest | null;
+	onRequestHandled: () => void;
+	onBrowseHosts: () => void;
+} } = {}) {
 	const cwd = useApp((s) => s.cwd);
 	const hostId = useApp((s) => s.projects.projects.find((p) => p.id === s.activeProjectId)?.hostId);
 	const resolvedTheme = useApp((s) => s.resolvedTheme);
-	const [activeKey, setActiveKey] = useState<string | null>(null);
+	const remoteOnly = !!remote;
+	const request = remote?.request;
+	const onRequestHandled = remote?.onRequestHandled;
+	const [activeKey, setActiveKey] = useState<string | null>(remoteOnly ? lastRemoteKey : null);
 	const [connecting, setConnecting] = useState(false);
 	const hostRef = useRef<HTMLDivElement>(null);
+	const restartRequested = useRef<Entry | null>(null);
 	useTerminalList();
 
 	// 懒启动：终端页签真正显示（本组件被挂载）时才创建当前项目的实例，并切到它
 	useEffect(() => {
-		if (!cwd) return;
+		if (remoteOnly || !cwd) return;
 		getOrCreate(cwd, hostId);
 		setActiveKey(entryKey(cwd, hostId));
-	}, [cwd, hostId]);
+	}, [cwd, hostId, remoteOnly]);
 
-	const list = [...entries.values()].filter((item) => !item.disposed);
-	const active = list.find((item) => entryKey(item.cwd, item.hostId) === activeKey) ?? list[0] ?? null;
+	useEffect(() => {
+		if (!request) return;
+		const item = getOrCreate(request.cwd, request.hostId);
+		setActiveKey(entryKey(item.cwd, item.hostId));
+		if (item.view.status === "exited" || item.view.status === "error") restartRequested.current = item;
+		else if (item.view.status === "running") useApp.getState().rememberRemoteHost(request.hostId);
+		onRequestHandled?.();
+	}, [request, onRequestHandled]);
+
+	const list = [...entries.values()].filter((item) => !item.disposed && (!remoteOnly || item.hostId));
+	const active = request ? null : list.find((item) => entryKey(item.cwd, item.hostId) === activeKey) ?? list[0] ?? null;
 	const view = useTerminalView(active);
 
 	// 主题切换：已创建的终端实例同步换色
@@ -516,7 +542,12 @@ export function TerminalTab() {
 	useEffect(() => {
 		const host = hostRef.current;
 		if (!host || !active) return;
+		if (remoteOnly) lastRemoteKey = entryKey(active.cwd, active.hostId);
 		attach(active, host);
+		if (restartRequested.current === active) {
+			restartRequested.current = null;
+			void restart(active);
+		}
 		const observer = new ResizeObserver(() => scheduleFit(active));
 		observer.observe(host);
 		return () => {
@@ -526,11 +557,10 @@ export function TerminalTab() {
 				active.fitTimer = null;
 			}
 		};
-	}, [active]);
+	}, [active, remoteOnly]);
 
-	const close = async (entry: Entry) => {
+	const close = (entry: Entry) => {
 		const key = entryKey(entry.cwd, entry.hostId);
-		if (entry.terminalId) await api.terminal.close(entry.terminalId).catch(() => undefined);
 		disposeTerminal(entry.cwd, entry.hostId);
 		if (activeKey === key) setActiveKey(null);
 	};
@@ -538,14 +568,15 @@ export function TerminalTab() {
 	return (
 		<div className="flex min-h-0 flex-1 flex-col">
 			{/* 连接条：每个连接一项，可切换 / 关闭；＋ 新建连接（本地或远程主机） */}
-			<div className="flex h-7 shrink-0 items-center gap-1 border-b border-border px-2 font-mono text-[11px]">
+			<div className={`flex min-w-0 shrink-0 items-center gap-1 border-b border-border px-2 font-mono text-[11px] ${remoteOnly ? "h-10 bg-term-bar" : "h-7"}`}>
+				<div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none]">
 				{list.map((item) => {
 					const key = entryKey(item.cwd, item.hostId);
 					const on = item === active;
 					return (
 						<div
 							key={key}
-							className={`flex min-w-0 max-w-[42%] items-center gap-1 rounded px-1.5 py-0.5 ${on ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2"}`}
+							className={`flex min-w-0 max-w-52 shrink-0 items-center gap-1 rounded px-1.5 py-0.5 ${on ? "bg-panel-2 text-fg" : "text-muted hover:bg-panel-2"}`}
 						>
 							<button
 								type="button"
@@ -554,12 +585,12 @@ export function TerminalTab() {
 								className="flex min-w-0 items-center gap-1.5"
 							>
 								<span className={`size-1.5 shrink-0 rounded-full ${statusDot(item.view.status)}`} />
-								<span className="shrink-0">{connectionLabel(item)}</span>
+								<span className="shrink-0 max-w-[12ch] truncate">{connectionLabel(item)}</span>
 								<span className="truncate text-faint">{item.cwd}</span>
 							</button>
 							<button
 								type="button"
-								onClick={() => void close(item)}
+								onClick={() => close(item)}
 								title="关闭这个连接"
 								className="shrink-0 text-faint hover:text-err"
 							>
@@ -568,10 +599,12 @@ export function TerminalTab() {
 						</div>
 					);
 				})}
+				</div>
 				<button
 					type="button"
-					onClick={() => setConnecting(true)}
-					title="新建终端连接"
+					onClick={remote?.onBrowseHosts ?? (() => setConnecting(true))}
+					title={remoteOnly ? "选择主机连接" : "新建终端连接"}
+					aria-label={remoteOnly ? "选择主机连接" : "新建终端连接"}
 					className="shrink-0 rounded px-1.5 py-0.5 text-muted hover:bg-panel-2 hover:text-fg"
 				>
 					＋
@@ -612,10 +645,16 @@ export function TerminalTab() {
 			{active ? (
 				<div
 					ref={hostRef}
-					className="min-h-0 flex-1 px-2 py-1"
+					className={`min-h-0 flex-1 ${remoteOnly ? "bg-[var(--remote-console)] px-4 py-3" : "px-2 py-1"}`}
 				/>
 			) : (
-				<div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
+				remote ? (
+					<div className="fw-remote-empty flex-1">
+						<Icon name="square-terminal" className="size-6" />
+						<h2>{request ? "正在准备终端…" : "没有打开的远程终端"}</h2>
+						{!request && <Button onClick={remote.onBrowseHosts}>选择主机</Button>}
+					</div>
+				) : <div className="term min-h-0 flex-1 overflow-y-auto px-4 pb-3 text-[12.5px] leading-[1.8]">
 					<div className="text-muted">还没有终端连接：点上方「＋」新建一个（本地或远程主机）。</div>
 					<div className="text-faint">
 						打开项目后会自动带上该项目目录的终端；按 {isMac ? "⌘`" : "Ctrl+`"} 收起本面板。

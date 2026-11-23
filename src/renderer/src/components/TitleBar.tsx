@@ -53,7 +53,7 @@ function LayoutToggle({ icon, label, on, controls, onClick }: { icon: IconName; 
 	);
 }
 
-const VIEW_NAME = { welcome: "开始使用", chat: "会话", review: "文件改动", settings: "设置", database: "数据库", imagegen: "图片生成", gallery: "图片库" } as const;
+const VIEW_NAME = { welcome: "开始使用", chat: "会话", review: "文件改动", settings: "设置", database: "数据库", imagegen: "图片生成", gallery: "图片库", remote: "远程主机" } as const;
 
 function Location() {
 	const view = useApp((s) => s.view);
@@ -74,9 +74,11 @@ export function TitleBar() {
 	const rightPanel = useApp((s) => s.rightPanel);
 	const canToggleTools = useApp(canToggleRightPanel);
 	const railVisible = useApp((s) => s.railVisible);
-	const terminalPanel = useApp((s) => s.terminalPanel);
+	const terminalPanel = useApp((s) => s.view === "remote" ? s.remoteSection === "terminal" : s.terminalPanel);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
 	const view = useApp((s) => s.view);
+	const inRemote = view === "remote";
+	const terminalLabel = inRemote ? (terminalPanel ? "返回主机列表" : "打开远程终端") : (terminalPanel ? "收起终端面板" : "打开终端面板");
 	const [open, setOpen] = useState<{ name: MenuName | "root"; x: number; y: number } | null>(null);
 
 	const menuItems = (name: MenuName): MenuItem[] => {
@@ -85,7 +87,7 @@ export function TitleBar() {
 			case "文件":
 				return [
 					{ label: "导入项目文件夹…", hint: isMac ? "⌘O" : "Ctrl+O", onClick: () => void s.importProjects() },
-					{ label: "添加远程项目（SSH）…", onClick: () => s.setRemoteOpen(true) },
+					{ label: "添加远程项目（SSH）…", onClick: () => s.setView("remote") },
 					{ label: "从已有会话发现项目…", onClick: () => s.setDiscoverOpen(true) },
 					{ separator: true, label: "" },
 					{ label: "设置", hint: isMac ? "⌘," : "Ctrl+,", onClick: () => s.setView("settings") },
@@ -96,7 +98,7 @@ export function TitleBar() {
 				];
 			case "视图":
 				return [
-					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", disabled: view === "imagegen", onClick: () => s.toggleSidebar() },
+					{ label: sidebarOpen ? "隐藏项目栏" : "显示项目栏", hint: isMac ? "⌘B" : "Ctrl+B", disabled: view === "imagegen" || inRemote, onClick: () => s.toggleSidebar() },
 					{ label: canToggleTools && rightPanel ? "收起工具面板" : "打开工具面板", hint: isMac ? "⌘⌥B" : "Ctrl+Alt+B", disabled: !canToggleTools, onClick: s.toggleRightPanel },
 					{ label: "数据库工作台", onClick: () => s.setView("database") },
 					{ label: "打开内置浏览器", onClick: () => s.openRightPanel("browser") },
@@ -115,9 +117,10 @@ export function TitleBar() {
 				];
 			case "终端":
 				return [
-					{ label: terminalPanel ? "收起终端面板" : "打开终端面板", hint: "Ctrl+`", onClick: () => s.setTerminalPanel(!terminalPanel) },
+					{ label: terminalLabel, hint: "Ctrl+`", onClick: s.toggleTerminalSurface },
 					{
 						label: "输出",
+						disabled: inRemote,
 						onClick: () => {
 							s.setPanelTab("output");
 							s.setTerminalPanel(true);
@@ -125,6 +128,7 @@ export function TitleBar() {
 					},
 					{
 						label: "pi 日志",
+						disabled: inRemote,
 						onClick: () => {
 							s.setPanelTab("logs");
 							s.setTerminalPanel(true);
@@ -170,13 +174,13 @@ export function TitleBar() {
 			}
 			if (key === "b") {
 				e.preventDefault();
-				if (s.view !== "imagegen") s.toggleSidebar();
+				if (s.view !== "imagegen" && s.view !== "remote") s.toggleSidebar();
 			} else if (key === "k") {
 				e.preventDefault();
 				s.setPalette(!s.palette.open);
 			} else if (e.key === "`") {
 				e.preventDefault();
-				s.setTerminalPanel(!s.terminalPanel);
+				s.toggleTerminalSurface();
 			} else if (key === "n") {
 				e.preventDefault();
 				if (s.activeProjectId) void s.newSession();
@@ -230,9 +234,9 @@ export function TitleBar() {
 			<div className="app-drag min-w-0 flex-1 self-stretch" />
 
 			<div className="fw-title-tools" role="group" aria-label="窗口工具">
-				{view !== "welcome" && <LayoutToggle icon="square-terminal" label={terminalPanel ? "收起终端面板（Ctrl+`）" : "打开终端面板（Ctrl+`）"} on={terminalPanel} controls="fw-terminal-panel" onClick={() => useApp.getState().setTerminalPanel(!terminalPanel)} />}
-				{(!sidebarOpen || view === "settings" || view === "database" || view === "imagegen" || view === "welcome") && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} onClick={() => useApp.getState().setPalette(true)} />}
-				{view !== "settings" && view !== "welcome" && view !== "database" && view !== "imagegen" && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
+				{view !== "welcome" && <LayoutToggle icon="square-terminal" label={`${terminalLabel}（Ctrl+\`）`} on={terminalPanel} controls={inRemote ? "fw-remote-terminal" : "fw-terminal-panel"} onClick={useApp.getState().toggleTerminalSurface} />}
+				{(!sidebarOpen || view === "settings" || view === "database" || view === "imagegen" || view === "welcome" || inRemote) && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} onClick={() => useApp.getState().setPalette(true)} />}
+				{view !== "settings" && view !== "welcome" && view !== "database" && view !== "imagegen" && !inRemote && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
 			</div>
 
 			{/* Windows / Linux：系统风格的窗口按钮，贴右上角；macOS 用系统自带的红绿灯 */}

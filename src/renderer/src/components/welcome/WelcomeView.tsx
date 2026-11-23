@@ -142,6 +142,9 @@ export function WelcomeView() {
 						导入项目文件夹
 						<span className="font-normal opacity-70">Ctrl+O</span>
 					</Button>
+					<Button size="lg" onClick={() => setView("remote")}>
+						<Icon name="server" className="size-4" />远程主机
+					</Button>
 					<Button size="lg" onClick={() => setView("database")}>
 						<Icon name="database" className="size-4" />数据库工作台
 					</Button>

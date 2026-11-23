@@ -11,7 +11,6 @@ import { Sidebar } from "./components/Sidebar";
 import { UpdateDialog } from "./components/UpdateDialog";
 import { AppUpdateNotice } from "./components/AppUpdateNotice";
 import { DiscoverDialog } from "./components/sidebar/DiscoverDialog";
-import { RemoteProjectDialog } from "./components/sidebar/RemoteProjectDialog";
 import { HostKeyDialog } from "./components/sidebar/HostKeyDialog";
 import { StatusBar } from "./components/StatusBar";
 import { TerminalView } from "./components/terminal/TerminalView";
@@ -27,6 +26,7 @@ const ImageStudio = lazy(() => import("./components/imagegen/ImageStudio").then(
 const ImageLibrary = lazy(() => import("./components/imagegen/ImageLibrary").then((m) => ({ default: m.ImageLibrary })));
 const ReviewView = lazy(() => import("./components/review/ReviewView").then((m) => ({ default: m.ReviewView })));
 const BottomPanel = lazy(() => import("./components/terminal/BottomPanel").then((m) => ({ default: m.BottomPanel })));
+const RemoteWorkspace = lazy(() => import("./components/terminal/RemoteWorkspace").then((m) => ({ default: m.RemoteWorkspace })));
 
 function ViewFallback() {
 	return <div className="flex min-h-0 flex-1 items-center justify-center bg-bg text-[13px] text-faint">加载中…</div>;
@@ -42,7 +42,7 @@ function BottomPanelSlot({ open }: { open: boolean }) {
 }
 
 function EmptyState() {
-	const { importProjects, setView, setDiscoverOpen, setRemoteOpen } = useApp.getState();
+	const { importProjects, setView, setDiscoverOpen } = useApp.getState();
 	const hasProjects = useApp((s) => s.projects.projects.length > 0);
 	return (
 		<WorkbenchEmpty
@@ -51,7 +51,7 @@ function EmptyState() {
 			detail={hasProjects ? "从项目栏打开已有项目，或导入新的工作目录。" : "选择一个本地文件夹，把代码、会话和修改记录放进同一个工作台。"}
 			actions={<>
 				<Button variant="primary" onClick={() => void importProjects()}>导入文件夹</Button>
-				<Button onClick={() => setRemoteOpen(true)}>添加远程项目</Button>
+				<Button onClick={() => setView("remote")}>添加远程项目</Button>
 				<Button variant="ghost" onClick={() => setDiscoverOpen(true)}>发现已有项目</Button>
 				<Button variant="ghost" onClick={() => setView("settings", "custom")}>配置模型</Button>
 			</>}
@@ -67,7 +67,7 @@ export function App() {
 	const terminalPanelOpen = useApp((s) => s.terminalPanel);
 	const [databaseOpened, setDatabaseOpened] = useState(view === "database");
 	const [studioOpened, setStudioOpened] = useState(view === "imagegen");
-	const hasWorkspaceSidebar = view !== "settings" && view !== "database" && view !== "imagegen";
+	const hasWorkspaceSidebar = view !== "settings" && view !== "database" && view !== "imagegen" && view !== "remote";
 	useEffect(() => {
 		if (view === "database") setDatabaseOpened(true);
 		if (view === "imagegen") setStudioOpened(true);
@@ -111,9 +111,9 @@ export function App() {
 											</Suspense>
 										</div>
 									)}
-									{view === "settings" ? (
+									{view === "remote" || view === "settings" ? (
 										<Suspense fallback={<ViewFallback />}>
-											<SettingsView />
+											{view === "remote" ? <RemoteWorkspace /> : <SettingsView />}
 										</Suspense>
 									) : view === "database" || view === "imagegen" ? (
 										null
@@ -135,7 +135,7 @@ export function App() {
 										</div>
 									)}
 								</main>
-								<BottomPanelSlot open={terminalPanelOpen} />
+								<BottomPanelSlot open={terminalPanelOpen && view !== "remote"} />
 							</div>
 						</div>
 						<StatusBar />
@@ -144,7 +144,6 @@ export function App() {
 
 				<Notices />
 				<DiscoverDialog />
-				<RemoteProjectDialog />
 				<HostKeyDialog />
 				<AuthDialog />
 				<PromptDialog />

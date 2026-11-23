@@ -61,7 +61,8 @@ export interface Notice {
 	text: string;
 }
 
-export type View = "welcome" | "chat" | "review" | "settings" | "imagegen" | "gallery" | "database";
+export type View = "welcome" | "chat" | "review" | "settings" | "imagegen" | "gallery" | "database" | "remote";
+export type RemoteSection = "hosts" | "recent" | "terminal";
 export type RightPanel = "files" | "execution" | "session" | "server" | "services" | "browser";
 export type SettingsTab = "custom" | "resources" | "mcp" | "preferences" | "subagent" | "appearance" | "raw" | "kernel";
 /** 命令面板的初始分类：全部 / 命令 / 文件 / 会话 */
@@ -108,8 +109,9 @@ interface AppState extends SessionSlice {
 	projects: ProjectsState;
 	/** SSH 主机列表（远程项目用） */
 	hosts: SshHost[];
-	/** 添加远程项目对话框是否打开 */
-	remoteOpen: boolean;
+	remoteSection: RemoteSection;
+	/** 最近启动的远程终端（主机 ID → 时间，仅存在本机） */
+	recentRemoteHosts: Record<string, number>;
 	/** 主机密钥已变化：等待用户比对指纹并确认（hostId） */
 	hostKeyPrompt: string | null;
 	/** 更新指纹后要重试的动作（例如重新连接主机） */
@@ -188,7 +190,8 @@ interface AppState extends SessionSlice {
 	addProjects(paths: string[], open?: boolean): Promise<void>;
 	/** 添加并打开一个远程项目（服务器上的目录） */
 	addRemoteProject(hostId: string, path: string, name?: string): Promise<void>;
-	setRemoteOpen(open: boolean): void;
+	setRemoteSection(section: RemoteSection): void;
+	rememberRemoteHost(hostId: string): void;
 	setHostKeyPrompt(hostId: string | null, retry?: () => void): void;
 	setDiscoverOpen(open: boolean): void;
 	openProject(projectId: string, sessionPath?: string): Promise<void>;
@@ -234,6 +237,7 @@ interface AppState extends SessionSlice {
 	toggleSidebar(): void;
 	setPalette(open: boolean, mode?: PaletteMode): void;
 	setTerminalPanel(open: boolean): void;
+	toggleTerminalSurface(): void;
 	setPanelTab(tab: BottomTab): void;
 	openPreview(path: string | null, hostId?: string | null): void;
 	/** 把文本追加到输入框（例如引用文件路径） */
@@ -264,6 +268,17 @@ const SIDEBAR_KEY = "flowork.sidebarOpen";
 const EXPANDED_KEY = "flowork.expandedProjects";
 /** 图库收藏：按图片 id 记录，与缓存文件生命周期解耦（清空缓存后收藏保留） */
 const IMAGE_FAVORITES_KEY = "flowork.imageFavorites";
+const RECENT_REMOTE_HOSTS_KEY = "flowork.recentRemoteHosts";
+
+function storedRecentRemoteHosts(): Record<string, number> {
+	try {
+		const value: unknown = JSON.parse(localStorage.getItem(RECENT_REMOTE_HOSTS_KEY) ?? "{}");
+		if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+		return Object.fromEntries(Object.entries(value).filter(([, time]) => typeof time === "number" && Number.isFinite(time)));
+	} catch {
+		return {};
+	}
+}
 
 function storedPanel(key = PANEL_KEY): RightPanel | null {
 	const v = localStorage.getItem(key);
@@ -653,7 +668,8 @@ export const useApp = create<AppState>()((set, get) => {
 		discoverOpen: false,
 		projects: { projects: [], groups: [] },
 		hosts: [],
-		remoteOpen: false,
+		remoteSection: "hosts",
+		recentRemoteHosts: storedRecentRemoteHosts(),
 		hostKeyPrompt: null,
 		hostKeyRetry: null,
 		activeProjectId: null,
@@ -716,7 +732,8 @@ export const useApp = create<AppState>()((set, get) => {
 		},
 
 		setView(view, tab) {
-			set(tab ? { view, settingsTab: tab } : { view });
+			if (view === "remote") set({ view, remoteSection: "hosts" });
+			else set(tab ? { view, settingsTab: tab } : { view });
 		},
 
 		setTheme(mode) {
@@ -810,7 +827,7 @@ export const useApp = create<AppState>()((set, get) => {
 		async addRemoteProject(hostId, path, name) {
 			try {
 				const r = await api.projects.addRemote(hostId, path, name);
-				set({ projects: r.state, remoteOpen: false });
+				set({ projects: r.state });
 				get().pushNotice("info", `已添加远程项目：${r.project.path}`);
 				await get().openProject(r.project.id);
 			} catch (error) {
@@ -818,8 +835,19 @@ export const useApp = create<AppState>()((set, get) => {
 			}
 		},
 
-		setRemoteOpen(open) {
-			set({ remoteOpen: open });
+		setRemoteSection(remoteSection) {
+			set({ remoteSection });
+		},
+
+		rememberRemoteHost(hostId) {
+			const history = { ...get().recentRemoteHosts, [hostId]: Date.now() };
+			const recentRemoteHosts = Object.fromEntries(Object.entries(history).sort((a, b) => b[1] - a[1]).slice(0, 50));
+			set({ recentRemoteHosts });
+			try {
+				localStorage.setItem(RECENT_REMOTE_HOSTS_KEY, JSON.stringify(recentRemoteHosts));
+			} catch {
+				// 本机存储不可写时，不阻止打开终端。
+			}
 		},
 
 		setHostKeyPrompt(hostId, retry) {
@@ -1238,6 +1266,12 @@ export const useApp = create<AppState>()((set, get) => {
 
 		setTerminalPanel(open) {
 			set({ terminalPanel: open });
+		},
+
+		toggleTerminalSurface() {
+			const state = get();
+			if (state.view === "remote") state.setRemoteSection(state.remoteSection === "terminal" ? "hosts" : "terminal");
+			else state.setTerminalPanel(!state.terminalPanel);
 		},
 
 		setPanelTab(tab) {
