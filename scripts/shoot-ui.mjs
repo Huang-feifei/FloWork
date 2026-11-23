@@ -19,7 +19,6 @@ const prefix = process.argv[3] ?? "ui";
 mkdirSync(outDir, { recursive: true });
 
 const mock = readFileSync(join(root, "scripts/mock-transcript.js"), "utf8");
-const clickTitle = (title) => `(() => { const button = document.querySelector(${JSON.stringify(`button[title='${title}']`)}); if (!button) throw new Error(${JSON.stringify(`找不到截图按钮：${title}`)}); button.click(); })()`;
 /** 切到某个视图（截图辅助：直接改界面状态，不经过交互） */
 const setView = (view) => `window.__floworkStore.setState({ view: ${JSON.stringify(view)} })`;
 const showSessionFiles = `window.__floworkStore.setState({ rightPanel: "session", railVisible: false })`;
@@ -244,7 +243,8 @@ const verifyUpdateDownload = `(() => {
 	const settings = document.querySelector('.fw-app-rail [title="设置"]');
 	if (!trigger || trigger.dataset.phase !== 'downloading' || !settings || trigger.getBoundingClientRect().bottom > settings.getBoundingClientRect().top) throw new Error('更新入口没有放在左下角设置上方');
 	if (document.querySelector('#fw-update-popover')) throw new Error('后台下载不应主动弹出浮层');
-	trigger.click();
+	const progress = trigger.querySelector('progress');
+	if (progress?.value !== 45 || progress.max !== 100 || !trigger.textContent.includes('45%') || !progress.getBoundingClientRect().height) throw new Error('左下角没有直接显示下载进度');
 })()`;
 const verifyUpdateProgress = `(() => {
 	const panel = document.querySelector('#fw-update-popover');
@@ -309,15 +309,33 @@ const scenes = {
 	"composer-running-dark": [mock, showSessionFiles, modelExamples, `document.documentElement.dataset.theme = "dark"`, { js: verifyComposerLayout, wait: 100 }],
 	"app-update": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`,
 		{ appUpdate: { phase: "downloading", version: "1.1.10", downloaded: 45, total: 100 }, wait: 100 },
-		{ js: verifyUpdateDownload, wait: 100 }, { js: verifyUpdateProgress, wait: 80 },
+		{ js: verifyUpdateDownload, wait: 100 }, { js: `document.querySelector('.fw-update-trigger').click()`, wait: 80 }, { js: verifyUpdateProgress, wait: 80 },
 		{ appUpdate: { phase: "ready", version: "1.1.10" }, wait: 100 }, { js: verifyUpdateReady, wait: 100 }],
+	"app-update-download": [mock, showSessionFiles, `document.documentElement.dataset.theme = "dark"`,
+		{ appUpdate: { phase: "downloading", version: "1.1.10", downloaded: 45, total: 100 }, wait: 100 },
+		{ js: verifyUpdateDownload, wait: 80 }],
 	thinking: [mock, showSessionFiles, modelExamples, { js: verifyThinking, wait: 100 }, { js: openThinking, wait: 100 }],
 	"thinking-dark": [mock, showSessionFiles, modelExamples, `document.documentElement.dataset.theme = "dark"`, { js: openThinking, wait: 100 }],
 	review: [mock, `document.querySelector('.fw-review-link').click()`, { js: waitForReview, wait: 120 }],
 	"review-empty": [mock, `window.__floworkStore.setState({ view: 'review', messages: [] })`, { js: waitForReview, wait: 120 }],
 	"settings-image-only": [setView("settings"), { js: verifyImageOnlyEndpoint, wait: 120 }],
 	palette: [mock, `window.__floworkStore.getState().setPalette(true)`],
-	terminal: [mock, clickTitle("终端")],
+	terminal: [mock, { js: `(async () => {
+		const pause = () => new Promise(resolve => setTimeout(resolve, 50));
+		const until = async (test, message) => { for (let i = 0; i < 60; i++) { const value = test(); if (value) return value; await pause(); } throw new Error(message); };
+		const button = () => document.querySelector('.fw-titlebar [aria-label^="打开终端面板"], .fw-titlebar [aria-label^="收起终端面板"]');
+		const panel = () => document.getElementById('fw-terminal-panel');
+		const trigger = await until(button, '标题栏缺少终端入口');
+		if (document.querySelector('.fw-app-rail [title="终端"]')) throw new Error('左栏仍有终端入口');
+		const minimize = document.querySelector('.fw-titlebar [title="最小化"]');
+		if (minimize && trigger.getBoundingClientRect().right > minimize.getBoundingClientRect().left) throw new Error('终端入口未与窗口按钮分组排列');
+		trigger.click();
+		await until(() => panel() && button().getAttribute('aria-expanded') === 'true', '点击标题栏未打开终端');
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: String.fromCharCode(96), ctrlKey: true, cancelable: true }));
+		await until(() => !panel() && button().getAttribute('aria-expanded') === 'false', '原快捷键未收起终端');
+		button().click();
+		await until(panel, '未能再次打开终端');
+	})()`, wait: 100 }],
 	settings: [setView("settings")],
 	database: [setView("database")],
 	imagegen: [setView("imagegen")],

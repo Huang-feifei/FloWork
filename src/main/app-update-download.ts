@@ -147,7 +147,7 @@ export class AppUpdateDownload {
 					if (bytes > installer.size) throw new Error("安装包超过发布记录中的大小");
 					hash.update(chunk);
 					await handle.writeFile(chunk);
-					if (Date.now() - progressAt >= 250) {
+					if (bytes === installer.size || Date.now() - progressAt >= 250) {
 						progressAt = Date.now();
 						this.publish({ phase: "downloading", version: installer.version, downloaded: bytes, total: installer.size });
 					}

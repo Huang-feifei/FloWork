@@ -329,7 +329,7 @@ app.on("will-quit", (event) => {
 		app.quit();
 	};
 	try {
-		const child = spawn(installer, ["/S", "--updated", "--force-run"], { detached: true, stdio: "ignore", windowsHide: true });
+		const child = spawn(installer, ["--updated", "--force-run"], { detached: true, stdio: "ignore", shell: false });
 		child.once("error", failed);
 		child.once("spawn", () => { child.unref(); app.quit(); });
 	} catch (error) { failed(error); }

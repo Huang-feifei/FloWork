@@ -69,7 +69,7 @@ export function registerIpc(
 			const answer = await dialog.showMessageBox(win, {
 				type: "question", buttons: ["稍后", "重启安装"], defaultId: 0, cancelId: 0,
 				message: `重启 FloWork 并安装 v${version}？`,
-				detail: "终端连接会关闭，请先保存尚未提交的输入和编辑。安装完成后 FloWork 将重新打开。",
+				detail: "终端连接会关闭，请先保存尚未提交的输入和编辑。FloWork 关闭后，Windows 安装器会显示进度，安装完成后会重新打开 FloWork。",
 			});
 			return answer.response === 1 && !win.isDestroyed();
 		}, restartForAppUpdate);

@@ -36,6 +36,7 @@ win:
   artifactName: ${productName}-${version}-${arch}-setup.${ext}
 
 nsis:
+  include: build/installer.nsh
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

@@ -36,15 +36,17 @@ function WindowButton({ icon, title, close, onClick }: { icon: IconName; title: 
 	);
 }
 
-function LayoutToggle({ icon, label, on, onClick }: { icon: IconName; label: string; on: boolean; onClick: () => void }) {
+function LayoutToggle({ icon, label, on, controls, onClick }: { icon: IconName; label: string; on?: boolean; controls?: string; onClick: () => void }) {
 	return (
 		<button
 			type="button"
 			title={label}
+			aria-label={label}
+			aria-pressed={controls ? undefined : on}
+			aria-expanded={controls ? !!on : undefined}
+			aria-controls={controls && on ? controls : undefined}
 			onClick={onClick}
-			className={`flex size-8 items-center justify-center rounded-md hover:bg-panel-2 ${
-				on ? "text-fg" : "text-faint hover:text-fg"
-			}`}
+			className="app-no-drag fw-title-toggle"
 		>
 			<Icon name={icon} className="size-4" />
 		</button>
@@ -227,9 +229,10 @@ export function TitleBar() {
 			<Location />
 			<div className="app-drag min-w-0 flex-1 self-stretch" />
 
-			<div className="flex items-center gap-0.5">
-				{(!sidebarOpen || view === "settings" || view === "database" || view === "imagegen" || view === "welcome") && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} on={false} onClick={() => useApp.getState().setPalette(true)} />}
-				{view !== "settings" && view !== "welcome" && view !== "imagegen" && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
+			<div className="fw-title-tools" role="group" aria-label="窗口工具">
+				{view !== "welcome" && <LayoutToggle icon="square-terminal" label={terminalPanel ? "收起终端面板（Ctrl+`）" : "打开终端面板（Ctrl+`）"} on={terminalPanel} controls="fw-terminal-panel" onClick={() => useApp.getState().setTerminalPanel(!terminalPanel)} />}
+				{(!sidebarOpen || view === "settings" || view === "database" || view === "imagegen" || view === "welcome") && <LayoutToggle icon="search" label={`搜索工作区（${isMac ? "⌘K" : "Ctrl+K"}）`} onClick={() => useApp.getState().setPalette(true)} />}
+				{view !== "settings" && view !== "welcome" && view !== "database" && view !== "imagegen" && <LayoutToggle icon="panel-left" label={`切换左栏（${isMac ? "⌘B" : "Ctrl+B"}）`} on={sidebarOpen} onClick={() => useApp.getState().toggleSidebar()} />}
 			</div>
 
 			{/* Windows / Linux：系统风格的窗口按钮，贴右上角；macOS 用系统自带的红绿灯 */}

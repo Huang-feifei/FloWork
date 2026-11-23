@@ -123,7 +123,7 @@ export function BottomPanel() {
 	const activeTab = tab;
 
 	return (
-		<section className="flex h-[min(280px,38vh)] shrink-0 flex-col overflow-hidden rounded-br-[10px] border-t border-border bg-term">
+		<section id="fw-terminal-panel" aria-label="终端面板" className="flex h-[min(280px,38vh)] shrink-0 flex-col overflow-hidden rounded-br-[10px] border-t border-border bg-term">
 			<div className="flex h-11 shrink-0 items-center gap-3 border-b border-border bg-term-bar px-4">
 				<Segmented items={tabs.map((t) => ({ id: t.id, label: t.label }))} active={activeTab} onChange={(id) => setPanelTab(id as BottomTab)} />
 				<div className="flex-1" />

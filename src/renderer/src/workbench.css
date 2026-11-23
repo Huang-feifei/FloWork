@@ -50,6 +50,11 @@ html[data-theme="dark"]:not([data-bg="image"]) .fw-workbench {
 	--color-inline-code-fg: #f6c89e;
 }
 .fw-workbench .fw-titlebar { color: var(--color-fg); }
+.fw-title-tools { display: flex; flex-shrink: 0; align-items: center; gap: 2px; border-radius: 8px; background: color-mix(in srgb, var(--color-panel-2) 64%, transparent); padding: 2px; }
+.fw-title-toggle { display: grid; width: 30px; height: 28px; place-items: center; border-radius: 6px; color: var(--color-muted); }
+.fw-title-toggle:hover, .fw-title-toggle:is([aria-expanded="true"], [aria-pressed="true"]) { color: var(--color-fg); background: var(--color-panel-2); }
+.fw-title-toggle[aria-expanded="true"] { box-shadow: inset 0 -2px color-mix(in srgb, var(--fw-ink-button) 65%, transparent); }
+.fw-title-toggle:focus-visible { outline: 1px solid var(--fw-ink-button); outline-offset: -1px; }
 .fw-brand { color: var(--color-fg); font-size: 17px; font-weight: 720; letter-spacing: -.045em; }
 .fw-brand-mark { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 7px; background: var(--fw-rail); color: var(--fw-signal); font-size: 16px; line-height: 1; }
 .fw-title-rule { height: 16px; width: 1px; background: var(--color-border-strong); }
@@ -65,6 +70,13 @@ html[data-theme="dark"]:not([data-bg="image"]) .fw-workbench {
 .fw-rail-badge { position: absolute; top: 3px; right: 5px; border-radius: 4px; padding: 0 3px; color: #221908; background: var(--fw-signal); font-weight: 700; }
 .fw-update-slot { flex-shrink: 0; }
 .fw-update-slot:not(:has(button)) { height: 0; margin-block-start: -4px; }
+.fw-update-trigger[data-phase="downloading"] { gap: 2px; padding-block: 3px; font-variant-numeric: tabular-nums; }
+.fw-update-progress { appearance: none; display: block; overflow: hidden; border: 0; border-radius: 3px; }
+.fw-update-progress::-webkit-progress-bar { background: var(--color-panel-2); }
+.fw-update-progress::-webkit-progress-value { background: var(--fw-ink-button); }
+.fw-update-progress-rail { width: 26px; height: 3px; }
+.fw-update-progress-rail::-webkit-progress-bar { background: #ffffff29; }
+.fw-update-progress-rail::-webkit-progress-value { background: var(--fw-signal); }
 .fw-update-trigger[data-phase="ready"] { color: var(--fw-signal); background: var(--fw-rail-active); }
 .fw-update-welcome { position: absolute; left: 18px; bottom: 18px; z-index: 35; }
 .fw-update-welcome .fw-update-trigger { background: var(--fw-rail); color: var(--fw-signal); }

@@ -32,10 +32,9 @@ function ActivityItem({ icon, label, short, active, disabled, onClick }: Item) {
 export function ActivityBar() {
 	const view = useApp((s) => s.view);
 	const hasProject = useApp((s) => s.activeProjectId !== null);
-	const terminalPanel = useApp((s) => s.terminalPanel);
 	const rightPanel = useApp((s) => s.rightPanel);
 	const remoteOpen = useApp((s) => s.remoteOpen);
-	const { setView, setRightPanel, openRightPanel, setTerminalPanel, setRemoteOpen } = useApp.getState();
+	const { setView, setRightPanel, openRightPanel, setRemoteOpen } = useApp.getState();
 	const inChat = view === "chat";
 	const items: Record<Section, Item[]> = {
 		main: [
@@ -46,7 +45,6 @@ export function ActivityBar() {
 			{ icon: "image", label: "图片库", active: view === "gallery", onClick: () => setView("gallery") },
 			{ icon: "database", label: "数据库", active: view === "database", onClick: () => setView("database") },
 			{ icon: "files", label: "项目文件", short: "文件", active: hasProject && inChat && rightPanel === "files", disabled: !hasProject, onClick: () => inChat && rightPanel === "files" ? setRightPanel(null) : openRightPanel("files") },
-			{ icon: "square-terminal", label: "终端", active: terminalPanel, onClick: () => setTerminalPanel(!terminalPanel) },
 			{ icon: "server", label: "远程主机（SSH）", short: "远程", active: remoteOpen, onClick: () => setRemoteOpen(true) },
 		],
 		settings: [{ icon: "settings", label: "设置", active: view === "settings", onClick: () => setView("settings") }],
